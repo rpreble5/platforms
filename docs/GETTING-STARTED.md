@@ -31,33 +31,52 @@ installer again.
 
 ## 2. Get the code
 
-Easiest way, no git needed:
+### Recommended: GitHub Desktop
 
-1. Go to the repo on GitHub and switch to the
-   `claude/multiplayer-platformer-quiz-xnvuc2` branch (the dropdown that says
-   "main").
-2. Green **Code** button → **Download ZIP**.
-3. Unzip it. Put the folder somewhere you'll find again — Desktop is fine.
+It bundles git so there's nothing extra to install, it makes updates one click,
+and it solves step 3 for you.
 
-You'll end up with a folder like `platforms-claude-multiplayer-platformer-quiz-xnvuc2`.
-Rename it to `platforms` if you like, it doesn't matter.
+1. Install it from **[desktop.github.com](https://desktop.github.com)** and sign
+   in with your GitHub account.
+2. **File → Clone Repository** → **GitHub.com** tab → pick `rpreble5/platforms`
+   → **Clone**. It goes to `Documents/GitHub/platforms` unless you change it.
+3. Click **Fetch origin** (top right) so it can see the branch.
+4. **Current Branch** dropdown (top middle) → choose
+   `claude/multiplayer-platformer-quiz-xnvuc2`.
+
+That last step matters — cloning drops you on the default branch, which doesn't
+have any of this in it.
 
 <details>
-<summary>Or use git, if you have it</summary>
+<summary>Or download a ZIP, no install at all</summary>
+
+1. On the repo page, switch the branch dropdown to
+   `claude/multiplayer-platformer-quiz-xnvuc2`.
+2. Green **Code** button → **Download ZIP**, then unzip somewhere findable.
+
+Works fine, but every update means downloading and unzipping again.
+</details>
+
+<details>
+<summary>Or the command line, if you already use git</summary>
 
 ```
 git clone https://github.com/rpreble5/platforms.git
 cd platforms
 git checkout claude/multiplayer-platformer-quiz-xnvuc2
 ```
-
-Worth it later — `git pull` gets you updates without re-downloading.
 </details>
 
 ## 3. Open a terminal *in that folder*
 
-This is the step that trips people up. The terminal has to be pointed at the
-project folder, not wherever it opened by default.
+The terminal has to be pointed at the project folder, not wherever it opens by
+default. This is the step that trips people up.
+
+**With GitHub Desktop, it's one menu item:** **Repository → Open in Terminal**
+(Mac) or **Repository → Open in Command Prompt** (Windows). Done — skip to
+step 4.
+
+Otherwise:
 
 - **Mac** — right-click the folder in Finder → **New Terminal at Folder**.
   (If you don't see it: System Settings → Keyboard → Keyboard Shortcuts →
@@ -65,10 +84,8 @@ project folder, not wherever it opened by default.
 - **Windows** — open the folder in File Explorer, then **Shift+right-click** in
   the empty space inside it → **Open PowerShell window here** (or "Open in
   Terminal").
-
-**Either OS, the always-works way:** type `cd ` (with a space) in a terminal,
-then drag the folder from Finder/Explorer onto the terminal window — it fills in
-the path for you. Press Enter.
+- **Either, always works** — type `cd ` (with a space) in a terminal, then drag
+  the folder from Finder/Explorer onto the window; it fills in the path. Enter.
 
 To confirm you're in the right place, type `ls` (Mac) or `dir` (Windows). You
 should see `package.json`, `server`, `client`.
@@ -132,17 +149,21 @@ connections. Say yes.** More on this below if you miss it.
   Mac).
 - **Start again:** `npm run dev` in the same terminal.
 - **Next session:** double-click **`start.command`** (Mac) or **`start.bat`**
-  (Windows) in the project folder. It does everything for you.
+  (Windows) in the project folder. It does everything for you. To find the
+  folder from GitHub Desktop: **Repository → Show in Finder / Show in Explorer**.
 
 On Mac, the first double-click may say the file can't be opened because it's
 from an unidentified developer — right-click it → **Open** → **Open**. Once.
 
 ## Getting updates
 
-If you downloaded the ZIP: download it again, unzip, and run `npm install` once
-more in the new folder.
+**GitHub Desktop:** click **Fetch origin**, then **Pull origin** when it offers.
+Then run `npm install` once more — only actually needed if a dependency changed,
+but it's harmless and quick, so just always do it.
 
-If you used git: `git pull` then `npm install`.
+**ZIP:** download again, unzip, `npm install` in the new folder.
+
+**Command line:** `git pull` then `npm install`.
 
 ---
 
@@ -182,6 +203,8 @@ or use a different port:
 
 - Mac: `PORT=8081 npm run dev`
 - Windows PowerShell: `$env:PORT=8081; npm run dev`
+- Windows Command Prompt (what GitHub Desktop opens by default):
+  `set PORT=8081 && npm run dev`
 
 The printed URLs will update to match.
 
