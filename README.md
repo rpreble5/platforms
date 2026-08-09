@@ -12,10 +12,20 @@ you'll actually use — before any game content is worth writing.
 
 ## Quick start
 
+**Never run a Node project before? Start with
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)** — installing Node, getting
+the code, opening a terminal in the right folder, and what to do when the phone
+won't connect (it's almost always the firewall).
+
+Otherwise:
+
 ```bash
 npm install
 npm run dev
 ```
+
+After the first setup, double-click `start.command` (macOS) or `start.bat`
+(Windows) instead.
 
 The terminal prints a QR code and two URLs:
 
