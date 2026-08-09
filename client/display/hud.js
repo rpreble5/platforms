@@ -61,18 +61,20 @@ export function drawHud(cx, m) {
     ['sim', `${STEP_HZ} Hz · ${m.steps} step${m.steps === 1 ? '' : 's'}`],
   ];
 
+  // Below the question banner, which owns the top 150px during a round.
+  const top = 170;
   const w = 330;
   const h = 34 + rows.length * 26 + (m.note ? 30 : 0);
-  panel(cx, 24, 24, w, h);
+  panel(cx, 24, top, w, h);
 
   cx.font = `700 15px ${MONO}`;
   cx.fillStyle = '#7fd8a8';
-  cx.fillText('LATENCY', 40, 50);
+  cx.fillText('LATENCY', 40, top + 26);
   cx.fillStyle = '#5a6478';
-  cx.fillText('H detail · T tune · F flash', 128, 50);
+  cx.fillText('H detail · T tune · F flash', 128, top + 26);
 
   cx.font = `500 15px ${MONO}`;
-  let y = 76;
+  let y = top + 52;
   for (const [k, v] of rows) {
     cx.fillStyle = '#7c879b';
     cx.fillText(k, 40, y);

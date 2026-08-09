@@ -8,7 +8,8 @@
  *
  * How to use it:
  *   1. TV in Game Mode. HDMI cable, never Chromecast/AirPlay.
- *   2. Enable flash mode on the phone (the flag in its status bar).
+ *   2. Press F on the display to arm the target, and enable flash mode on the
+ *      phone (the flag in its status bar).
  *   3. With a SECOND phone, film in 240fps slow-motion so that the player's
  *      thumb AND this white square are both in frame.
  *   4. Count frames from thumb contact to the square appearing. /240 = seconds.
@@ -31,7 +32,10 @@ const HOLD_FRAMES = 2;
 
 export class LatencyFlash {
   constructor() {
-    this.enabled = true;
+    // Off by default: it sits over the right-hand answer plate, and it is a
+    // measurement tool you reach for deliberately, not part of the game.
+    // Press F on the display to arm it.
+    this.enabled = false;
     this.remaining = 0;
     this.count = 0;
     /** Sim tick at which the most recent flash fired, for the on-screen counter. */

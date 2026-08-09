@@ -4,9 +4,13 @@ A latency prototype for a 25–30 player quiz platformer. Phones are dumb
 gamepads (left / right / jump). One central screen owns the physics and the
 rendering. Nobody looks at their phone while playing.
 
-**There is no quiz yet, on purpose.** This milestone exists to produce one
-number — real glass-to-glass latency, measured on real phones over the WiFi
-you'll actually use — before any game content is worth writing.
+Rounds work: a question appears, the platforms get answer labels, a timer runs,
+the wrong platforms crumble, and points go to whoever committed fastest.
+
+It still carries the measurement rig it was built around, because the number
+that decides whether any of this feels good — real glass-to-glass latency on
+real phones over the WiFi you'll actually use — is not something the code can
+tell you.
 
 ---
 
@@ -40,11 +44,17 @@ with no phone at all.
 
 | key | on the display |
 |---|---|
+| **`Enter`** | **start the game / skip to the next question** |
+| `P` | pause |
+| `R` | restart from question one |
 | `A` `D` / arrows | move the local test avatar |
 | space / `W` | jump |
 | `H` | per-player RTT / loss table |
 | `T` | live physics tuning (`←→` pick, `↑↓` adjust, shift for ×5, `P` prints a paste-able block) |
-| `F` | toggle the flash-test target |
+| `F` | arm the flash-test target |
+
+Questions live in `questions/default.json` and are re-read on every display
+reload, so editing them and hitting refresh is the whole edit loop.
 
 ---
 
@@ -82,6 +92,37 @@ path, and those are the terms that dominate.
 - **The wrong interface.** If the host is on both Ethernet and WiFi, the printed
   join URL may be for the network the phones aren't on. The terminal lists every
   address it found — try another one.
+
+## How a round scores
+
+Correct answer: **1000 points**, plus a **speed bonus up to 500** that decays
+linearly from the moment the question opens to the moment it locks.
+
+The decay is the important part, and it is not the obvious design. Ranking
+players — 1st gets most, 2nd gets less — would make the score depend on
+ordering, and at 30 players the gap between adjacent arrivals is often tens of
+milliseconds. That is the same size as the spread in network latency, so rank
+scoring would quietly hand points to whoever has the better phone and the better
+corner of the room. A linear decay over a 12-second window makes 100 ms worth
+about **four points out of five hundred**.
+
+So what actually gets rewarded is **deciding fast, not connecting fast** — which
+is the only version of "first gets more" that's fair to run at a party. Rank is
+still shown on the scoreboard, because "you were 3rd!" is the fun part; it just
+doesn't drive the maths.
+
+Two more rules worth knowing:
+
+- Your time is set by **first touch** on the correct platform, but you must
+  **still be standing on it at the lock** to score. A bounce off the edge costs
+  nothing; leaving early is strictly riskier than staying.
+- There is an undocumented **400 ms grace** after the timer visually hits zero.
+  A landing that misses the buzzer by less than one round trip still counts.
+  Players are never told, because it exists so latency can't decide whether an
+  answer registered.
+
+All of that is covered by tests in `sim/round.test.js`, including explicit
+fairness tests asserting that a realistic latency gap is worth under ten points.
 
 ## Read this before you measure anything
 
@@ -125,7 +166,8 @@ is the latency problem.
 **The flash test** is the only measurement that includes touch sampling and the
 TV, i.e. the terms that dominate:
 
-1. TV in Game Mode. Display fullscreen. Flash target visible (bottom-right).
+1. TV in Game Mode. Display fullscreen. Press **F** to arm the flash target
+   (bottom-right; off by default so it doesn't cover an answer).
 2. On the phone, tap the ⚑ in its status bar to enable flash mode.
 3. With a **second phone**, film in **240 fps slow-motion** so the player's thumb
    *and* the flash target are both in frame.
@@ -333,6 +375,6 @@ come from JSDoc + `checkJs`, so the dev loop is save-and-refresh.
 
 ## What's next
 
-Rounds, questions, scoring, elimination — all deliberately unbuilt. Tune the feel
-over real WiFi first, get a flash-test number, then decide the game design with
-that number in hand.
+Round *types* — the current one is "everyone races to the right answer". A host
+control page, so you're not driving from the display's keyboard. And the feel
+pass: tune the physics constants over real WiFi with `T`, not on localhost.

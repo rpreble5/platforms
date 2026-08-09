@@ -24,6 +24,10 @@ import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJ
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { step } from '../../sim/world.js';
+import { FLOOR_Y, buildArena } from '../../sim/levels.js';
+import { PHASE, createGame, skip, startGame, stepGame } from '../../sim/round.js';
+import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
+import { drawRoundOverlay } from './round-ui.js';
 import { InputBus } from './input-bus.js';
 import { render } from './render.js';
 import { drawHud } from './hud.js';
@@ -41,8 +45,11 @@ const boot = /** @type {HTMLElement} */ (document.getElementById('boot'));
 
 // ------------------------------------------------------------------ state
 
-const world = createWorld();
+const world = createWorld(buildArena(4));
 const bus = new InputBus();
+let game = createGame([]);
+world.spawn = { x: 1920 / 2 - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
+let lastPhase = game.phase;
 const flash = new LatencyFlash();
 
 /** @type {Map<number, {name:string, color:string, hat:string, connected:boolean}>} */
@@ -171,13 +178,29 @@ function frame(now) {
     bus.drainInto(world);
     flash.observe(world);
     step(world, STEP_MS);
+    stepGame(game, world, STEP_MS);
     acc -= STEP_MS;
     steps++;
   }
   lastSteps = steps;
 
-  render(cx, world, roster, { qr, joinUrl, dimOthers: false });
+  if (game.phase !== lastPhase) {
+    if (game.phase === PHASE.REVEAL) {
+      for (const r of game.results) {
+        if (r.id === LOCAL_ID) continue;
+        send({
+          type: 'FEEDBACK_REQ',
+          playerId: r.id,
+          code: r.correct ? FB_LANDED_CORRECT : FB_LANDED_WRONG,
+        });
+      }
+    }
+    lastPhase = game.phase;
+  }
+
+  render(cx, world, roster, game, { qr: game.phase === PHASE.LOBBY ? qr : null, joinUrl });
   flash.draw(cx);
+  drawRoundOverlay(cx, game, roster, world.players.size);
   drawHud(cx, {
     bus,
     roster,
@@ -198,7 +221,13 @@ function frame(now) {
     lastCheckpoint = now;
     send({
       type: 'CHECKPOINT',
-      state: { tick: world.tick, players: world.players.size, phase: 'M0_SPIKE' },
+      state: {
+        tick: world.tick,
+        players: world.players.size,
+        phase: game.phase,
+        qIndex: game.qIndex,
+        scores: Object.fromEntries(game.scores),
+      },
     });
   }
 }
@@ -220,11 +249,26 @@ function onKey(e, down) {
     }
     if (k === 'f') {
       flash.enabled = !flash.enabled;
-      hud.note = flash.enabled ? '' : 'flash target off';
+      hud.note = flash.enabled ? 'flash target armed (bottom right)' : '';
       return;
     }
     if (tune.on && k === 'p') {
       printTuning();
+      return;
+    }
+    if (k === 'enter') {
+      if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
+      else skip(game, world);
+      e.preventDefault();
+      return;
+    }
+    if (k === 'p') {
+      game.paused = !game.paused;
+      hud.note = game.paused ? 'PAUSED — press P to resume' : '';
+      return;
+    }
+    if (k === 'r') {
+      startGame(game, world);
       return;
     }
   }
@@ -315,6 +359,14 @@ async function init() {
   roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', hat: 'none', connected: true });
 
   try {
+    const pack = await fetch('/api/questions').then((r) => r.json());
+    if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
+    else hud.note = 'no questions loaded — check questions/default.json';
+  } catch {
+    hud.note = 'could not load questions';
+  }
+
+  try {
     const health = await fetch('/api/health').then((r) => r.json());
     if (health.joinUrl) {
       joinUrl = health.joinUrl;
@@ -335,7 +387,9 @@ async function init() {
 
   // Debug handle. Useful from the console at the venue ("why is player 7 not
   // moving?") and used by the browser smoke test.
-  Object.assign(globalThis, { __platforms: { world, bus, roster, net, PHYS, flash } });
+  Object.assign(globalThis, {
+    __platforms: { world, bus, roster, net, PHYS, flash, get game() { return game; } },
+  });
 
   connect();
   requestAnimationFrame(frame);

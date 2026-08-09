@@ -1,0 +1,46 @@
+{
+  "pack": "default",
+  "answerMs": 12000,
+  "questions": [
+    {
+      "text": "Which planet has the most moons?",
+      "answers": ["Jupiter", "Saturn", "Uranus", "Neptune"],
+      "correct": 1
+    },
+    {
+      "text": "What is the capital of Australia?",
+      "answers": ["Sydney", "Melbourne", "Canberra", "Perth"],
+      "correct": 2
+    },
+    {
+      "text": "How many strings does a standard violin have?",
+      "answers": ["4", "6"],
+      "correct": 0
+    },
+    {
+      "text": "Which of these is NOT a primary colour of light?",
+      "answers": ["Red", "Green", "Yellow"],
+      "correct": 2
+    },
+    {
+      "text": "What year did the first iPhone go on sale?",
+      "answers": ["2005", "2007", "2009", "2011"],
+      "correct": 1
+    },
+    {
+      "text": "Which animal has the longest lifespan?",
+      "answers": ["Giant tortoise", "Greenland shark", "Bowhead whale"],
+      "correct": 1
+    },
+    {
+      "text": "What does HTTP stand for?",
+      "answers": ["HyperText Transfer Protocol", "High Transfer Text Protocol"],
+      "correct": 0
+    },
+    {
+      "text": "Which country has the most time zones?",
+      "answers": ["Russia", "USA", "France", "China"],
+      "correct": 2
+    }
+  ]
+}

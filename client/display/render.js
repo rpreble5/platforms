@@ -7,6 +7,7 @@
 
 import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
+import { drawAnswerPlates, drawDebris } from './round-ui.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
 /** @typedef {import('../../sim/player.js').Player} Player */
@@ -53,9 +54,10 @@ function separate(items) {
  * @param {CanvasRenderingContext2D} cx
  * @param {World} world
  * @param {Map<number, Look>} roster
- * @param {{qr: {size:number, modules:Uint8Array[]} | null, joinUrl: string, dimOthers: boolean}} opts
+ * @param {import('../../sim/round.js').Game} game
+ * @param {{qr: {size:number, modules:Uint8Array[]} | null, joinUrl: string}} opts
  */
-export function render(cx, world, roster, opts) {
+export function render(cx, world, roster, game, opts) {
   cx.fillStyle = '#05070c';
   cx.fillRect(0, 0, WORLD_W, WORLD_H);
 
@@ -71,6 +73,11 @@ export function render(cx, world, roster, opts) {
     cx.fillStyle = p.oneWay ? '#4d5b85' : '#5a688f';
     cx.fillRect(p.x + 4, p.y, p.w - 8, 4);
   }
+
+  // Debris first (behind everything), then the answer plates, then avatars —
+  // so a crowd standing on a platform never hides the answer it represents.
+  drawDebris(cx, game);
+  drawAnswerPlates(cx, world, game);
 
   const count = world.players.size;
   const scale = avatarScale(count);

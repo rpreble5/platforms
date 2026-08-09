@@ -96,9 +96,10 @@ Real phones tested: ______ Air RTT p50 / p95 from the HUD: ______ / ______
 
 ## 3. Glass-to-glass (the number that matters)
 
-Second phone, **240 fps slow-motion**, framing the player's thumb *and* the
-flash target in the bottom-right of the TV. Enable flash mode with the ⚑ in the
-gamepad's status bar. Count frames from thumb contact to the square going white,
+Press **F** on the display to arm the flash target (bottom-right; it's off by
+default so it doesn't sit over an answer). Then, with a second phone, film in
+**240 fps slow-motion**, framing the player's thumb *and* the target. Enable
+flash mode with the ⚑ in the gamepad's status bar. Count frames from thumb contact to the square going white,
 divide by 240.
 
 | config | frames @240fps | ms |

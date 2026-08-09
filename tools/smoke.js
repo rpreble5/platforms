@@ -284,9 +284,83 @@ if (crowd > 0) {
   ok(`crowded the display with ${crowd} bots`);
 }
 
+// ---------------------------------------------------------------- a real round
+//
+// The unit tests cover the round machine; this checks the part they can't --
+// that it runs, renders, and scores inside an actual browser.
+
+const deckSize = await display.evaluate(() => /** @type {any} */ (globalThis).__platforms.game.questions.length);
+assert(deckSize > 0, `question deck loaded (${deckSize} questions)`);
+
+await display.keyboard.press('Enter');
+await display.waitForFunction(
+  () => /** @type {any} */ (globalThis).__platforms.game.phase === 'ANSWER',
+  null,
+  { timeout: 15000 }
+);
+ok('round started and reached ANSWER');
+
 if (shots) {
   mkdirSync(path.join(root, 'state'), { recursive: true });
-  await display.screenshot({ path: path.join(root, 'state/smoke-display.png') });
+  await display.screenshot({ path: path.join(root, 'state/round-answer.png') });
+}
+
+// Put roughly two thirds of the room on the right answer, staggered in time so
+// the speed bonus actually has something to differentiate.
+const placed = await display.evaluate(() => {
+  const { world, game } = /** @type {any} */ (globalThis).__platforms;
+  const q = game.questions[game.qIndex];
+  const plat = world.platforms.find((/** @type {any} */ p) => p.id === `ans${q.correct}`);
+  const wrong = world.platforms.find((/** @type {any} */ p) => p.id?.startsWith('ans') && p !== plat);
+  let i = 0;
+  let onCorrect = 0;
+  for (const p of world.players.values()) {
+    const target = i % 3 === 2 ? wrong : plat;
+    if (target === plat) onCorrect++;
+    p.x = target.x + 20 + ((i * 37) % Math.max(1, target.w - 60));
+    p.y = target.y - p.h;
+    p.vx = 0;
+    p.vy = 0;
+    p.onGround = true;
+    p.standingOn = target;
+    i++;
+  }
+  return onCorrect;
+});
+assert(placed > 0, `${placed} players standing on the correct answer`);
+
+await display.waitForFunction(
+  () => /** @type {any} */ (globalThis).__platforms.game.phase === 'REVEAL',
+  null,
+  { timeout: 20000 }
+);
+ok('reached REVEAL');
+
+const scored = await display.evaluate(() => {
+  const g = /** @type {any} */ (globalThis).__platforms.game;
+  const correct = g.results.filter((/** @type {any} */ r) => r.correct);
+  return {
+    correct: correct.length,
+    wrong: g.results.length - correct.length,
+    top: correct[0]?.points ?? 0,
+    bottom: correct[correct.length - 1]?.points ?? 0,
+    debris: g.debris.length,
+  };
+});
+assert(scored.correct === placed, `${scored.correct} scored, ${scored.wrong} did not`);
+assert(scored.top >= scored.bottom, `points ordered by arrival (${scored.top} .. ${scored.bottom})`);
+assert(scored.debris > 0, `${scored.debris} wrong platforms crumbled`);
+
+await display.waitForFunction(
+  () => /** @type {any} */ (globalThis).__platforms.game.phase === 'SCORE',
+  null,
+  { timeout: 15000 }
+);
+await display.waitForTimeout(400);
+ok('reached SCORE with a scoreboard');
+
+if (shots) {
+  await display.screenshot({ path: path.join(root, 'state/round-score.png') });
   await phonePage.screenshot({ path: path.join(root, 'state/smoke-phone.png') });
   ok('screenshots written to state/');
 }

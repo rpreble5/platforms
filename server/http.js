@@ -81,6 +81,18 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
+    if (pathname === '/api/questions') {
+      try {
+        const pack = loadQuestions(root);
+        res.writeHead(200, { 'Content-Type': MIME['.json'] });
+        res.end(JSON.stringify(pack));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': MIME['.json'] });
+        res.end(JSON.stringify({ error: String(err) }));
+      }
+      return;
+    }
+
     if (pathname === '/api/checkpoint') {
       const body = JSON.stringify(getCheckpoint() ?? null);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
@@ -164,4 +176,51 @@ function sendFile(res, abs) {
     'Content-Length': String(st.size),
   });
   createReadStream(abs).pipe(res);
+}
+
+
+/**
+ * Read and sanity-check the question pack. Read fresh each request so editing
+ * questions.json and reloading the display is the whole edit loop.
+ *
+ * Problems are reported loudly but do not stop the game: refusing to start a
+ * party because one answer is 29 characters long would be the wrong trade. The
+ * length caps exist because of across-the-room readability, and an over-long
+ * answer will simply be shrunk to fit by the renderer.
+ * @param {string} root
+ */
+export function loadQuestions(root) {
+  const file = path.join(root, 'questions/default.json');
+  const pack = JSON.parse(readFileSync(file, 'utf8'));
+
+  /** @type {string[]} */
+  const problems = [];
+  const questions = (pack.questions ?? []).filter((/** @type {any} */ q, /** @type {number} */ i) => {
+    const where = `Q${i + 1}`;
+    if (typeof q?.text !== 'string' || !Array.isArray(q?.answers)) {
+      problems.push(`${where}: missing text or answers — skipped`);
+      return false;
+    }
+    if (q.answers.length < 2 || q.answers.length > 4) {
+      problems.push(`${where}: ${q.answers.length} answers, must be 2-4 — skipped`);
+      return false;
+    }
+    if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.answers.length) {
+      problems.push(`${where}: "correct" is out of range — skipped`);
+      return false;
+    }
+    if (q.text.length > 90) problems.push(`${where}: question is ${q.text.length} chars (>90 is hard to read across a room)`);
+    for (const a of q.answers) {
+      if (String(a).length > 28) problems.push(`${where}: answer "${a}" is ${String(a).length} chars (>28 shrinks small)`);
+    }
+    return true;
+  });
+
+  if (problems.length) {
+    console.log('\n  \x1b[33m!\x1b[0m  questions/default.json:');
+    for (const m of problems) console.log(`       ${m}`);
+    console.log('');
+  }
+
+  return { pack: pack.pack ?? 'default', answerMs: pack.answerMs ?? 12000, questions };
 }
