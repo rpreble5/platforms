@@ -1,0 +1,344 @@
+/**
+ * The display: authoritative for physics, and the renderer.
+ *
+ * The loop below is the shape the whole project is organised around.
+ * Three details are load-bearing:
+ *
+ *   - ONE rAF callback. No separate timer, no earlier rAF, no work after
+ *     render(). rAF fires immediately before paint, so this is as late as we
+ *     can legally tick — every millisecond earlier is a millisecond of staleness.
+ *   - drainInputQueue() runs INSIDE the fixed-step loop, not once per frame. A
+ *     packet that lands mid-frame is consumed by the very next tick.
+ *   - render() draws the latest tick directly. No interpolation buffer.
+ */
+
+import {
+  CHECKPOINT_MS,
+  MAX_FRAME_DT_MS,
+  MAX_STEPS_PER_FRAME,
+  PHYS,
+  STEP_MS,
+  TWEAKABLE,
+} from '../../shared/tuning.js';
+import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJson } from '../../shared/protocol.js';
+import { encodeQR } from '../../shared/qr.js';
+import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
+import { step } from '../../sim/world.js';
+import { InputBus } from './input-bus.js';
+import { render } from './render.js';
+import { drawHud } from './hud.js';
+import { LatencyFlash } from './latency-flash.js';
+
+// ------------------------------------------------------------------ canvas
+
+const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('stage'));
+const cx = /** @type {CanvasRenderingContext2D} */ (
+  // `desynchronized` is a genuine low-latency hint (it can skip a compositor
+  // buffer); `alpha:false` avoids a per-frame blend pass.
+  canvas.getContext('2d', { alpha: false, desynchronized: true })
+);
+const boot = /** @type {HTMLElement} */ (document.getElementById('boot'));
+
+// ------------------------------------------------------------------ state
+
+const world = createWorld();
+const bus = new InputBus();
+const flash = new LatencyFlash();
+
+/** @type {Map<number, {name:string, color:string, hat:string, connected:boolean}>} */
+const roster = new Map();
+/** @type {Map<number, {rttP50:number, rttP95:number, loss:number}>} */
+const net = new Map();
+
+/** @type {number[]} */
+const frameSamples = [];
+let lastSteps = 0;
+let joinUrl = '';
+/** @type {{size:number, modules:Uint8Array[]} | null} */
+let qr = null;
+
+const hud = { detail: false, note: '' };
+const tune = { on: false, index: 0 };
+
+// The local keyboard player. Server ids start at 1, so 0 is always free.
+// Being able to drive an avatar from the host keyboard makes it possible to
+// tune feel and verify the loop with no phone in the room.
+const LOCAL_ID = 0;
+let localMask = 0;
+
+// ------------------------------------------------------------------ socket
+
+/** @type {WebSocket | null} */
+let ws = null;
+let backoff = 250;
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws?role=display`);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    backoff = 250;
+    boot.classList.add('hidden');
+    send({ type: 'DISPLAY_HELLO' });
+    send({ type: 'ROSTER_REQ' });
+  };
+
+  ws.onmessage = (ev) => {
+    const bytes = new Uint8Array(ev.data);
+    if (!bytes.length) return;
+
+    if (bytes[0] === T_INPUT_FWD) {
+      bus.onPacket(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      return;
+    }
+    if (bytes[0] === T_JSON) {
+      /** @type {any} */
+      let msg;
+      try {
+        msg = decodeJson(bytes);
+      } catch {
+        return;
+      }
+      onJson(msg);
+    }
+  };
+
+  ws.onclose = () => {
+    boot.textContent = 'relay disconnected — reconnecting…';
+    boot.classList.remove('hidden');
+    setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 2, 4000);
+  };
+  ws.onerror = () => ws?.close();
+}
+
+/** @param {unknown} obj */
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(encodeJson(obj));
+}
+
+/** @param {any} msg */
+function onJson(msg) {
+  switch (msg.type) {
+    case 'ROSTER': {
+      /** @type {Set<number>} */
+      const seen = new Set([LOCAL_ID]);
+      for (const p of msg.players) {
+        seen.add(p.id);
+        roster.set(p.id, { name: p.name, color: p.color, hat: p.hat, connected: p.connected });
+        addPlayer(world, p.id);
+      }
+      // Players are only ever removed from the roster on a full refresh; a
+      // disconnected player keeps their avatar (translucent) so they can rejoin
+      // into the same body.
+      for (const id of [...world.players.keys()]) {
+        if (!seen.has(id)) {
+          removePlayer(world, id);
+          roster.delete(id);
+          net.delete(id);
+          bus.forget(id);
+        }
+      }
+      break;
+    }
+    case 'NET_STATS':
+      net.set(msg.playerId, { rttP50: msg.rttP50, rttP95: msg.rttP95, loss: msg.loss });
+      break;
+    default:
+      break;
+  }
+}
+
+// ------------------------------------------------------------------ the loop
+
+let last = performance.now();
+let acc = 0;
+let lastCheckpoint = 0;
+
+/** @param {number} now */
+function frame(now) {
+  requestAnimationFrame(frame);
+  const t0 = performance.now();
+
+  // Clamped so a tab restore cannot make us try to catch up 30 seconds of sim.
+  acc += Math.min(now - last, MAX_FRAME_DT_MS);
+  last = now;
+
+  let steps = 0;
+  while (acc >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
+    bus.applyMask(LOCAL_ID, localMask);
+    bus.drainInto(world);
+    flash.observe(world);
+    step(world, STEP_MS);
+    acc -= STEP_MS;
+    steps++;
+  }
+  lastSteps = steps;
+
+  render(cx, world, roster, { qr, joinUrl, dimOthers: false });
+  flash.draw(cx);
+  drawHud(cx, {
+    bus,
+    roster,
+    net,
+    frameSamples,
+    steps: lastSteps,
+    players: world.players.size,
+    detail: hud.detail,
+    note: hud.note,
+  });
+  if (tune.on) drawTuner(cx);
+
+  const dur = performance.now() - t0;
+  frameSamples.push(dur);
+  if (frameSamples.length > 240) frameSamples.shift();
+
+  if (now - lastCheckpoint >= CHECKPOINT_MS) {
+    lastCheckpoint = now;
+    send({
+      type: 'CHECKPOINT',
+      state: { tick: world.tick, players: world.players.size, phase: 'M0_SPIKE' },
+    });
+  }
+}
+
+// ------------------------------------------------------------------ keyboard
+
+/** @param {KeyboardEvent} e @param {boolean} down */
+function onKey(e, down) {
+  const k = e.key.toLowerCase();
+
+  if (down && !e.repeat) {
+    if (k === 'h') {
+      hud.detail = !hud.detail;
+      return;
+    }
+    if (k === 't') {
+      tune.on = !tune.on;
+      return;
+    }
+    if (k === 'f') {
+      flash.enabled = !flash.enabled;
+      hud.note = flash.enabled ? '' : 'flash target off';
+      return;
+    }
+    if (tune.on && k === 'p') {
+      printTuning();
+      return;
+    }
+  }
+
+  if (tune.on && down) {
+    const stepDir = k === 'arrowup' ? 1 : k === 'arrowdown' ? -1 : 0;
+    if (stepDir) {
+      const [name, delta] = TWEAKABLE[tune.index];
+      const next = round6(/** @type {any} */ (PHYS)[name] + delta * stepDir * (e.shiftKey ? 5 : 1));
+      /** @type {any} */ (PHYS)[name] = Math.max(0, next);
+      e.preventDefault();
+      return;
+    }
+    if (k === 'arrowleft' || k === 'arrowright') {
+      tune.index =
+        (tune.index + (k === 'arrowright' ? 1 : TWEAKABLE.length - 1)) % TWEAKABLE.length;
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Local test player.
+  let bit = 0;
+  if (k === 'a' || k === 'arrowleft') bit = BTN_LEFT;
+  else if (k === 'd' || k === 'arrowright') bit = BTN_RIGHT;
+  else if (k === ' ' || k === 'w' || k === 'arrowup') bit = BTN_JUMP;
+  if (!bit) return;
+  e.preventDefault();
+  localMask = down ? localMask | bit : localMask & ~bit;
+}
+
+addEventListener('keydown', (e) => onKey(e, true));
+addEventListener('keyup', (e) => onKey(e, false));
+// A window that loses focus must release, or the avatar runs forever.
+addEventListener('blur', () => {
+  localMask = 0;
+});
+
+function printTuning() {
+  const lines = TWEAKABLE.map(([name]) => `  ${name}: ${/** @type {any} */ (PHYS)[name]},`);
+  // eslint-disable-next-line no-console
+  console.log(`export const PHYS = {\n${lines.join('\n')}\n  // ...unchanged fields omitted\n};`);
+  hud.note = 'tuning printed to console';
+  setTimeout(() => (hud.note = ''), 2500);
+}
+
+/** @param {CanvasRenderingContext2D} c */
+function drawTuner(c) {
+  const w = 380;
+  const h = 34 + TWEAKABLE.length * 24 + 30;
+  const x = 1920 - w - 24;
+  const y = 24;
+  c.fillStyle = 'rgba(8,11,18,0.9)';
+  c.beginPath();
+  c.roundRect(x, y, w, h, 12);
+  c.fill();
+  c.strokeStyle = 'rgba(90,104,130,0.4)';
+  c.stroke();
+
+  c.font = '700 15px ui-monospace, SFMono-Regular, Menlo, monospace';
+  c.fillStyle = '#ffd93d';
+  c.fillText('TUNING  ←→ pick  ↑↓ adjust  P print', x + 16, y + 26);
+
+  c.font = '500 14px ui-monospace, SFMono-Regular, Menlo, monospace';
+  let ry = y + 52;
+  TWEAKABLE.forEach(([name], i) => {
+    const active = i === tune.index;
+    c.fillStyle = active ? '#ffffff' : '#7c879b';
+    c.fillText(`${active ? '▸' : ' '} ${name}`, x + 16, ry);
+    c.textAlign = 'right';
+    c.fillText(String(/** @type {any} */ (PHYS)[name]), x + w - 16, ry);
+    c.textAlign = 'left';
+    ry += 24;
+  });
+  c.fillStyle = '#5a6478';
+  c.fillText('tune this over real WiFi, not localhost', x + 16, ry + 6);
+}
+
+/** @param {number} n @returns {number} */
+function round6(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+// ------------------------------------------------------------------ boot
+
+async function init() {
+  addPlayer(world, LOCAL_ID);
+  roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', hat: 'none', connected: true });
+
+  try {
+    const health = await fetch('/api/health').then((r) => r.json());
+    if (health.joinUrl) {
+      joinUrl = health.joinUrl;
+      qr = encodeQR(joinUrl);
+    }
+  } catch {
+    /* the QR is a convenience; the loop must start regardless */
+  }
+
+  // The display is served from localhost, which IS a secure context even over
+  // plain HTTP — so unlike the phones, it gets wakeLock for free.
+  try {
+    // @ts-ignore - not in older lib.dom
+    await navigator.wakeLock?.request('screen');
+  } catch {
+    /* not fatal */
+  }
+
+  // Debug handle. Useful from the console at the venue ("why is player 7 not
+  // moving?") and used by the browser smoke test.
+  Object.assign(globalThis, { __platforms: { world, bus, roster, net, PHYS, flash } });
+
+  connect();
+  requestAnimationFrame(frame);
+}
+
+init();

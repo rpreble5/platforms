@@ -1,0 +1,28 @@
+{
+  "name": "platforms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Latency prototype for a 30-player quiz platformer. Phones are dumb gamepads; one central screen owns physics and rendering.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test 'sim/*.test.js' 'shared/*.test.js' 'server/*.test.js'",
+    "typecheck": "tsc -p jsconfig.json --noEmit",
+    "loadgen": "node tools/loadgen.js",
+    "smoke": "node tools/smoke.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/ws": "^8.18.1",
+    "jsqr": "^1.4.0",
+    "playwright-core": "^1.62.1",
+    "typescript": "^7.0.2"
+  }
+}

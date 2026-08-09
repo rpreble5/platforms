@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Gamepad</title>
+<style>
+  /* The whole page is a control surface. Nothing here may scroll, zoom,
+     select, long-press, or bounce — every one of those is a dropped input. */
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    height:100%; width:100%; overflow:hidden; position:fixed; inset:0;
+    background:#0b0d12; color:#fff;
+    font:600 16px/1.2 ui-sans-serif, -apple-system, system-ui, sans-serif;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+    -webkit-touch-callout:none; overscroll-behavior:none;
+  }
+
+  #bar {
+    position:absolute; inset:0 0 auto 0; height:11vh; min-height:56px;
+    display:flex; align-items:center; gap:10px; padding:0 14px;
+    padding-top:env(safe-area-inset-top);
+    background:#11141c; border-bottom:1px solid #1e2431; z-index:3;
+  }
+  #swatch {
+    width:34px; height:34px; border-radius:9px; flex:none;
+    display:grid; place-items:center; font-size:18px; background:#333;
+  }
+  #who { flex:1; min-width:0; }
+  #name { font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #status { font-size:11px; color:#7d8798; font-weight:500; letter-spacing:.02em; }
+  #rtt { font:700 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color:#7d8798; text-align:right; }
+  #rtt b { display:block; font-size:19px; color:#e8edf5; }
+  #flagbtn { padding:8px 10px; margin:-8px -6px -8px 0; color:#3d4657; font-size:15px; }
+  #flagbtn.on { color:#ffd93d; }
+
+  #surface { position:absolute; inset:11vh 0 0 0; top:max(11vh,56px); display:flex; z-index:1; }
+  .zone {
+    flex:1; display:grid; place-items:center; position:relative;
+    font-size:min(13vw,58px); color:#39425a;
+    background:#141822; border-left:1px solid #0b0d12;
+    /* compositor-only press feedback: no layout, no paint, no rAF */
+    transition:transform .04s linear, background-color .04s linear;
+    will-change:transform;
+  }
+  .zone:first-child { border-left:0; }
+  #jump { flex:2; background:#1a2030; color:#4c5878; }
+  .zone.down { transform:scale(.96); background:#2f3a52; }
+  #jump.down { background:#3d4a6b; }
+
+  /* Full-screen white flash for the 240fps camera test. Painted on its own
+     layer so it composites without a relayout. */
+  #flash {
+    position:absolute; inset:0; background:#fff; z-index:9;
+    opacity:0; pointer-events:none; will-change:opacity;
+  }
+  #flash.on { opacity:1; }
+
+  /* Feedback tint (correct / wrong / eliminated). */
+  #tint { position:absolute; inset:0; z-index:8; opacity:0; pointer-events:none;
+          transition:opacity .25s ease-out; will-change:opacity; }
+
+  #overlay {
+    position:absolute; inset:0; z-index:20; background:#0b0d12;
+    display:grid; place-items:center; text-align:center; padding:28px;
+  }
+  #overlay.hidden { display:none; }
+  #overlay h1 { font-size:22px; margin-bottom:10px; }
+  #overlay p { font-size:14px; font-weight:500; color:#9aa4b6; line-height:1.5; max-width:30ch; }
+  #overlay .big { font-size:52px; margin-bottom:14px; }
+  #nosleep { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div id="swatch">?</div>
+  <div id="who"><div id="name">connecting…</div><div id="status">joining the game</div></div>
+  <div id="rtt"><b>—</b>ms rtt</div>
+  <div id="flagbtn">⚑</div>
+</div>
+
+<div id="surface">
+  <div class="zone" id="left" data-btn="left">◀</div>
+  <div class="zone" id="right" data-btn="right">▶</div>
+  <div class="zone" id="jump" data-btn="jump">JUMP</div>
+</div>
+
+<div id="tint"></div>
+<div id="flash"></div>
+<video id="nosleep" muted playsinline loop preload="auto"></video>
+
+<div id="overlay">
+  <div>
+    <div class="big">🎮</div>
+    <h1 id="ovh">Tap to join</h1>
+    <p id="ovp">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
+  </div>
+</div>
+
+<script>
+/*__PROTOCOL__*/
+/*__TUNING__*/
+
+(function () {
+  'use strict';
+
+  // ------------------------------------------------------------------ elements
+  var $ = function (id) { return document.getElementById(id); };
+  var elSurface = $('surface'), elFlash = $('flash'), elTint = $('tint');
+  var elName = $('name'), elStatus = $('status'), elRtt = $('rtt').firstElementChild;
+  var elSwatch = $('swatch'), elOverlay = $('overlay'), elOvh = $('ovh'), elOvp = $('ovp');
+  var elFlag = $('flagbtn');
+  var zones = { left: $('left'), right: $('right'), jump: $('jump') };
+
+  var HAT_GLYPH = { none: '●', cap: '🧢', horns: '🤘', antenna: '📡' };
+
+  // ------------------------------------------------------------------ identity
+  var token = null;
+  try { token = localStorage.getItem('platforms.token'); } catch (e) { /* private mode */ }
+  var clientSalt = hash32(token || String(Math.random()));
+  /** Stagger periodic sends, or 30 phones sync on second boundaries and
+   *  manufacture their own airtime contention. */
+  var phase = clientSalt % HEARTBEAT_MS;
+
+  var playerId = 0;
+
+  // ------------------------------------------------------------------ input state
+  var held = 0;          // authoritative mask, recomputed from live pointers
+  var seq = 0;
+  var lastSentMask = 0;
+  var lastSendAt = 0;
+  var lastEchoReqAt = 0;
+  var pointers = new Map();   // pointerId -> zone name
+  var bothSinceAt = 0;        // for the LEFT+RIGHT find-me gesture
+  var findMeLatched = false;
+  var flashMode = false;
+
+  // ------------------------------------------------------------------ rtt stats
+  var samples = [];
+  var echoAsked = 0, echoGot = 0;
+  var lastStatsAt = 0;
+
+  // ------------------------------------------------------------------ socket
+  var ws = null, connected = false, backoff = 250, reconnectTimer = 0;
+
+  function wsUrl() {
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + location.host + '/ws';
+  }
+
+  function connect() {
+    clearTimeout(reconnectTimer);
+    try { ws = new WebSocket(wsUrl()); } catch (e) { scheduleReconnect(); return; }
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = function () {
+      connected = true;
+      backoff = 250;
+      setStatus('connected');
+      sendJson({ type: 'HELLO', token: token || undefined });
+      // Re-assert the current mask right away: the server may have watchdogged
+      // us to zero while we were away.
+      lastSentMask = -1;
+      pushInput(false);
+    };
+
+    ws.onmessage = function (ev) {
+      var bytes = new Uint8Array(ev.data);
+      if (!bytes.length) return;
+      var type = bytes[0];
+
+      if (type === T_ECHO) {
+        var v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        var e = decodeEcho(v);
+        var rtt = since16(e.stamp16, t16(performance.now()));
+        if (rtt >= 0 && rtt < 5000) {
+          echoGot++;
+          samples.push(rtt);
+          if (samples.length > 120) samples.shift();
+          elRtt.textContent = String(rtt);
+        }
+        return;
+      }
+
+      if (type === T_FEEDBACK) { feedback(bytes[1]); return; }
+
+      if (type === T_JSON) {
+        var msg;
+        try { msg = decodeJson(bytes); } catch (err) { return; }
+        onJson(msg);
+      }
+    };
+
+    ws.onclose = function () { connected = false; setStatus('reconnecting…'); scheduleReconnect(); };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 2, 4000);
+  }
+
+  function onJson(msg) {
+    if (msg.type === 'HELLO_ACK') {
+      playerId = msg.playerId;
+      token = msg.token;
+      try { localStorage.setItem('platforms.token', token); } catch (e) {}
+      phase = hash32(token) % HEARTBEAT_MS;
+      elName.textContent = msg.name;
+      // The phone IS the identity anchor: whole-screen colour plus hat glyph.
+      // "Look at your phone, then find that on screen" is the whole mechanism
+      // for picking yourself out of 30 avatars.
+      document.body.style.background = msg.color;
+      elSwatch.style.background = msg.color;
+      elSwatch.style.color = '#0b0d12';
+      elSwatch.textContent = HAT_GLYPH[msg.hat] || '●';
+      setStatus('you are ' + msg.name);
+      hideOverlay();
+    } else if (msg.type === 'KICK') {
+      showOverlay('👋', 'Disconnected', msg.reason || '');
+      try { ws.close(); } catch (e) {}
+    } else if (msg.type === 'STATE' && msg.msg) {
+      setStatus(msg.msg);
+    }
+  }
+
+  function sendJson(obj) {
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(encodeJson(obj));
+  }
+
+  // ------------------------------------------------------------------ the hot path
+  //
+  // Sent synchronously inside the pointer handler. There is deliberately no
+  // requestAnimationFrame loop anywhere on this page — batching input to a
+  // frame would add up to 16ms for no benefit whatsoever.
+  function pushInput(isHeartbeat) {
+    if (!ws || ws.readyState !== 1) return;
+    var now = performance.now();
+    var flags = 0;
+    if (isHeartbeat) flags |= F_HEARTBEAT;
+    if (document.hidden) flags |= F_PAGE_HIDDEN;
+    if (now - lastEchoReqAt >= ECHO_EVERY_MS) {
+      flags |= F_REQ_ECHO;
+      lastEchoReqAt = now;
+      echoAsked++;
+    }
+    seq = (seq + 1) & 0xffff;
+    // Full mask every time — a lost or reordered packet self-heals on the next
+    // one, and there is no press/release pairing to fall out of sync.
+    ws.send(encodeInput(T_INPUT, held, flags, seq, t16(now)));
+    lastSentMask = held;
+    lastSendAt = now;
+  }
+
+  function recomputeMask() {
+    var m = 0;
+    pointers.forEach(function (zone) {
+      if (zone === 'left') m |= BTN_LEFT;
+      else if (zone === 'right') m |= BTN_RIGHT;
+      else if (zone === 'jump') m |= BTN_JUMP;
+    });
+
+    // Find-me: hold LEFT+RIGHT together. Highest-value feature for 30 players.
+    var both = (m & BTN_LEFT) && (m & BTN_RIGHT);
+    if (both) {
+      if (!bothSinceAt) bothSinceAt = performance.now();
+      else if (!findMeLatched && performance.now() - bothSinceAt >= FINDME_HOLD_MS) {
+        findMeLatched = true;
+        m |= BTN_FINDME;
+        vibrate(20);
+      }
+    } else {
+      bothSinceAt = 0;
+      findMeLatched = false;
+    }
+    if (findMeLatched) m |= BTN_FINDME;
+
+    if (m !== held) {
+      var pressed = m & ~held;
+      held = m;
+      paintZones();
+      pushInput(false);
+      if (pressed & BTN_JUMP) {
+        vibrate(12);
+        if (flashMode) doFlash();
+      }
+    }
+  }
+
+  function zoneAt(clientX, clientY) {
+    var r = elSurface.getBoundingClientRect();
+    if (clientY < r.top) return null;
+    var x = clientX - r.left;
+    if (x < r.width * 0.25) return 'left';
+    if (x < r.width * 0.5) return 'right';
+    return 'jump';
+  }
+
+  function paintZones() {
+    zones.left.classList.toggle('down', !!(held & BTN_LEFT));
+    zones.right.classList.toggle('down', !!(held & BTN_RIGHT));
+    zones.jump.classList.toggle('down', !!(held & BTN_JUMP));
+  }
+
+  // One surface, not three buttons. A Map of live pointers gives multitouch
+  // (left + jump at once), sliding between zones, and correct release when a
+  // finger drifts off — all fiddly with per-button listeners.
+  function onDown(e) {
+    e.preventDefault();
+    var z = zoneAt(e.clientX, e.clientY);
+    if (!z) return;
+    pointers.set(e.pointerId, z);
+    recomputeMask();
+  }
+  function onMove(e) {
+    if (!pointers.has(e.pointerId)) return;
+    e.preventDefault();
+    var z = zoneAt(e.clientX, e.clientY);
+    if (z !== pointers.get(e.pointerId)) {
+      if (z) pointers.set(e.pointerId, z); else pointers.delete(e.pointerId);
+      recomputeMask();
+    }
+  }
+  function onUp(e) {
+    if (!pointers.has(e.pointerId)) return;
+    e.preventDefault();
+    pointers.delete(e.pointerId);
+    recomputeMask();
+  }
+
+  var opts = { passive: false };
+  elSurface.addEventListener('pointerdown', onDown, opts);
+  elSurface.addEventListener('pointermove', onMove, opts);
+  elSurface.addEventListener('pointerup', onUp, opts);
+  // pointercancel fires on iOS system gestures. Miss it and the avatar runs
+  // off the level forever — the single most visible bug in the game.
+  elSurface.addEventListener('pointercancel', onUp, opts);
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, opts);
+  document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, opts);
+  document.addEventListener('dblclick', function (e) { e.preventDefault(); }, opts);
+
+  // ------------------------------------------------------------------ release on background
+  function releaseAll(reason) {
+    pointers.clear();
+    if (held !== 0) { held = 0; paintZones(); }
+    // Send it even if the mask was already 0 — cheap, and it beats the watchdog.
+    pushInput(false);
+    setStatus(reason);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      releaseAll('paused (screen off)');
+    } else {
+      setStatus(connected ? 'connected' : 'reconnecting…');
+      // Bypass backoff — the socket is usually already dead by now on iOS.
+      if (!ws || ws.readyState > 1) { backoff = 250; connect(); }
+    }
+  });
+  window.addEventListener('pagehide', function () { releaseAll('paused'); });
+  window.addEventListener('blur', function () { releaseAll('paused'); });
+
+  // ------------------------------------------------------------------ periodic
+  setInterval(function () {
+    var now = performance.now();
+    if (!ws || ws.readyState !== 1) return;
+
+    // Heartbeat: resend an unchanged mask. Layer two of three against the
+    // dropped-release bug (full mask, this, and the server-side watchdog).
+    if (now - lastSendAt >= HEARTBEAT_MS + (phase % 60)) {
+      if (held !== 0 || lastSentMask !== 0) pushInput(true);
+      else if (now - lastSendAt >= IDLE_PING_MS) {
+        // Idle ping keeps the 802.11 association warm and the HUD alive.
+        seq = (seq + 1) & 0xffff;
+        echoAsked++;
+        lastEchoReqAt = now;
+        ws.send(encodeInput(T_PING, 0, F_REQ_ECHO, seq, t16(now)));
+        lastSendAt = now;
+      }
+    }
+
+    if (now - lastStatsAt >= STATS_EVERY_MS + phase) {
+      lastStatsAt = now;
+      if (samples.length >= 3) {
+        var s = samples.slice().sort(function (a, b) { return a - b; });
+        sendJson({
+          type: 'STATS',
+          rttP50: s[Math.floor(s.length * 0.5)],
+          rttP95: s[Math.min(s.length - 1, Math.floor(s.length * 0.95))],
+          loss: echoAsked ? Math.max(0, 1 - echoGot / echoAsked) : 0,
+        });
+      }
+    }
+  }, 100);
+
+  // ------------------------------------------------------------------ feedback
+  function feedback(code) {
+    var color = code === FB_LANDED_CORRECT ? '#2fc98d'
+      : code === FB_LANDED_WRONG ? '#ff5a3c'
+      : code === FB_ELIMINATED ? '#000'
+      : code === FB_SCORED ? '#ffd93d' : '#4aa8ff';
+    elTint.style.background = color;
+    elTint.style.transition = 'none';
+    elTint.style.opacity = '0.85';
+    requestAnimationFrame(function () {
+      elTint.style.transition = 'opacity .4s ease-out';
+      elTint.style.opacity = '0';
+    });
+    vibrate(code === FB_LANDED_WRONG || code === FB_ELIMINATED ? [30, 40, 30] : 25);
+  }
+
+  // Android only. iOS Safari has no navigator.vibrate at all, so the visual
+  // press feedback has to carry the whole job there.
+  function vibrate(pattern) {
+    if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
+  }
+
+  // ------------------------------------------------------------------ flash test
+  //
+  // Marks the moment of a JUMP press with a full-screen white frame so a 240fps
+  // camera can catch the phone and the TV in one shot. Note the phone's own
+  // display pipeline delays this flash by ~20-40ms, so THUMB -> TV is the true
+  // number and FLASH -> TV is a lower bound. See docs/venue-check.md.
+  function doFlash() {
+    elFlash.classList.add('on');
+    setTimeout(function () { elFlash.classList.remove('on'); }, 100);
+  }
+  function setFlashMode(on) {
+    flashMode = on;
+    elFlag.classList.toggle('on', on);
+    setStatus(on ? 'flash test ON — film thumb + TV at 240fps' : 'flash test off');
+  }
+  elFlag.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    setFlashMode(!flashMode);
+  }, opts);
+  if (location.hash.indexOf('flash') >= 0) setFlashMode(true);
+
+  // ------------------------------------------------------------------ keep awake
+  //
+  // The phone page is plain HTTP so it is NOT a secure context and wakeLock is
+  // unavailable. We try it anyway (it works from localhost, and if this is ever
+  // served over HTTPS), then fall back to the silent-looping-video hack if the
+  // asset has been generated. Neither is guaranteed, hence the instruction.
+  var wakeLock = null;
+  function keepAwake() {
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+      navigator.wakeLock.request('screen').then(function (l) {
+        wakeLock = l;
+        l.addEventListener('release', function () { wakeLock = null; });
+      }).catch(function () { videoFallback(); });
+    } else {
+      videoFallback();
+    }
+  }
+  // iOS Safari needs the mp4 (it will not play VP8); Android Chrome takes
+  // either. The mp4 is not committed because it needs a real ffmpeg to build —
+  // run tools/make-nosleep.sh. Without it, iPhones fall back to the printed
+  // "Auto-Lock: Never" instruction, which is why that instruction is on the
+  // join overlay rather than buried in a README.
+  function videoFallback() {
+    var v = $('nosleep');
+    if (v.dataset.tried) return;
+    v.dataset.tried = '1';
+    var sources = ['/nosleep.mp4', '/nosleep.webm'];
+    (function next(i) {
+      if (i >= sources.length) return;
+      fetch(sources[i], { method: 'HEAD' }).then(function (r) {
+        if (!r.ok) return next(i + 1);
+        v.src = sources[i];
+        v.play().catch(function () { next(i + 1); });
+      }).catch(function () { next(i + 1); });
+    })(0);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && !wakeLock) keepAwake();
+  });
+
+  // ------------------------------------------------------------------ overlay
+  function showOverlay(icon, head, body) {
+    elOverlay.querySelector('.big').textContent = icon;
+    elOvh.textContent = head;
+    elOvp.textContent = body;
+    elOverlay.classList.remove('hidden');
+  }
+  function hideOverlay() { elOverlay.classList.add('hidden'); }
+  function setStatus(s) { elStatus.textContent = s; }
+
+  // A user gesture is required before video playback and vibration are allowed,
+  // so the join tap does double duty.
+  elOverlay.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    hideOverlay();
+    keepAwake();
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(function () {});
+    }
+  }, opts);
+
+  function hash32(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0);
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

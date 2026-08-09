@@ -1,0 +1,291 @@
+# platforms
+
+A latency prototype for a 25–30 player quiz platformer. Phones are dumb
+gamepads (left / right / jump). One central screen owns the physics and the
+rendering. Nobody looks at their phone while playing.
+
+**There is no quiz yet, on purpose.** This milestone exists to produce one
+number — real glass-to-glass latency, measured on real phones over the WiFi
+you'll actually use — before any game content is worth writing.
+
+---
+
+## Quick start
+
+```bash
+npm install
+npm run dev
+```
+
+The terminal prints a QR code and two URLs:
+
+```
+players   http://192.168.1.20:8080/       <- scan this / phones open this
+display   http://localhost:8080/display/  <- open on the machine driving the TV
+```
+
+Put the display page fullscreen on the TV, scan the QR from a phone, and press
+buttons. You can also drive an avatar from the host keyboard (`A` / `D` / space)
+with no phone at all.
+
+| key | on the display |
+|---|---|
+| `A` `D` / arrows | move the local test avatar |
+| space / `W` | jump |
+| `H` | per-player RTT / loss table |
+| `T` | live physics tuning (`←→` pick, `↑↓` adjust, shift for ×5, `P` prints a paste-able block) |
+| `F` | toggle the flash-test target |
+
+---
+
+## Read this before you measure anything
+
+Two things dominate the latency budget and **neither is in this code**:
+
+1. **Put the TV in Game Mode.** Motion smoothing / "cinema" processing adds
+   80–150 ms — more than this entire software pipeline combined. It is one
+   settings menu and it is the single highest-leverage change available.
+2. **HDMI cable only.** Chromecast and AirPlay add 100–500 ms. There is no
+   configuration that makes wireless display acceptable here.
+
+The full budget, touch → photons:
+
+| stage | good | bad |
+|---|---|---|
+| touch digitizer + OS dispatch | 7 ms | 50 ms |
+| JS handler → bytes on the wire | 1 ms | 5 ms |
+| **air hop (802.11 contention, retries, power-save)** | 4 ms | **120 ms** |
+| AP → host over Ethernet | <1 ms | 2 ms |
+| relay → display (loopback) | 0.5 ms | 4 ms |
+| latch → next sim tick @120 Hz | 4 ms | 8 ms |
+| sim + render in rAF | 2 ms | 20 ms |
+| rAF → compositor → HDMI | 17 ms | 33 ms |
+| **TV panel processing** | 12 ms | **140 ms** |
+| **total** | **~49 ms** | **~380 ms** |
+
+A well-run party lands around **60–90 ms p50**. That is fine — console players
+live there. What people actually perceive is **variance and dropped inputs**, not
+mean latency: a rock-steady 90 ms feels good, and 40–250 ms jitter feels broken.
+Optimise p99 and never-drop-an-input.
+
+---
+
+## Measuring it properly
+
+**The HUD** (top-left) shows what software can see: air RTT p50/p95 reported by
+each phone, loss, relay delay, queue→tick delay, and frame time. Watch frame
+p95 — above ~20 ms you're dropping frames and your *renderer*, not your network,
+is the latency problem.
+
+**The flash test** is the only measurement that includes touch sampling and the
+TV, i.e. the terms that dominate:
+
+1. TV in Game Mode. Display fullscreen. Flash target visible (bottom-right).
+2. On the phone, tap the ⚑ in its status bar to enable flash mode.
+3. With a **second phone**, film in **240 fps slow-motion** so the player's thumb
+   *and* the flash target are both in frame.
+4. Press jump. Count frames from thumb contact to the square going white.
+   ÷ 240 = seconds. Each frame is 4.17 ms.
+
+Run it four times on night one: **Game Mode on/off × host wired/wireless.** The
+Game Mode delta alone will settle every architecture argument you might have.
+
+> The phone's own white flash is a convenience marker, not the reference — the
+> phone's display pipeline delays it by 20–40 ms. **Thumb → TV** is the true
+> number; phone-flash → TV is a lower bound.
+
+**Load testing** before you write any game:
+
+```bash
+npm run loadgen -- --url http://192.168.1.20:8080 --clients 10,20,30 --hold 30
+```
+
+Run it from a laptop that is *on the WiFi* so packets are really in the air. It
+prints a p50/p95/p99/loss table and tells you whether you've tripped a
+bring-the-router trigger. **One radio is not thirty radios** — this validates
+server CPU, the AP's client table, and the protocol under volume; it does not
+reproduce true airtime contention. Only real phones do that.
+
+---
+
+## Network
+
+Target the office WiFi — it's what you'll use and it may well be fine; the whole
+game needs about 50 kbit/s. The prototype's job is to tell you, with numbers,
+well before the event.
+
+The one thing that hard-fails is **client isolation**: many corporate and guest
+networks let phones reach the internet but not a laptop on the same network.
+That breaks this design completely and is undetectable from the host side — you
+find out by trying. It's also the cheapest possible test, so do it first: one
+phone, one QR scan, does it connect.
+
+Try, best first:
+
+1. **Host on the same WiFi SSID as the phones.** Counter-intuitive given Ethernet
+   is faster, but corporate wired and wireless are usually separate VLANs with
+   firewall rules between them, so a wired host often simply can't be reached.
+2. **Host on Ethernet.** Better when it works — the host's traffic leaves the air
+   entirely. Verify a phone can actually reach it.
+3. Ask IT for a non-isolated SSID for one evening. Often a five-minute chat.
+
+### When to bring your own router
+
+Decide from measurements, not on the night:
+
+- Isolation probe fails and IT can't help → no choice.
+- p99 input RTT > 150 ms, or loss > 1%, at 30 clients under load.
+- RTT degrades sharply as clients scale (fine at 10, bad at 25) — that's AP or
+  airtime saturation, and a real crowd will be worse.
+- Flash test > 150 ms glass-to-glass *after* the TV is in Game Mode.
+
+Then: **standalone island AP, no WAN at all.** No internet means the phones'
+background apps stop competing for airtime, which is a real win. Prefer 5 GHz /
+802.11ac; a 2.4 GHz-only 802.11n box will struggle at 30 clients. WPA2-PSK (not
+WPA3 — old-device compatibility), host on Ethernet, **fixed non-DFS channel
+(36–40 or 149–153 in the US)** so a radar event can't silently channel-hop and
+drop everyone for 60 s mid-party, and **40 MHz width, not 80**. Put legacy
+2.4 GHz on a differently-named SSID; turn band steering off. Brief the players:
+their phones will warn "no internet" and Android may bounce them to cellular.
+
+See `docs/venue-check.md` for the pre-event checklist and a place to write the
+numbers down.
+
+---
+
+## Architecture
+
+```
+30x Phone (dumb gamepad, sends intent only)
+      |  WebSocket over LAN  -- the only wireless hop
+      v
+Node relay  (host laptop: static files + WS fanout + identity)
+      |  WebSocket over loopback  -- ~0.5 ms
+      v
+Display page (owns physics sim AND rendering)
+      |  HDMI
+      v
+    TV / projector
+```
+
+**Phones send intent, never position** — a 4-bit button mask. Because nobody
+looks at their phone, there is no client view to reconcile: no prediction, no
+rollback, no snapshot format. That is a large simplification normal multiplayer
+games don't get.
+
+**Physics lives in the display page, not in Node.** The decisive reason isn't the
+serialization hop (~1 ms) — it's that separating sim from renderer forces you to
+buy an **interpolation buffer**, the standard 1–2 ticks of render-in-the-past
+used to smooth arrival jitter. That's 16–33 ms of *deliberate* added latency that
+exists only because the two are separated. Co-locating them renders the current
+tick with zero interpolation delay, and it's the biggest saving available in
+software.
+
+The cost is robustness, handled without giving up co-location: the sim is a pure,
+DOM-free module under `sim/` (Node imports the identical files for tests), and
+the display pushes a 2 Hz checkpoint to the relay, mirrored to `state/`. Node
+owns **identity only**; the display owns **physics and round logic**. No overlap,
+so there's never a "which one is right" question.
+
+**Transport is a plain WebSocket.** Not socket.io — we need raw `setNoDelay`,
+`perMessageDeflate: false`, and binary frames, and its client JS would land at the
+worst possible moment (30 phones joining at once). WebRTC DataChannel is a v2
+upgrade behind a measured trigger, not a v1 decision: it buys ~10 ms on the p99,
+and roughly nothing on the median.
+
+One non-obvious enabler: the display loads from `localhost`, which **is a secure
+context even over plain HTTP**, so it gets `wakeLock` for free — while phones load
+over plain HTTP by IP with no certificate warnings.
+
+### Three low-level details that are load-bearing
+
+- `setNoDelay` is applied on the HTTP server's `connection` event, *before* the
+  WebSocket upgrade, so no path can miss it. Browsers already set `TCP_NODELAY`
+  client-side, so **server → phone is the direction Nagle actually bites** — our
+  6-byte echo frames are exactly the small-write case it delays by up to 40 ms.
+- Input is forwarded **the instant it arrives**, never batched to a timer.
+  Coalescing is precisely the "optimization" that adds the latency we're removing.
+- Phones send **on change only, plus a 400 ms heartbeat**. Thirty phones at 60 Hz
+  would be ~1800 pkt/s of airtime for zero benefit.
+
+### Why forgiveness beats milliseconds
+
+`JUMP_BUFFER_MS = 150`, `COYOTE_MS = 120` in `shared/tuning.js`.
+
+A player reacts to a frame already ~70 ms old, and their press takes another
+~70 ms to arrive — so the world their jump lands in is ~150 ms ahead of the one
+they reacted to. That shows up in exactly two ways: pressing just *after* walking
+off an edge (coyote time fixes it) and just *before* landing (jump buffering
+fixes it). Together those two constants absorb the entire good-case latency
+budget. Shaving 10 ms off the wire moves nothing a human can detect; widening the
+buffer by 50 ms turns a failed jump into a landed one.
+
+The same logic extends to level design, which is the highest-leverage latency
+work available: **keep the required precision low.** A game that never demands
+50 ms precision cannot be ruined by 90 ms of lag.
+
+### The dropped-release bug
+
+An avatar that runs off the level forever is the most visible failure this game
+can have, and TCP cannot prevent it — iOS suspends a backgrounded tab between a
+press and its release. Three independent layers guard it:
+
+1. The **full mask is in every packet**, so loss and reordering self-heal.
+2. The phone **resends an unchanged mask every 400 ms**, and sends mask 0
+   immediately on `visibilitychange` / `pagehide` / `blur` / `pointercancel`.
+3. The server **forwards a synthetic mask 0** after 2 s of silence, and on
+   disconnect.
+
+---
+
+## Layout
+
+```
+server/     http.js (static + inlined phone page), relay.js (WS), roster.js (identity)
+shared/     protocol.js (wire format), tuning.js (all constants), palette.js, qr.js
+sim/        PURE, no DOM: world.js, player.js, collide.js  -- Node runs these in tests
+client/display/  main.js (loop), input-bus.js, render.js, hud.js, latency-flash.js
+client/phone/    index.html -- the entire gamepad, one file
+tools/      loadgen.js, smoke.js, make-nosleep.sh
+```
+
+`shared/protocol.js` is imported unchanged by Node and the display page, and is
+**inlined into the phone page at boot** with its `export` keywords stripped — so
+the phone loads no modules and the wire format still can't drift. The phone being
+one gzipped file is a latency decision: thirty phones loading at once is the worst
+congestion moment of the night.
+
+## Commands
+
+```bash
+npm run dev        # server with --watch
+npm start          # server
+npm test           # sim determinism + physics + relay integration (24 tests)
+npm run typecheck  # tsc over JSDoc types, no build step
+npm run smoke      # drive the real pages in Chromium; --shots, --crowd 28
+npm run loadgen    # synthetic clients
+bash tools/make-nosleep.sh   # build the keep-awake videos (needs ffmpeg)
+```
+
+There is **no build step** and exactly **one runtime dependency** (`ws`). Types
+come from JSDoc + `checkJs`, so the dev loop is save-and-refresh.
+
+## Known gaps
+
+- **iPhone screens may sleep.** The phone page is plain HTTP, so it isn't a
+  secure context and `wakeLock` is unavailable. The fallback is a silent looping
+  video; `nosleep.webm` is committed and covers Android, but iOS Safari won't
+  play VP8 and needs an MP4 — run `bash tools/make-nosleep.sh` (needs a real
+  ffmpeg) to build it. Until then iPhones rely on the "Auto-Lock: Never"
+  instruction on the join screen. In practice sleep is only a risk during the
+  lobby; players tap constantly during a round.
+- **No haptics on iOS.** `navigator.vibrate` doesn't exist in Safari, so the
+  visual press feedback carries the whole job there.
+- **Player cap is 40**, with the longest-gone disconnected slot reclaimed when
+  full. Screen space and the 48 colour×hat identities are the real limits.
+
+## What's next
+
+Rounds, questions, scoring, elimination — all deliberately unbuilt. Tune the feel
+over real WiFi first, get a flash-test number, then decide the game design with
+that number in hand.
