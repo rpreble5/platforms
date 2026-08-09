@@ -5,7 +5,7 @@
  * buffer worth 16-33ms of deliberate added latency, and co-locating deletes it.
  */
 
-import { WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
+import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
@@ -20,11 +20,13 @@ import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
  */
 
 /**
- * Render-space separation. Physics deliberately has NO player-vs-player
- * collision — 30 bodies shoving on one platform produces chaos players blame on
- * lag, it makes iteration order matter (a fairness bug), and it turns crowding
- * into something that can actually cost someone points. So we fan avatars out
- * visually, on a copy, and leave the simulation pristine.
+ * Optional visual-only fan-out between overlapping avatars, off by default.
+ *
+ * Players have no collision with each other in the simulation — never have —
+ * so this only ever moved the *drawn* positions, on a copy. It is off because
+ * it looks like shoving, and an apparent interaction the game doesn't actually
+ * model is worse than a crowded pile: people attribute it to lag, or to each
+ * other. See RENDER_PUSH_APART in shared/tuning.js.
  * @param {Array<{x:number, y:number, w:number, p:Player}>} items
  */
 function separate(items) {
@@ -35,9 +37,7 @@ function separate(items) {
         const b = items[j];
         if (Math.abs(a.y - b.y) > 40) continue;
         const dx = b.x - a.x;
-        // Slightly more than half-width each, so bodies end up shoulder to
-        // shoulder with a visible gap rather than merged into a blob.
-        const min = (a.w + b.w) * 0.58;
+        const min = (a.w + b.w) * RENDER_PUSH_APART;
         const d = Math.abs(dx);
         if (d >= min) continue;
         const push = (min - d) * 0.5;
@@ -80,10 +80,12 @@ export function render(cx, world, roster, opts) {
   for (const p of world.players.values()) {
     items.push({ x: p.x, y: p.y, w: p.w * scale, p });
   }
-  separate(items);
+  if (RENDER_PUSH_APART > 0) separate(items);
 
-  // Draw back-to-front by y so overlapping avatars read as depth.
-  items.sort((a, b) => a.y - b.y);
+  // Draw back-to-front by y so overlapping avatars read as depth. Sorting by
+  // id as the tiebreak keeps the stacking order stable when two avatars sit at
+  // the same height — otherwise a pile flickers as sort order churns.
+  items.sort((a, b) => a.y - b.y || a.p.id - b.p.id);
 
   const anyFindMe = items.some((it) => it.p.findMeUntil > world.t);
 
@@ -101,8 +103,8 @@ export function render(cx, world, roster, opts) {
     const sprite = getAvatar(look.color, look.hat, Math.round(w), Math.round(h));
     cx.drawImage(sprite, Math.round(it.x - AVATAR_PAD), Math.round(it.y - AVATAR_PAD));
 
-    // Labels auto-hide where the crowd is dense — 30 overlapping names is worse
-    // than none. Density is measured in render space, after separation.
+    // Labels auto-hide once the room is crowded — 30 overlapping names is worse
+    // than none. Find-me always keeps its own label.
     if (scale > 0.7 || findMe || count <= 20) {
       const label = getLabel(look.name, findMe ? '#ffffff' : shade(look.color, 0.55));
       cx.drawImage(label, Math.round(it.x + w / 2 - label.width / 2), Math.round(it.y - 40));

@@ -111,6 +111,20 @@ export const FINDME_HOLD_MS = 400;
 export const FINDME_SHOW_MS = 2000;
 
 /**
+ * Visual-only fan-out between overlapping avatars, as a fraction of their
+ * combined width. **0 disables it, which is the default.**
+ *
+ * This never touched the simulation — players have no collision with each other
+ * at all, and never have (see the test in sim/sim.test.js). This only nudged
+ * the *drawn* positions apart so a pile-up stayed legible. The problem is that
+ * it looks exactly like shoving, and with 30 players that reads as physics the
+ * game doesn't actually have, which is worse than an unreadable pile.
+ *
+ * Set to 0.58 to bring it back if crowding turns out to be the bigger problem.
+ */
+export const RENDER_PUSH_APART = 0;
+
+/**
  * Avatars shrink as the room fills so 30 of them still fit on one platform.
  * @param {number} count
  * @returns {number}
