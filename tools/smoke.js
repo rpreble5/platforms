@@ -66,16 +66,29 @@ const base = `http://127.0.0.1:${port}`;
 const executablePath =
   process.env.CHROME_PATH ??
   globSome([
+    `${process.env.PLAYWRIGHT_BROWSERS_PATH ?? ''}/chromium-*/chrome-linux/chrome`,
+    `${process.env.HOME ?? ''}/.cache/ms-playwright/chromium-*/chrome-linux/chrome`,
     '/opt/pw-browsers/chromium-*/chrome-linux/chrome',
-    '/opt/pw-browsers/chromium/chrome-linux/chrome',
     '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
     '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ]);
 
-const browser = await chromium.launch({
-  ...(executablePath ? { executablePath } : {}),
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
-});
+let browser;
+try {
+  browser = await chromium.launch({
+    // With no hit, fall through to playwright's own browser resolution.
+    ...(executablePath ? { executablePath } : {}),
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+} catch (err) {
+  console.error(`\n  could not launch Chromium${executablePath ? ` at ${executablePath}` : ''}:`);
+  console.error(`    ${err instanceof Error ? err.message.split('\n')[0] : err}`);
+  console.error('  Install one with `npx playwright install chromium`, or set CHROME_PATH.\n');
+  process.exit(1);
+}
 
 /** @type {string[]} */
 const problems = [];

@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: tests
+        # Sim determinism + physics forgiveness + relay integration.
+        run: npm test
+
+  smoke:
+    # Boots the real pages in a real browser against a real server. The unit
+    # tests cannot catch a runtime error in the renderer, and that failure mode
+    # looks exactly like "nothing happens" at the venue.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: install chromium
+        run: npx --yes playwright@1 install --with-deps chromium
+      - name: smoke
+        run: npm run smoke -- --shots --crowd 28
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: state/*.png
+          if-no-files-found: ignore

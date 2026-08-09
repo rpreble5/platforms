@@ -114,6 +114,13 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
+    // Many gamepads on one machine, for functional testing without a room full
+    // of phones. Says nothing about latency — see the note in the page itself.
+    if (pathname === '/testpad' || pathname === '/testpad/') {
+      sendFile(res, path.join(root, 'client/testpad/index.html'));
+      return;
+    }
+
     // Static module trees.
     const rel = pathname.replace(/^\/+/, '');
     if (STATIC_DIRS.some((d) => rel === d || rel.startsWith(d + '/'))) {

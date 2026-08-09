@@ -9,6 +9,19 @@ decision stops being a judgement call.
 
 ---
 
+## Before you go anywhere
+
+Do this at home first — it costs an hour and de-risks everything below.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | `npm run dev` on the laptop; open `/testpad?n=6` and the display side by side. Six gamepads move six avatars. | ☐ |
+| 2 | Your own phone on your home WiFi joins via the QR and feels right. | ☐ |
+| 3 | Run the flash test (section 3) on your home TV. You now know what "good" looks like before the venue can confuse you. | ☐ |
+| 4 | Host firewall allows inbound Node — macOS prompts on first run; Windows Defender blocks by default and treats most WiFi as "Public". **A blocked firewall looks identical to client isolation.** | ☐ |
+
+---
+
 ## 0. Five-minute go/no-go (do this first)
 
 | # | Check | Result |
@@ -17,8 +30,11 @@ decision stops being a judgement call.
 | 2 | Scan the QR from **one phone on the office WiFi**. Does the gamepad connect and show a colour + name? | ☐ |
 | 3 | Press a button — does an avatar move on the display? | ☐ |
 
-**If step 2 fails, stop.** That is almost certainly **client isolation**, and no
-amount of tuning fixes it. Options, in order: ask IT for a non-isolated SSID for
+**If step 2 fails**, rule out the two impostors first — the **host firewall**
+(above) and the **wrong interface** (if the host is on both Ethernet and WiFi,
+the printed URL may be for the network the phones aren't on; the terminal lists
+every address it found). If neither explains it, that is **client isolation**,
+and no amount of tuning fixes it. Options, in order: ask IT for a non-isolated SSID for
 one evening; try the host on Ethernet instead (or vice versa — see below); bring
 your own router.
 

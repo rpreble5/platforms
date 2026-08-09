@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test pad — many gamepads on one machine</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #05070c; color: #c8d1e0;
+    font: 500 14px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  header {
+    padding: 14px 18px; border-bottom: 1px solid #1b2130; background: #0a0e17;
+    display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+  }
+  h1 { font-size: 15px; margin: 0; color: #7fd8a8; letter-spacing: .04em; }
+  header p { margin: 0; color: #7c879b; font-size: 13px; }
+  header a { color: #4aa8ff; }
+  .count a {
+    display: inline-block; padding: 3px 9px; margin-right: 4px; border-radius: 6px;
+    background: #151b28; color: #c8d1e0; text-decoration: none; font-variant-numeric: tabular-nums;
+  }
+  .count a.on { background: #2f3a52; color: #fff; }
+  #grid { display: grid; gap: 10px; padding: 12px; }
+  .seat { display: flex; flex-direction: column; gap: 4px; }
+  .seat span { color: #5a6478; font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+  iframe {
+    width: 100%; aspect-ratio: 9 / 16; max-height: 62vh;
+    border: 1px solid #1b2130; border-radius: 10px; background: #0b0d12;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TEST PAD</h1>
+  <p class="count">seats:
+    <a href="?n=2">2</a><a href="?n=4">4</a><a href="?n=6">6</a><a href="?n=9">9</a><a href="?n=12">12</a>
+  </p>
+  <p>Each frame is a real gamepad with its own identity. Open the
+    <a href="/display/" target="_blank">display</a> in another window.</p>
+</header>
+
+<div id="grid"></div>
+
+<script type="module">
+  // One laptop, many players. Each iframe loads the real phone page with a
+  // distinct ?seat=, which namespaces its token in localStorage — without that,
+  // every tab on this origin shares one token and the server's takeover logic
+  // makes them kick each other in a loop.
+  //
+  // This is for functional and crowding checks only. It tells you nothing about
+  // latency: there is no radio, no touch digitizer, and no TV in the path, and
+  // those are the terms that dominate. Use real phones and the flash test for
+  // any number you intend to trust.
+  const n = Math.max(1, Math.min(24, Number(new URLSearchParams(location.search).get('n')) || 4));
+  const grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = `repeat(${Math.min(n, Math.ceil(Math.sqrt(n * 1.6)))}, 1fr)`;
+
+  for (let i = 1; i <= n; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'seat';
+    const label = document.createElement('span');
+    label.textContent = `seat ${i}`;
+    const frame = document.createElement('iframe');
+    frame.src = `/?seat=${i}`;
+    frame.title = `gamepad seat ${i}`;
+    wrap.append(label, frame);
+    grid.append(wrap);
+  }
+
+  for (const a of document.querySelectorAll('.count a')) {
+    if (a.getAttribute('href') === `?n=${n}`) a.classList.add('on');
+  }
+</script>
+</body>
+</html>

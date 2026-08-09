@@ -38,6 +38,41 @@ with no phone at all.
 
 ---
 
+## Where to run it
+
+**On the laptop that will drive the TV, on the same network as the phones.**
+That is not a preference — it's the design. Every hop this project optimises
+away is a LAN hop, and hosting the relay anywhere off-LAN (a cloud box, a
+tunnel, a VPN relay) inserts a WAN round trip that dwarfs the entire budget.
+A cloud-hosted build can tell you the buttons work; it can tell you nothing
+about latency, which is the only reason this milestone exists.
+
+There is no deploy step. `git clone`, `npm install`, `npm run dev`.
+
+### Testing without a room full of people
+
+| what you have | what you can learn |
+|---|---|
+| Just a laptop | Feel, physics tuning, rendering, crowding. Drive an avatar with `A`/`D`/space; open `/testpad?n=6` for six live gamepads side by side; `npm run smoke -- --crowd 28` renders a full room headlessly. |
+| Laptop + your own phone, at home | The real input path, real RTT, and a real flash-test number on your own TV. This is the single highest-value hour you can spend. |
+| Office, a few phones, before the event | The client-isolation go/no-go, plus `npm run loadgen` for the client-count sweep. See `docs/venue-check.md`. |
+| The actual room | The number that counts. |
+
+`/testpad?n=6` runs N real gamepads as iframes on one machine, each with its own
+identity (via `?seat=`, which namespaces the token — without it every tab on an
+origin shares one token and they kick each other in a loop). It is for
+functional and crowding checks only: no radio, no touch digitizer, no TV in the
+path, and those are the terms that dominate.
+
+### Two things that look exactly like client isolation but aren't
+
+- **The host firewall.** macOS prompts on first run; Windows Defender blocks
+  inbound by default and often classifies office WiFi as "Public". Allow Node
+  through, or phones will fail to connect on a network that is perfectly fine.
+- **The wrong interface.** If the host is on both Ethernet and WiFi, the printed
+  join URL may be for the network the phones aren't on. The terminal lists every
+  address it found — try another one.
+
 ## Read this before you measure anything
 
 Two things dominate the latency budget and **neither is in this code**:
@@ -241,11 +276,13 @@ press and its release. Three independent layers guard it:
 ## Layout
 
 ```
+.github/    ci.yml -- typecheck + tests + a browser smoke run on every push
 server/     http.js (static + inlined phone page), relay.js (WS), roster.js (identity)
 shared/     protocol.js (wire format), tuning.js (all constants), palette.js, qr.js
 sim/        PURE, no DOM: world.js, player.js, collide.js  -- Node runs these in tests
 client/display/  main.js (loop), input-bus.js, render.js, hud.js, latency-flash.js
 client/phone/    index.html -- the entire gamepad, one file
+client/testpad/  N gamepads on one machine, for testing without a crowd
 tools/      loadgen.js, smoke.js, make-nosleep.sh
 ```
 

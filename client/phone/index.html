@@ -120,8 +120,17 @@
   var HAT_GLYPH = { none: '●', cap: '🧢', horns: '🤘', antenna: '📡' };
 
   // ------------------------------------------------------------------ identity
+  //
+  // The token is namespaced by an optional ?seat= parameter. Without it, every
+  // tab on one machine shares localStorage, sends the same token, and the
+  // server's takeover logic makes them kick each other in a loop — which makes
+  // it impossible to test multiplayer from a single laptop. ?seat=3 gives that
+  // tab its own identity. Real players never pass it. See /testpad.
+  var seat = new URLSearchParams(location.search).get('seat') || '';
+  var TOKEN_KEY = 'platforms.token' + (seat ? '.' + seat : '');
+
   var token = null;
-  try { token = localStorage.getItem('platforms.token'); } catch (e) { /* private mode */ }
+  try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { /* private mode */ }
   var clientSalt = hash32(token || String(Math.random()));
   /** Stagger periodic sends, or 30 phones sync on second boundaries and
    *  manufacture their own airtime contention. */
@@ -210,7 +219,7 @@
     if (msg.type === 'HELLO_ACK') {
       playerId = msg.playerId;
       token = msg.token;
-      try { localStorage.setItem('platforms.token', token); } catch (e) {}
+      try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
       phase = hash32(token) % HEARTBEAT_MS;
       elName.textContent = msg.name;
       // The phone IS the identity anchor: whole-screen colour plus hat glyph.
