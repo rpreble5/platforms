@@ -9,19 +9,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { BTN_JUMP } from '../shared/protocol.js';
+import { BTN_JUMP, BTN_RIGHT } from '../shared/protocol.js';
 import { STEP_MS } from '../shared/tuning.js';
 import { addPlayer, createWorld, step } from './world.js';
 import { ANSWER_Y, FLOOR_Y, buildArena, answerId } from './levels.js';
 import {
   BASE_POINTS,
+  DEBRIS_LIFE_MS,
   MAX_SPEED_BONUS,
   PHASE,
+  inputsLive,
   createGame,
   speedBonus,
   standings,
   startGame,
-  stepGame,
+  stepRound,
 } from './round.js';
 
 /** @type {import('./round.js').Question[]} */
@@ -67,10 +69,7 @@ function rig(deck = DECK, answerMs = 12000) {
  */
 function run(world, game, ms) {
   const n = Math.round(ms / STEP_MS);
-  for (let i = 0; i < n; i++) {
-    step(world, STEP_MS);
-    stepGame(game, world, STEP_MS);
-  }
+  for (let i = 0; i < n; i++) stepRound(game, world, STEP_MS);
 }
 
 /**
@@ -91,6 +90,28 @@ function standOn(world, id, answerIndex) {
   p.standingOn = plat;
 }
 
+/**
+ * Add a player at an exact position.
+ * @param {import('./world.js').World} world
+ * @param {number} id @param {number} x @param {number} y
+ */
+function join(world, id, x, y) {
+  const p = addPlayer(world, id);
+  p.x = x;
+  p.y = y;
+  return p;
+}
+
+/**
+ * Hold a button, as the input bus would.
+ * @param {import('./world.js').World} world @param {number} id @param {number} mask
+ */
+function press(world, id, mask) {
+  const p = /** @type {any} */ (world.players.get(id));
+  p.input.pressEdge |= mask & ~p.input.held;
+  p.input.held |= mask;
+}
+
 test('a round runs LOBBY -> INTRO -> ANSWER -> LOCK -> REVEAL -> SCORE', () => {
   const { world, game } = rig();
   addPlayer(world, 1);
@@ -105,7 +126,7 @@ test('a round runs LOBBY -> INTRO -> ANSWER -> LOCK -> REVEAL -> SCORE', () => {
   run(world, game, 12100);
   assert.equal(game.phase, PHASE.LOCK);
 
-  run(world, game, 500);
+  run(world, game, 800);
   assert.equal(game.phase, PHASE.REVEAL);
 
   run(world, game, 2300);
@@ -127,7 +148,7 @@ test('arriving earlier scores more than arriving later', () => {
   run(world, game, 1000);
   standOn(world, 2, 1);
 
-  run(world, game, 11500); // out of ANSWER, through LOCK
+  run(world, game, 11900); // out of ANSWER, through LOCK
   assert.equal(game.phase, PHASE.REVEAL);
 
   const early = resultFor(game, 1);
@@ -147,7 +168,7 @@ test('a wrong platform scores nothing, and so does the floor', () => {
 
   standOn(world, 1, 3); // wrong answer
   // player 2 just stands on the floor
-  run(world, game, 12600);
+  run(world, game, 12900);
 
   assert.equal(resultFor(game, 1).points, 0);
   assert.equal(resultFor(game, 2).points, 0);
@@ -168,7 +189,7 @@ test('leaving the correct platform before the lock forfeits the points', () => {
   assert.ok(game.arrivals.has(1), 'arrival was recorded');
 
   standOn(world, 1, 0); // wander off to a wrong platform
-  run(world, game, 12100);
+  run(world, game, 12500);
 
   assert.equal(resultFor(game, 1).correct, false);
   assert.equal(scoreFor(game, 1), 0);
@@ -185,7 +206,7 @@ test('the lock grace still counts a landing just after the buzzer', () => {
   run(world, game, 12050); // timer has expired; we are inside LOCK
   assert.equal(game.phase, PHASE.LOCK);
   standOn(world, 1, 1);
-  run(world, game, 400);
+  run(world, game, 800);
 
   assert.equal(game.phase, PHASE.REVEAL);
   assert.equal(resultFor(game, 1).correct, true, 'grace landing counted');
@@ -198,7 +219,7 @@ test('wrong platforms stop being solid at the reveal', () => {
   run(world, game, 3100);
   assert.equal(world.platforms.filter((p) => p.id?.startsWith('ans')).length, 4);
 
-  run(world, game, 12600);
+  run(world, game, 12900);
   const left = world.platforms.filter((p) => p.id?.startsWith('ans'));
   assert.equal(left.length, 1, 'only the correct platform survives');
   assert.equal(left[0].id, answerId(1));
@@ -213,7 +234,7 @@ test('someone standing on a wrong platform falls when it goes', () => {
   standOn(world, 1, 3);
   const yBefore = /** @type {any} */ (world.players.get(1)).y;
 
-  run(world, game, 12600); // through the reveal
+  run(world, game, 12900); // through the reveal
   run(world, game, 400);
   assert.ok(/** @type {any} */ (world.players.get(1)).y > yBefore + 40, 'the floor came out from under them');
 });
@@ -225,14 +246,14 @@ test('scores accumulate across questions', () => {
 
   run(world, game, 3100);
   standOn(world, 1, 1);
-  run(world, game, 12600);
+  run(world, game, 12900);
   const afterOne = scoreFor(game, 1);
   assert.ok(afterOne > BASE_POINTS);
 
   run(world, game, 2300 + 4100 + 3100); // reveal, score, next intro
   assert.equal(game.qIndex, 1);
   standOn(world, 1, 0); // correct for question two
-  run(world, game, 12600);
+  run(world, game, 12900);
 
   assert.ok(scoreFor(game, 1) > afterOne, 'total went up');
   assert.equal(standings(game)[0].id, 1);
@@ -242,7 +263,7 @@ test('the deck ends in GAME_OVER', () => {
   const { world, game } = rig();
   addPlayer(world, 1);
   startGame(game, world);
-  for (let i = 0; i < DECK.length; i++) run(world, game, 3100 + 12600 + 2300 + 4100);
+  for (let i = 0; i < DECK.length; i++) run(world, game, 3100 + 12900 + 2300 + 4100);
   assert.equal(game.phase, PHASE.GAME_OVER);
 });
 
@@ -336,4 +357,149 @@ test('the jump clears an answer platform with real margin', () => {
   const rose = FLOOR_Y - p.h - apex;
   const needed = FLOOR_Y - ANSWER_Y;
   assert.ok(rose > needed * 1.25, `rose ${rose.toFixed(0)}px, needs ${needed} — want 25%+ slack`);
+});
+
+// ---------------------------------------------------------------- the buzzer
+
+test('jumping as the timer runs out still scores', () => {
+  // Reported from a real game: scoring read `standingOn`, which is null while
+  // airborne, so a player bouncing on the right answer at the buzzer got zero.
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  run(world, game, 3100);
+
+  standOn(world, 1, 1);
+  const p = /** @type {any} */ (world.players.get(1));
+
+  // Straight up, half a second before the buzzer.
+  run(world, game, 11400);
+  p.input.pressEdge |= BTN_JUMP;
+  run(world, game, 100);
+  assert.equal(p.standingOn, null, 'airborne as the timer ends');
+  assert.equal(game.phase, PHASE.ANSWER);
+
+  run(world, game, 1400); // out of ANSWER and all the way through the settle
+  assert.equal(game.phase, PHASE.REVEAL);
+  assert.equal(resultFor(game, 1).correct, true, 'mid-jump at the buzzer still counts');
+});
+
+test('input stops at the buzzer', () => {
+  // So the crowd freezes where they committed and you can read the answer off
+  // the screen, instead of everyone milling about through the reveal.
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  run(world, game, 3100);
+  standOn(world, 1, 1);
+
+  run(world, game, 12100); // into LOCK
+  assert.equal(game.phase, PHASE.LOCK);
+  assert.equal(inputsLive(game), false);
+
+  const p = /** @type {any} */ (world.players.get(1));
+  const xBefore = p.x;
+  press(world, 1, BTN_RIGHT); // held down hard
+  run(world, game, 600);
+  assert.equal(Math.round(p.x), Math.round(xBefore), 'held RIGHT moves nobody after the buzzer');
+});
+
+test('input stays dead through the reveal and the scoreboard', () => {
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  run(world, game, 3100);
+  standOn(world, 1, 1);
+  run(world, game, 12900); // into REVEAL
+
+  assert.equal(game.phase, PHASE.REVEAL);
+  assert.equal(inputsLive(game), false);
+  run(world, game, 2300);
+  assert.equal(game.phase, PHASE.SCORE);
+  assert.equal(inputsLive(game), false);
+
+  const p = /** @type {any} */ (world.players.get(1));
+  const xBefore = p.x;
+  press(world, 1, BTN_RIGHT);
+  run(world, game, 800);
+  assert.equal(Math.round(p.x), Math.round(xBefore), 'still frozen on the scoreboard');
+});
+
+test('input comes back for the next question', () => {
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  assert.equal(inputsLive(game), true, 'live during the intro');
+  run(world, game, 3100);
+  assert.equal(inputsLive(game), true, 'live during the answer window');
+
+  run(world, game, 12900 + 2300 + 4100); // all the way into question two
+  assert.equal(game.qIndex, 1);
+  assert.equal(inputsLive(game), true, 'live again');
+
+  const p = /** @type {any} */ (world.players.get(1));
+  const xBefore = p.x;
+  press(world, 1, BTN_RIGHT);
+  run(world, game, 400);
+  assert.ok(p.x > xBefore + 20, 'and actually moves');
+});
+
+test('a held button during the freeze does not fire when it lifts', () => {
+  // The freeze zeroes the player's latched input, but the bus keeps delivering.
+  // If those edges accumulated they would all discharge at once on the next
+  // question and everyone would lurch sideways.
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  run(world, game, 3100);
+  standOn(world, 1, 1);
+  run(world, game, 12100);
+
+  press(world, 1, BTN_JUMP);
+  run(world, game, 600);
+  const p = /** @type {any} */ (world.players.get(1));
+  assert.equal(p.jumpBuffer, 0, 'no jump is sitting buffered');
+  assert.equal(p.input.pressEdge, 0, 'no edge is sitting latched');
+});
+
+// ---------------------------------------------------------------- debris
+
+test('crumbled platforms fall once, not once per phase', () => {
+  // Reported from a real game: the fall animation replayed a few seconds later.
+  // It was keyed on phaseT, which resets when SCORE begins while debris was
+  // still populated.
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  run(world, game, 3100);
+  standOn(world, 1, 1);
+
+  run(world, game, 12900);
+  assert.equal(game.phase, PHASE.REVEAL);
+  assert.equal(game.debris.length, 3);
+  assert.ok(game.debrisT < 300, `fall has just started (${game.debrisT.toFixed(0)}ms)`);
+
+  run(world, game, 1000);
+  const midFall = game.debrisT;
+  assert.ok(midFall >= 1000, 'the clock is running');
+
+  // Cross into SCORE, where phaseT resets.
+  run(world, game, 1300);
+  assert.equal(game.phase, PHASE.SCORE);
+  assert.ok(game.phaseT < 500, `phaseT restarted for the new phase (${game.phaseT.toFixed(0)}ms)`);
+  assert.equal(game.debris.length, 0, 'debris is gone, so nothing can replay');
+});
+
+test('debris clears itself even if a phase runs long', () => {
+  const { world, game } = rig();
+  join(world, 1, 400, 400);
+  startGame(game, world);
+  run(world, game, 3100);
+  standOn(world, 1, 1);
+  run(world, game, 12900);
+  assert.ok(game.debris.length > 0);
+
+  game.paused = false;
+  run(world, game, DEBRIS_LIFE_MS + 200);
+  assert.equal(game.debris.length, 0);
 });

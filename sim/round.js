@@ -19,6 +19,7 @@
  */
 
 import { buildArena, answerId, spawnFor } from './levels.js';
+import { step } from './world.js';
 
 export const PHASE = /** @type {const} */ ({
   LOBBY: 'LOBBY',
@@ -36,13 +37,26 @@ export const MAX_SPEED_BONUS = 500;
 /** Question slides in and platforms rise. Inputs stay live throughout. */
 export const INTRO_MS = 3000;
 /**
- * Undocumented grace after the timer visually hits zero. A landing that misses
- * the buzzer by less than one round-trip still counts. Nobody is told about it;
- * it exists so latency never decides whether an answer registered.
+ * The settle window, after the buzzer and before the reveal.
+ *
+ * Player input STOPS here, but physics keeps running. Two reasons, and both
+ * were bugs before this existed:
+ *
+ *  - Anyone mid-jump when the timer ended had `standingOn === null` and scored
+ *    nothing. A full jump arc is ~680ms, so this is long enough that everybody
+ *    lands before anything is counted.
+ *  - With inputs live through the reveal, the crowd kept milling about and you
+ *    couldn't actually see where people had committed. Freezing makes the
+ *    answer legible, which is the whole point of the moment.
+ *
+ * It doubles as the latency grace it used to be: a landing that misses the
+ * buzzer by a round-trip still counts.
  */
-export const LOCK_MS = 400;
+export const LOCK_MS = 800;
 export const REVEAL_MS = 2200;
 export const SCORE_MS = 4000;
+/** How long crumbled platforms keep falling before they're dropped. */
+export const DEBRIS_LIFE_MS = 1600;
 
 /**
  * @typedef {object} Question
@@ -72,6 +86,10 @@ export const SCORE_MS = 4000;
  * @property {Map<number, number>} arrivals playerId -> ms after ANSWER started
  * @property {Result[]} results from the round just scored
  * @property {import('./collide.js').Platform[]} debris crumbled platforms, for drawing
+ * @property {number} debrisT ms since they started falling — its OWN clock, not
+ *   phaseT, which resets between phases and made the fall replay
+ * @property {Map<number, string|null>} atBuzzer playerId -> platform id they were
+ *   on when the timer ended
  * @property {boolean} paused
  */
 
@@ -91,6 +109,8 @@ export function createGame(questions, answerMs = 12000) {
     arrivals: new Map(),
     results: [],
     debris: [],
+    debrisT: 0,
+    atBuzzer: new Map(),
     paused: false,
   };
 }
@@ -106,8 +126,27 @@ export function answerWindow(g) {
 }
 
 /**
+ * One tick of everything, in the only order that is correct.
+ *
+ * The freeze has to happen BEFORE physics, or held buttons get one tick of
+ * movement each frame and the crowd keeps drifting through the reveal. Leaving
+ * that ordering to the caller is how it gets broken, so this is the entry point
+ * both the display and the tests use.
+ *
+ * @param {Game} g
+ * @param {import('./world.js').World} world
+ * @param {number} dtMs
+ */
+export function stepRound(g, world, dtMs) {
+  if (!inputsLive(g)) freezeInputs(world);
+  step(world, dtMs);
+  stepGame(g, world, dtMs);
+}
+
+/**
  * Advance the game one tick. Mutates both the game and the world (platforms
- * come and go between phases).
+ * come and go between phases). Prefer `stepRound`, which also runs physics in
+ * the right order relative to the input freeze.
  * @param {Game} g
  * @param {import('./world.js').World} world
  * @param {number} dtMs
@@ -115,6 +154,13 @@ export function answerWindow(g) {
 export function stepGame(g, world, dtMs) {
   if (g.paused) return;
   g.phaseT += dtMs;
+
+  // Debris runs on its own clock so the fall doesn't restart when the phase
+  // changes underneath it, and clears itself once it's off screen.
+  if (g.debris.length) {
+    g.debrisT += dtMs;
+    if (g.debrisT > DEBRIS_LIFE_MS) g.debris = [];
+  }
 
   switch (g.phase) {
     case PHASE.LOBBY:
@@ -166,15 +212,29 @@ function enter(g, world, phase) {
   g.phase = phase;
   g.phaseT = 0;
 
+  if (phase === PHASE.LOCK) {
+    // Freeze the answer at the buzzer. Someone mid-jump counts as being on the
+    // platform they launched from — they committed before the timer ended, and
+    // with inputs now dead they can't change it.
+    g.atBuzzer = new Map();
+    for (const p of world.players.values()) {
+      g.atBuzzer.set(p.id, (p.standingOn ?? p.lastStoodOn)?.id ?? null);
+    }
+    freezeInputs(world);
+  }
+
   if (phase === PHASE.REVEAL) {
-    // Wrong platforms stop being solid immediately; they keep being drawn as
-    // debris for a moment. Inputs stay live, so you can leap off one as it goes.
+    // Wrong platforms stop being solid immediately, and keep being drawn as
+    // debris for a beat so the fall reads as consequence. Anyone standing on
+    // one drops with it — inputs are already frozen, so there's no scrambling
+    // off, which is what makes the moment legible.
     const q = currentQuestion(g);
     if (q) {
       const keep = answerId(q.correct);
       const doomed = world.platforms.filter((p) => p.id?.startsWith('ans') && p.id !== keep);
       world.platforms = world.platforms.filter((p) => !doomed.includes(p));
       g.debris = doomed;
+      g.debrisT = 0;
     }
   }
 }
@@ -198,8 +258,10 @@ export function nextQuestion(g, world) {
     return;
   }
   g.arrivals.clear();
+  g.atBuzzer.clear();
   g.results = [];
   g.debris = [];
+  g.debrisT = 0;
   world.platforms = buildArena(q.answers.length);
   respawnAll(world);
   enter(g, world, PHASE.INTRO);
@@ -214,6 +276,35 @@ export function skip(g, world) {
   else nextQuestion(g, world);
 }
 
+/**
+ * Whether player input should reach the simulation.
+ *
+ * Dead from the buzzer until the next question: through the settle, the reveal
+ * and the scoreboard, players stay exactly where they committed. Everywhere
+ * else — lobby, question intro, the answer window, game over — they can run
+ * around freely.
+ * @param {Game} g
+ * @returns {boolean}
+ */
+export function inputsLive(g) {
+  return g.phase !== PHASE.LOCK && g.phase !== PHASE.REVEAL && g.phase !== PHASE.SCORE;
+}
+
+/**
+ * Drop every held button and any buffered jump. Velocity is left alone — people
+ * mid-jump finish their arc, which is what makes the settle look like physics
+ * rather than a freeze-frame.
+ * @param {import('./world.js').World} world
+ */
+export function freezeInputs(world) {
+  for (const p of world.players.values()) {
+    p.input.held = 0;
+    p.input.pressEdge = 0;
+    p.input.releaseEdge = 0;
+    p.jumpBuffer = 0;
+  }
+}
+
 /** @param {import('./world.js').World} world */
 export function respawnAll(world) {
   let i = 0;
@@ -225,6 +316,8 @@ export function respawnAll(world) {
     p.vy = 0;
     p.jumpBuffer = 0;
     p.coyote = 0;
+    p.standingOn = null;
+    p.lastStoodOn = null;
     i++;
   }
 }
@@ -262,7 +355,12 @@ function score(g, world) {
   /** @type {Result[]} */
   const results = [];
   for (const p of world.players.values()) {
-    const onTarget = p.standingOn?.id === target;
+    // Credit either way round: you were on it when the timer ended, or you
+    // landed on it during the settle. The union is deliberate — inputs are
+    // dead after the buzzer, so there's nothing to game, and every way of
+    // losing credit through no fault of your own is closed off.
+    const settled = (p.standingOn ?? p.lastStoodOn)?.id;
+    const onTarget = g.atBuzzer.get(p.id) === target || settled === target;
     if (!onTarget) {
       results.push({ id: p.id, correct: false, points: 0, rank: 0, arrivalMs: Infinity });
       continue;

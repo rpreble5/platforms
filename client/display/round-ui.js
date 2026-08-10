@@ -43,8 +43,10 @@ export function drawSigns(cx, world, g) {
 export function drawDebris(cx, g) {
   if (!g.debris.length) return;
   const q = currentQuestion(g);
-  const fall = fallOffset(g.phaseT);
-  const tilt = Math.min(0.22, g.phaseT / 5000);
+  // debrisT, not phaseT: phaseT resets when SCORE begins, which replayed the
+  // whole fall a couple of seconds after the platforms had already gone.
+  const fall = fallOffset(g.debrisT);
+  const tilt = Math.min(0.22, g.debrisT / 5000);
 
   for (const p of g.debris) {
     const i = Number(String(p.id).slice(3));
@@ -163,6 +165,14 @@ function drawQuestion(cx, g) {
     cx.font = `700 26px ${FONT.ui}`;
     cx.fillStyle = UI.dim;
     cx.fillText('get ready…', WORLD_W / 2, 128);
+  }
+
+  // Say it out loud, or the settle reads as the game having hung.
+  if (g.phase === PHASE.LOCK) {
+    cx.textAlign = 'center';
+    cx.font = `800 30px ${FONT.display}`;
+    cx.fillStyle = UI.warn;
+    cx.fillText("TIME'S UP", WORLD_W / 2, 130);
   }
   cx.textAlign = 'left';
 }

@@ -132,15 +132,26 @@ is the only version of "first gets more" that's fair to run at a party. Rank is
 still shown on the scoreboard, because "you were 3rd!" is the fun part; it just
 doesn't drive the maths.
 
-Two more rules worth knowing:
+### The buzzer
 
-- Your time is set by **first touch** on the correct platform, but you must
-  **still be standing on it at the lock** to score. A bounce off the edge costs
-  nothing; leaving early is strictly riskier than staying.
-- There is an undocumented **400 ms grace** after the timer visually hits zero.
-  A landing that misses the buzzer by less than one round trip still counts.
-  Players are never told, because it exists so latency can't decide whether an
-  answer registered.
+**Input stops the moment the timer hits zero.** Physics keeps running for an
+800 ms settle, so anyone mid-jump completes their arc and lands. Two reasons:
+
+- A full jump is ~680 ms. Before the settle existed, anyone airborne at the
+  buzzer counted as standing on nothing and scored zero — bouncing on the right
+  answer as time ran out lost you the round.
+- With input live through the reveal, the crowd kept milling about and you
+  couldn't see where anyone had actually committed. Freezing makes the answer
+  readable, which is the whole point of that moment.
+
+**You get credit either way round:** you were on the correct platform when the
+timer ended (standing on it, or last standing on it if mid-jump), *or* you land
+on it during the settle. The union is deliberate — input is dead after the
+buzzer so there's nothing to game, and it closes off every way of losing credit
+through no fault of your own, including a round-trip of latency.
+
+Your *time* for the speed bonus is still set by **first touch**. Leaving early
+still forfeits: wander off to another platform and that's where you're counted.
 
 All of that is covered by tests in `sim/round.test.js`, including explicit
 fairness tests asserting that a realistic latency gap is worth under ten points.

@@ -28,6 +28,8 @@ import { groundBelow, moveX, moveY } from './collide.js';
  * @property {number} vx @property {number} vy
  * @property {boolean} onGround
  * @property {Platform | null} standingOn
+ * @property {Platform | null} lastStoodOn the surface you were most recently on,
+ *   kept while airborne so a jump at the buzzer doesn't read as "nowhere"
  * @property {number} coyote ms of coyote time remaining
  * @property {number} jumpBuffer ms of buffered jump remaining
  * @property {number} facing -1 or 1
@@ -55,6 +57,7 @@ export function createPlayer(id, x, y) {
     vy: 0,
     onGround: false,
     standingOn: null,
+    lastStoodOn: null,
     coyote: 0,
     jumpBuffer: 0,
     facing: 1,
@@ -126,6 +129,8 @@ export function stepPlayer(p, platforms, dtMs, worldT) {
       p.standingOn = under;
     }
   }
+
+  if (p.standingOn) p.lastStoodOn = p.standingOn;
 
   // 7. Timers.
   if (p.onGround) p.coyote = PHYS.COYOTE_MS;

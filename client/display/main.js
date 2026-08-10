@@ -23,9 +23,8 @@ import {
 import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJson } from '../../shared/protocol.js';
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
-import { step } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
-import { PHASE, createGame, skip, startGame, stepGame } from '../../sim/round.js';
+import { PHASE, createGame, skip, startGame, stepRound } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { drawRoundOverlay } from './round-ui.js';
 import { loadArt } from './art.js';
@@ -175,11 +174,13 @@ function frame(now) {
 
   let steps = 0;
   while (acc >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
+    // Always drain, so nothing accumulates in the bus during a freeze and
+    // discharges all at once when the next question opens. stepRound decides
+    // whether the drained input actually reaches the simulation.
     bus.applyMask(LOCAL_ID, localMask);
     bus.drainInto(world);
     flash.observe(world);
-    step(world, STEP_MS);
-    stepGame(game, world, STEP_MS);
+    stepRound(game, world, STEP_MS);
     acc -= STEP_MS;
     steps++;
   }
