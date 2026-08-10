@@ -95,13 +95,17 @@ const problems = [];
 /** @param {string} where @param {import('playwright-core').Page} page */
 function watch(where, page) {
   page.on('console', (/** @type {any} */ m) => {
-    if (m.type() === 'error') problems.push(`[${where} console] ${m.text()}`);
+    if (m.type() !== 'error') return;
+    // Optional sprites and the optional display font are expected to 404 until
+    // someone drops them in; everything else is a real problem.
+    if (/\/assets\/|nosleep/.test(m.location?.()?.url ?? m.text())) return;
+    problems.push(`[${where} console] ${m.text()}`);
   });
   page.on('pageerror', (/** @type {any} */ e) => problems.push(`[${where} pageerror] ${e.message}`));
   page.on('requestfailed', (/** @type {any} */ r) => {
     const u = r.url();
     // The NoSleep probe is expected to 404 when the asset has not been generated.
-    if (u.endsWith('/nosleep.mp4')) return;
+    if (u.endsWith('/nosleep.mp4') || u.includes('/assets/')) return;
     problems.push(`[${where} requestfailed] ${u} ${r.failure()?.errorText ?? ''}`);
   });
 }
@@ -288,6 +292,13 @@ if (crowd > 0) {
 //
 // The unit tests cover the round machine; this checks the part they can't --
 // that it runs, renders, and scores inside an actual browser.
+
+// Opening the phone page backgrounded this tab, and Chromium throttles rAF on
+// background tabs. The sim is driven by rAF with a per-frame dt clamp, so a
+// throttled display advances game time far slower than wall clock and the
+// round never finishes. Not a product bug -- the display is fullscreen and
+// focused at a party -- but the test has to reproduce that.
+await display.bringToFront();
 
 const deckSize = await display.evaluate(() => /** @type {any} */ (globalThis).__platforms.game.questions.length);
 assert(deckSize > 0, `question deck loaded (${deckSize} questions)`);

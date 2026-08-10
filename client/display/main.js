@@ -28,6 +28,7 @@ import { FLOOR_Y, buildArena } from '../../sim/levels.js';
 import { PHASE, createGame, skip, startGame, stepGame } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { drawRoundOverlay } from './round-ui.js';
+import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
 import { render } from './render.js';
 import { drawHud } from './hud.js';
@@ -355,6 +356,24 @@ function round6(n) {
 // ------------------------------------------------------------------ boot
 
 async function init() {
+  // Sprites and fonts BEFORE the first frame. The label cache measures text on
+  // first use and keeps the result forever, so a font that arrives late would
+  // leave every name rendered in the fallback face.
+  const [artResult] = await Promise.all([
+    loadArt(),
+    // Explicitly kick the load: document.fonts.ready only awaits faces that
+    // have already started loading, and a declared-but-unused @font-face
+    // never starts. Without this it resolves instantly and every cached label
+    // is measured in the fallback.
+    document.fonts
+      .load('800 40px PlatformsDisplay')
+      .then(() => document.fonts.ready)
+      .catch(() => undefined),
+  ]);
+  if (artResult.missing.length) {
+    hud.note = `drawing ${artResult.missing.join(', ')} procedurally — see docs/ART-SPEC.md`;
+  }
+
   addPlayer(world, LOCAL_ID);
   roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', hat: 'none', connected: true });
 

@@ -26,10 +26,13 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
 };
 
 /** Directories that may be served verbatim. Anything else 404s. */
-const STATIC_DIRS = ['shared', 'sim', 'client/display'];
+const STATIC_DIRS = ['shared', 'sim', 'client/display', 'assets'];
 
 /**
  * @param {string} root repo root

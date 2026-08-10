@@ -23,6 +23,17 @@ export const FLOOR_Y = WORLD_H - 100;
  */
 export const ANSWER_Y = FLOOR_Y - 160;
 export const ANSWER_H = 28;
+/**
+ * How tall the answer platform is *drawn*, versus the 28px it actually
+ * collides with. The extra hangs below the surface and carries the answer
+ * text, so the platform IS the signboard rather than having a label bolted
+ * under it.
+ *
+ * The ceiling on this number is the crowd: an avatar standing on the floor at
+ * full size reaches y=924, and the platform surface is at 820, so anything
+ * past ~100px would be covered by people's heads. 76 leaves 28px of air.
+ */
+export const ANSWER_SIGN_H = 76;
 
 const EDGE_MARGIN = 70;
 const MIN_GAP = 60;

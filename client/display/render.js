@@ -7,7 +7,9 @@
 
 import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
-import { drawAnswerPlates, drawDebris } from './round-ui.js';
+import { drawDebris, drawSigns } from './round-ui.js';
+import { drawFloor, drawSky } from './stage.js';
+import { UI } from './theme.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
 /** @typedef {import('../../sim/player.js').Player} Player */
@@ -58,26 +60,16 @@ function separate(items) {
  * @param {{qr: {size:number, modules:Uint8Array[]} | null, joinUrl: string}} opts
  */
 export function render(cx, world, roster, game, opts) {
-  cx.fillStyle = '#05070c';
-  cx.fillRect(0, 0, WORLD_W, WORLD_H);
+  drawSky(cx, world.t);
 
-  drawBackdrop(cx);
-
-  // platforms
-  for (const p of world.platforms) {
-    const top = p.oneWay ? '#2c3550' : '#39435f';
-    cx.fillStyle = top;
-    cx.beginPath();
-    cx.roundRect(p.x, p.y, p.w, p.h, p.oneWay ? 8 : 6);
-    cx.fill();
-    cx.fillStyle = p.oneWay ? '#4d5b85' : '#5a688f';
-    cx.fillRect(p.x + 4, p.y, p.w - 8, 4);
-  }
-
-  // Debris first (behind everything), then the answer plates, then avatars —
-  // so a crowd standing on a platform never hides the answer it represents.
+  // Debris behind, then the floor, then the signboards, then avatars. The
+  // answer text sits in the signboard's skirt, below the landing surface, so a
+  // crowd standing on a platform never covers the answer it represents.
   drawDebris(cx, game);
-  drawAnswerPlates(cx, world, game);
+  for (const p of world.platforms) {
+    if (p.id === 'floor') drawFloor(cx, p);
+  }
+  drawSigns(cx, world, game);
 
   const count = world.players.size;
   const scale = avatarScale(count);
@@ -120,15 +112,6 @@ export function render(cx, world, roster, game, opts) {
   cx.globalAlpha = 1;
 
   if (opts.qr) drawJoin(cx, opts.qr, opts.joinUrl, count);
-}
-
-/** @param {CanvasRenderingContext2D} cx */
-function drawBackdrop(cx) {
-  const g = cx.createLinearGradient(0, 0, 0, WORLD_H);
-  g.addColorStop(0, '#0a1020');
-  g.addColorStop(1, '#05070c');
-  cx.fillStyle = g;
-  cx.fillRect(0, 0, WORLD_W, WORLD_H);
 }
 
 /**
@@ -202,10 +185,10 @@ function drawJoin(cx, qr, url, count) {
   } while (size > 13 && cx.measureText(url).width > maxW);
 
   const cxp = Math.min(x + px / 2, WORLD_W - maxW / 2 - 8);
-  cx.fillStyle = '#dbe3f0';
+  cx.fillStyle = UI.paper;
   cx.fillText(url, cxp, y + px + 38);
   cx.font = '500 20px ui-sans-serif, system-ui, sans-serif';
-  cx.fillStyle = '#7c879b';
+  cx.fillStyle = UI.dim;
   cx.fillText(`${count} player${count === 1 ? '' : 's'} connected`, cxp, y + px + 68);
   cx.textAlign = 'left';
 }

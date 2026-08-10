@@ -93,6 +93,27 @@ path, and those are the terms that dominate.
   join URL may be for the network the phones aren't on. The terminal lists every
   address it found — try another one.
 
+## Art and assets
+
+The stage draws from sprites in `assets/` when they exist and falls back to
+shapes in code when they don't, so the game runs with that folder empty and you
+can add art one file at a time. The HUD names whatever is still procedural.
+
+Dimensions, slice points, palette and generation prompts:
+**[docs/ART-SPEC.md](docs/ART-SPEC.md)**.
+
+Two things worth knowing before you draw anything:
+
+- **The environment is desaturated on purpose.** Twelve saturated player colours
+  have to pop off it at 26px from across a room. Scenery that competes with them
+  is a bug however good it looks alone.
+- **The platform is the signboard.** The top 28px is what you land on; the 48px
+  below hangs under it and carries the answer text. They're one object, so the
+  label falls with the platform on reveal and there's never a question about
+  which answer belongs to which ledge. It's also the only layout that fits — an
+  avatar standing on the floor reaches y=924 and the platform surface is at 820,
+  so a separate floating label had nowhere to go.
+
 ## How a round scores
 
 Correct answer: **1000 points**, plus a **speed bonus up to 500** that decays

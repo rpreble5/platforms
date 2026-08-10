@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <title>Platforms — display</title>
 <style>
+  /* Drop a woff2 at assets/fonts/display.woff2 and it takes over everywhere.
+     Self-hosted on purpose: there is no internet at the venue, so a Google
+     Fonts <link> would silently fall back on the night. font-display:block
+     avoids a flash of the fallback face being measured into the label cache. */
+  @font-face {
+    font-family: 'PlatformsDisplay';
+    src: url('/assets/fonts/display.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: block;
+  }
   html, body { margin:0; height:100%; background:#05070c; overflow:hidden; cursor:none; }
   canvas { display:block; width:100%; height:100%; object-fit:contain; image-rendering:auto; }
   #boot {
