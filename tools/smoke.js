@@ -238,6 +238,7 @@ await phonePage.waitForSelector('#setup.on', { timeout: 5000 });
 const PICK = 4; // jade
 const YEAR = 2; // PGY3
 const GEAR = 9; // phones, which lives in the PGY3 pool
+const PAT = 2; // band
 
 await phonePage.fill('#nameIn', 'Bosco');
 
@@ -262,6 +263,7 @@ assert(
 
 await phonePage.locator(`.sw[data-i="${PICK}"]`).click();
 await phonePage.locator(`.gr[data-i="${GEAR}"]`).click();
+await phonePage.locator(`.pt[data-i="${PAT}"]`).click();
 assert(
   await phonePage
     .locator(`.sw[data-i="${PICK}"]`)
@@ -302,6 +304,10 @@ assert(
   onDisplay.cohortIndex === YEAR && onDisplay.hat === 'phones',
   `the display got the chosen year (PGY${onDisplay.cohortIndex + 1}) and its accessory`
 );
+assert(
+  onDisplay.pattern === 'band',
+  `the display got the chosen body pattern (${onDisplay.pattern})`
+);
 const box = /** @type {{x:number,y:number,width:number,height:number}} */ (
   await phonePage.locator('#jump').boundingBox()
 );
@@ -340,6 +346,7 @@ if (crowd > 0) {
         type: 'SET_LOOK',
         cohortIndex: i % 3,
         hatIndex: (i % 3) * 4 + (i % 4),
+        patternIndex: i % 4,
         colorIndex: i % 12,
       })
     );

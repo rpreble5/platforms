@@ -102,7 +102,8 @@ path, and those are the terms that dominate.
    `localStorage`. No token, or an unknown one, mints a new player.
 3. Node replies with `HELLO_ACK`: the player's id, a token to remember, and the
    look it has provisionally assigned them.
-4. The phone shows the **setup card** — name, training year, colour, accessory.
+4. The phone shows the **setup card** — name, training year, colour, accessory,
+   body pattern.
 5. They tap **I'm ready**. The phone sends `SET_LOOK`; Node resolves it and
    echoes back what they actually got; the display's roster updates and their
    avatar appears on the floor in that look.
@@ -115,13 +116,9 @@ setup card in the way.
 
 **Everything is a request, not a command.** Twelve colours cannot cover thirty
 players, and colour alone isn't separable anyway across a room, under projector
-gamma, or for a colourblind player. So the player asks for a colour and an
-accessory, and the server resolves collisions so the **(colour, accessory) pair
-stays unique for everybody**. When the exact pair is taken it keeps the colour
-and moves the accessory — a 30×42 block of hue is the stronger signal at the
-back of the room — and only once all four of a colour's slots are gone does the
-colour move to the nearest one with room. The picker greys out full colours
-before it comes to that.
+gamma, or for a colourblind player. So the player asks, and the server resolves
+collisions so the **(colour, accessory, pattern) triple stays unique for
+everybody** — see the resolution order below.
 
 ## Telling thirty people apart
 
@@ -140,13 +137,28 @@ fractions of `w`/`h` rather than pixels so they survive the avatar shrinking as
 the room fills. `shades` is the one that wants to live on the face; it's drawn
 overhanging both sides for exactly that reason.
 
-Three axes carry identity:
+Four axes carry identity:
 
 | axis | who chooses | what it's for |
 |---|---|---|
 | colour (12) | player | which one is me |
 | accessory (4 per year) | player | disambiguates people sharing a colour |
+| body pattern (4) | player | disambiguates people sharing both |
 | drawn height (0.85 / 1.0 / 1.15) | training year | which cohort, at a glance |
+
+That's 576 looks for 30 people, which is not the point — 48 was already more
+than enough. The point is *separation*, not combinations. A fourth
+well-separated state beats a fortieth indistinguishable one, which is why the
+patterns are four bold shapes rather than a dozen subtle ones. Anything
+low-contrast is charm, not identity: a projector crushes small differences in
+saturation before it crushes anything else, so a marking that looks tasteful on
+a monitor at arm's length is simply absent from the back of the room.
+
+**The resolution order is the design.** When two players want the same look the
+server gives up the weakest signal first: all four patterns are tried before the
+accessory moves, and all four accessories before the colour does. Since pattern
+absorbs most collisions, players now nearly always keep the exact colour and
+accessory they asked for.
 
 **Training year is a costume, never a gameplay difference.** `PLAYER_H` is 56
 for everybody; only the *sprite* is scaled, growing upward from the feet so the

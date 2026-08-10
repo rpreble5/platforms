@@ -20,6 +20,7 @@ import { UI } from './theme.js';
  * @property {string} name
  * @property {string} color
  * @property {string} hat
+ * @property {string} [pattern]
  * @property {number} [cohortIndex]
  * @property {boolean} connected
  */
@@ -110,7 +111,7 @@ export function render(cx, world, roster, game, opts) {
     const drawnH = h * COHORTS[clampCohort(look.cohortIndex ?? -1)].height;
     const top = it.y + h - drawnH;
 
-    const sprite = getAvatar(look.color, look.hat, Math.round(w), Math.round(drawnH));
+    const sprite = getAvatar(look.color, look.hat, Math.round(w), Math.round(drawnH), look.pattern);
     cx.drawImage(sprite, Math.round(it.x - AVATAR_PAD), Math.round(top - AVATAR_PAD));
 
     // Labels auto-hide once the room is crowded — 30 overlapping names is worse

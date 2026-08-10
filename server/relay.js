@@ -220,6 +220,7 @@ export class Relay {
           name: typeof msg.name === 'string' ? msg.name : undefined,
           colorIndex: Number.isInteger(msg.colorIndex) ? msg.colorIndex : undefined,
           hatIndex: Number.isInteger(msg.hatIndex) ? msg.hatIndex : undefined,
+          patternIndex: Number.isInteger(msg.patternIndex) ? msg.patternIndex : undefined,
           cohortIndex: Number.isInteger(msg.cohortIndex) ? msg.cohortIndex : undefined,
         });
         if (!record) return;
@@ -329,8 +330,10 @@ export class Relay {
       named: r.named,
       color: r.color,
       hat: r.hat,
+      pattern: r.pattern,
       colorIndex: r.colorIndex,
       hatIndex: r.hatIndex,
+      patternIndex: r.patternIndex,
       cohortIndex: r.cohortIndex,
       cohortSet: r.cohortSet,
       free: this.roster.freeByColor(r.cohortIndex),

@@ -15,11 +15,14 @@
  * that on screen" is the actual mechanism.
  *
  * Who chooses what:
- *   - The player picks cohort, colour and accessory.
- *   - The server resolves collisions, preferring to keep the colour and move
- *     the accessory, because a 30x42 block of hue is the stronger signal.
- * That split is what lets people choose without breaking the uniqueness the
- * whole identity system depends on.
+ *   - The player picks cohort, colour, accessory and body pattern.
+ *   - The server resolves collisions, giving up the weakest signal first:
+ *     pattern yields, then accessory, and the colour moves only as a last
+ *     resort. A 30x42 block of hue is the strongest thing on the avatar.
+ * That order is what lets people choose without breaking the uniqueness the
+ * whole identity system depends on — and with the pattern absorbing most
+ * collisions, players now usually get the exact colour and accessory they
+ * asked for.
  *
  * Colours avoid adjacent saturated red/blue pairs and anything that muddies
  * when a projector crushes saturation.
@@ -97,8 +100,37 @@ export const ACCESSORIES = [
   { key: 'shades', label: 'Shades', glyph: '🕶️' },
 ];
 
+/**
+ * Body patterns.
+ *
+ * These are deliberately bold rather than subtle. A pattern a couple of shades
+ * off the body colour is invisible at 30x42 from five metres — that difference
+ * is exactly what a projector's gamma crushes first — so each of these is a
+ * large, high-contrast shape covering a good fraction of the body. Small or
+ * low-contrast markings are charm, not identity, and this axis is doing
+ * identity work.
+ *
+ * Four is on purpose. The point of another axis is not more combinations —
+ * 12 x 4 was already far more than 30 people need. It is more *separation*:
+ * a fourth well-separated state beats a fortieth indistinguishable one.
+ */
+export const PATTERNS = [
+  { key: 'solid', label: 'Solid' },
+  { key: 'dots', label: 'Dots' },
+  { key: 'band', label: 'Band' },
+  { key: 'sash', label: 'Sash' },
+];
+
+/** Distinct looks available in one colour, within one year. */
+export const SLOTS_PER_COLOR = POOL_SIZE * PATTERNS.length;
+
 /** Total distinct looks. Far above MAX_PLAYERS, so nobody is turned away. */
-export const LOOK_COUNT = COLORS.length * ACCESSORIES.length;
+export const LOOK_COUNT = COLORS.length * ACCESSORIES.length * PATTERNS.length;
+
+/** @param {number} i @returns {number} */
+export function clampPattern(i) {
+  return Number.isInteger(i) && i >= 0 && i < PATTERNS.length ? i : 0;
+}
 
 /** The middle year. What a player holds before they've chosen. */
 export const DEFAULT_COHORT = 1;

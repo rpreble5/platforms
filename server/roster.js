@@ -11,7 +11,8 @@ import {
   ACCESSORIES,
   COLORS,
   DEFAULT_COHORT,
-  POOL_SIZE,
+  PATTERNS,
+  SLOTS_PER_COLOR,
   clampCohort,
   identityFor,
   lookName,
@@ -34,6 +35,8 @@ const NAME_STRIP = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u
  * @property {string} hat
  * @property {number} colorIndex
  * @property {number} hatIndex global accessory index; its range implies the cohort
+ * @property {string} pattern
+ * @property {number} patternIndex
  * @property {number} cohortIndex
  * @property {boolean} cohortSet whether the player has actually chosen a year
  * @property {number} joinIndex
@@ -95,8 +98,10 @@ export class Roster {
       named: Boolean(typed),
       color: COLORS[0].hex,
       hat: ACCESSORIES[0].key,
+      pattern: PATTERNS[0].key,
       colorIndex: 0,
       hatIndex: 0,
+      patternIndex: 0,
       // A placeholder until they pick. `cohortSet` is what tells the phone
       // whether the card still has a question to ask.
       cohortIndex: DEFAULT_COHORT,
@@ -111,7 +116,7 @@ export class Roster {
     // Spread the auto-assignment the way identityFor always has, but route it
     // through the same claim path a player's pick uses, so an auto-assigned look
     // can never collide with one somebody chose.
-    this.#assign(record, seed.colorIndex, seed.hatIndex);
+    this.#assign(record, seed.colorIndex, seed.hatIndex, 0);
     return { ok: true, record, isNew: true };
   }
 
@@ -123,7 +128,7 @@ export class Roster {
    * never the request, that goes back to the phone.
    *
    * @param {number} id
-   * @param {{name?: string, colorIndex?: number, hatIndex?: number, cohortIndex?: number}} want
+   * @param {{name?: string, colorIndex?: number, hatIndex?: number, patternIndex?: number, cohortIndex?: number}} want
    * @returns {PlayerRecord | null}
    */
   setLook(id, want) {
@@ -144,11 +149,19 @@ export class Roster {
 
     // A year change always re-runs assignment, because the accessory they were
     // wearing does not exist in the new year's pool.
-    if (movedYear || Number.isInteger(want.colorIndex) || Number.isInteger(want.hatIndex)) {
+    if (
+      movedYear ||
+      Number.isInteger(want.colorIndex) ||
+      Number.isInteger(want.hatIndex) ||
+      Number.isInteger(want.patternIndex)
+    ) {
       this.#assign(
         r,
         Number.isInteger(want.colorIndex) ? /** @type {number} */ (want.colorIndex) : r.colorIndex,
-        Number.isInteger(want.hatIndex) ? /** @type {number} */ (want.hatIndex) : r.hatIndex
+        Number.isInteger(want.hatIndex) ? /** @type {number} */ (want.hatIndex) : r.hatIndex,
+        Number.isInteger(want.patternIndex)
+          ? /** @type {number} */ (want.patternIndex)
+          : r.patternIndex
       );
     } else if (!r.named) {
       r.name = lookName(r.colorIndex, r.hatIndex);
@@ -157,15 +170,19 @@ export class Roster {
   }
 
   /**
-   * Free accessory slots per colour, within one year's pool. The phone greys
-   * out anything at zero, which is what stops a player picking a colour that is
-   * about to be refused.
+   * Free looks per colour, within one year. The phone greys out anything at
+   * zero, which is what stops a player picking a colour about to be refused.
+   *
+   * With patterns in the mix a colour holds sixteen looks per year rather than
+   * four, so in a 30-player room this will realistically never hit zero. It is
+   * kept because the guarantee should hold at any roster size, not because the
+   * warning is expected to fire.
    * @param {number} cohortIndex
    * @returns {number[]}
    */
   freeByColor(cohortIndex) {
     const pool = new Set(poolFor(cohortIndex));
-    const free = COLORS.map(() => POOL_SIZE);
+    const free = COLORS.map(() => SLOTS_PER_COLOR);
     for (const r of this.byId.values()) {
       if (pool.has(r.hatIndex)) free[r.colorIndex]--;
     }
@@ -173,43 +190,54 @@ export class Roster {
   }
 
   /**
-   * Resolve a look request to a free (colour, accessory) pair.
+   * Resolve a look request to a free (colour, accessory, pattern) triple.
    *
-   * Colour is tried first and accessory second: a 30x42 block of hue is the
-   * stronger signal at the back of the room, so when the exact pair is taken it
-   * is better to keep the colour and move the accessory than the reverse. Only
-   * once all four of a colour's slots are gone does the colour move, and then
-   * only to the nearest one with room.
+   * The nesting *is* the policy. Colour is the outermost loop and pattern the
+   * innermost, so the weakest signal is the first thing given up: a collision
+   * exhausts all four patterns before it touches the accessory, and all four
+   * accessories before the colour moves. That ordering follows how well each
+   * one survives thirty metres of room — a block of hue beats a silhouette
+   * beats a marking — and it means a player now usually keeps both the colour
+   * and the accessory they actually asked for.
    *
    * @param {PlayerRecord} record
    * @param {number} wantColor
    * @param {number} wantHat
+   * @param {number} wantPattern
    */
-  #assign(record, wantColor, wantHat) {
+  #assign(record, wantColor, wantHat, wantPattern) {
     /** @type {Set<string>} */
     const taken = new Set();
     for (const r of this.byId.values()) {
-      if (r !== record) taken.add(`${r.colorIndex}:${r.hatIndex}`);
+      if (r !== record) taken.add(`${r.colorIndex}:${r.hatIndex}:${r.patternIndex}`);
     }
 
-    // The requested accessory first, then the rest of this year's pool.
+    // Requested first in each axis, then the rest — so an uncontested request
+    // comes back exactly as asked.
     const pool = poolFor(record.cohortIndex);
     const hats = pool.includes(wantHat) ? [wantHat, ...pool.filter((h) => h !== wantHat)] : pool;
+    const pats = PATTERNS.map((_, i) => i);
+    const wp = Number.isInteger(wantPattern) && pats.includes(wantPattern) ? wantPattern : 0;
+    const patterns = [wp, ...pats.filter((p) => p !== wp)];
 
     const start = ((wantColor % COLORS.length) + COLORS.length) % COLORS.length;
     for (let step = 0; step < COLORS.length; step++) {
       const c = (start + step) % COLORS.length;
-      for (const h of hats) {
-        if (taken.has(`${c}:${h}`)) continue;
-        record.colorIndex = c;
-        record.hatIndex = h;
-        record.color = COLORS[c].hex;
-        record.hat = ACCESSORIES[h].key;
-        if (!record.named) record.name = lookName(c, h);
-        return;
+      for (const hh of hats) {
+        for (const p of patterns) {
+          if (taken.has(`${c}:${hh}:${p}`)) continue;
+          record.colorIndex = c;
+          record.hatIndex = hh;
+          record.patternIndex = p;
+          record.color = COLORS[c].hex;
+          record.hat = ACCESSORIES[hh].key;
+          record.pattern = PATTERNS[p].key;
+          if (!record.named) record.name = lookName(c, hh);
+          return;
+        }
       }
     }
-    // 48 slots per year against a 40-player cap, so this is unreachable — but
+    // 192 slots per year against a 40-player cap, so this is unreachable — but
     // leaving the record on an accessory from the wrong year would be worse.
     record.hatIndex = pool[0];
     record.hat = ACCESSORIES[pool[0]].key;

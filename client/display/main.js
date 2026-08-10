@@ -137,6 +137,7 @@ function onJson(msg) {
           name: p.name,
           color: p.color,
           hat: p.hat,
+          pattern: p.pattern,
           cohortIndex: p.cohortIndex,
           connected: p.connected,
         });
