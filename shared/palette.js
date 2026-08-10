@@ -49,25 +49,38 @@ export const COLORS = [
 /**
  * Training years.
  *
- * `height` scales how tall the avatar is DRAWN. It never touches the collision
- * box — see render.js and the fairness test in sim/round.test.js. Cohort is a
- * costume, never a gameplay difference.
+ * `height` scales how tall the avatar is DRAWN and `shape` picks the body
+ * outline. Neither touches the collision box — see render.js and the fairness
+ * test in sim/round.test.js. Cohort is a costume, never a gameplay difference.
  *
  * Height is a comparative cue: a clump of PGY1s beside a clump of PGY3s is
  * obvious, one PGY2 alone on a platform is not. That's the right shape for a
  * coarse three-state signal, and it's why the accessory pools carry the load
  * as well.
  *
- * The 0.85–1.15 spread is wider than it first looks like it needs to be. A
- * tighter 0.9–1.1 got swamped: accessory silhouettes vary the total height of a
- * sprite by about as much again, so the cohort signal has to clear that noise
- * to be readable at all. Headroom is fine either way — at the largest size the
- * tallest avatar's head still sits ~23px below the signboards.
+ * The 0.75–1.4 spread is wide because narrower ones got swamped. Accessory
+ * silhouettes vary the total height of a sprite by about as much again, so the
+ * cohort signal has to clear that noise before it reads at all; a 0.9–1.1 span
+ * was invisible and 0.85–1.15 was marginal.
+ *
+ * Shape is a second, weaker channel pointing the same way — redundant coding,
+ * which survives occlusion and a bad projector better than one channel does.
+ * Rendered side by side at 30x42 the three outlines are a small difference, and
+ * a real one; it is height that does the heavy lifting.
+ *
+ * The pools pair with the shapes better than they had any right to. PGY1's four
+ * accessories all sit near the centre-top, which is exactly where a domed body
+ * peaks, and PGY3's crown and horns sit flat on a slab's square shoulders.
+ *
+ * One consequence of 1.4, accepted deliberately: at fewer than about ten
+ * players, where avatars draw at full size, a PGY3's crown overlaps the bottom
+ * edge of an answer board when standing directly underneath. At 25-30 players
+ * there is 10px of clearance and it never happens.
  */
 export const COHORTS = [
-  { key: 'pgy1', label: 'PGY1', height: 0.85 },
-  { key: 'pgy2', label: 'PGY2', height: 1.0 },
-  { key: 'pgy3', label: 'PGY3', height: 1.15 },
+  { key: 'pgy1', label: 'PGY1', height: 0.75, shape: 'capsule' },
+  { key: 'pgy2', label: 'PGY2', height: 1.0, shape: 'round' },
+  { key: 'pgy3', label: 'PGY3', height: 1.4, shape: 'slab' },
 ];
 
 /** Accessories per cohort. Fixed at four so 12 colours x 4 = 48 slots per year. */

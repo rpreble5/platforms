@@ -102,16 +102,24 @@ export function render(cx, world, roster, game, opts) {
 
     if (findMe) drawFindMe(cx, it.x + w / 2, it.y + h / 2, w, world.t, look.color);
 
-    // Training year is a DRAWN height only. The collision box above is the same
-    // 40x56 for everybody, so the jump arc and the landing pixel are identical
-    // across cohorts and the year can never be a gameplay advantage. The sprite
-    // grows upward from the feet, which is also what makes the difference
-    // legible: baseline-aligned heights are trivial to compare, free-floating
-    // ones are not.
-    const drawnH = h * COHORTS[clampCohort(look.cohortIndex ?? -1)].height;
+    // Training year is a DRAWN height and outline only. The collision box above
+    // is the same 40x56 for everybody, so the jump arc and the landing pixel are
+    // identical across cohorts and the year can never be a gameplay advantage.
+    // The sprite grows upward from the feet, which is also what makes the
+    // difference legible: baseline-aligned heights are trivial to compare,
+    // free-floating ones are not.
+    const cohort = COHORTS[clampCohort(look.cohortIndex ?? -1)];
+    const drawnH = h * cohort.height;
     const top = it.y + h - drawnH;
 
-    const sprite = getAvatar(look.color, look.hat, Math.round(w), Math.round(drawnH), look.pattern);
+    const sprite = getAvatar(
+      look.color,
+      look.hat,
+      Math.round(w),
+      Math.round(drawnH),
+      look.pattern,
+      cohort.shape
+    );
     cx.drawImage(sprite, Math.round(it.x - AVATAR_PAD), Math.round(top - AVATAR_PAD));
 
     // Labels auto-hide once the room is crowded — 30 overlapping names is worse

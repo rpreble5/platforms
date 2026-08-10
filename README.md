@@ -144,7 +144,8 @@ Four axes carry identity:
 | colour (12) | player | which one is me |
 | accessory (4 per year) | player | disambiguates people sharing a colour |
 | body pattern (4) | player | disambiguates people sharing both |
-| drawn height (0.85 / 1.0 / 1.15) | training year | which cohort, at a glance |
+| drawn height (0.75 / 1.0 / 1.4) | training year | which cohort, at a glance |
+| body outline (capsule / round / slab) | training year | reinforces the year |
 
 That's 576 looks for 30 people, which is not the point — 48 was already more
 than enough. The point is *separation*, not combinations. A fourth
@@ -161,7 +162,7 @@ absorbs most collisions, players now nearly always keep the exact colour and
 accessory they asked for.
 
 **Training year is a costume, never a gameplay difference.** `PLAYER_H` is 56
-for everybody; only the *sprite* is scaled, growing upward from the feet so the
+for everybody; only the *sprite* changes, growing upward from the feet so the
 collision box, jump arc and landing pixel are identical across years. There's a
 test in `sim/round.test.js` that says so, because this is the one way the
 feature could quietly become an advantage.
@@ -169,9 +170,15 @@ feature could quietly become an advantage.
 Height is a **comparative** cue — a clump of PGY1s beside a clump of PGY3s is
 obvious, one PGY2 alone on a platform is not. That's the right shape for a
 coarse three-state signal, and it's why the accessory pools carry load too. The
-0.85–1.15 spread is wider than it looks like it needs to be because accessory
-silhouettes vary total sprite height by about as much again; a tighter spread
-got swamped.
+0.75–1.4 spread is wide because narrower ones got swamped: accessory silhouettes
+vary total sprite height by about as much again, so 0.9–1.1 was invisible and
+0.85–1.15 was marginal.
+
+Outline is a second, weaker channel pointing the same way. Side by side at
+30×42 the difference between a capsule and a slab is small but real, and
+redundant coding survives occlusion and a bad projector better than one channel
+does. Both live in `COHORTS` in `shared/palette.js` — two numbers and two
+strings if you want to dial either back.
 
 Whatever the server settles on is what goes back to the phone, and the phone
 wears it: the top bar takes the player's colour at full strength, with the hat

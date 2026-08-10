@@ -347,7 +347,10 @@ test('the training year is a costume, never a gameplay difference', () => {
   const sim = JSON.stringify(Object.entries(PHYS).sort());
   for (const c of COHORTS) {
     assert.notEqual(c.height, undefined, `${c.key} has a drawn height`);
+    assert.notEqual(c.shape, undefined, `${c.key} has a body outline`);
   }
+  assert.equal(new Set(COHORTS.map((c) => c.shape)).size, COHORTS.length, 'outlines are distinct');
+  assert.equal(new Set(COHORTS.map((c) => c.height)).size, COHORTS.length, 'heights are distinct');
   assert.equal(JSON.stringify(Object.entries(PHYS).sort()), sim, 'reading cohorts touches nothing');
 
   // Every player in the world is the same size as every other, whatever they
