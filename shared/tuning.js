@@ -126,12 +126,18 @@ export const RENDER_PUSH_APART = 0;
 
 /**
  * Avatars shrink as the room fills so 30 of them still fit on one platform.
+ *
+ * The floor used to be 0.65, which drew a 26x36 avatar at a full house — small
+ * enough that an accessory silhouette stopped being readable, and that is the
+ * whole identity mechanism at the size where name labels have already switched
+ * off. 0.75 gives 30x42, a third more area, and depth sorting in render.js
+ * already handles the extra overlap.
  * @param {number} count
  * @returns {number}
  */
 export function avatarScale(count) {
   if (count <= 8) return 1;
-  if (count <= 16) return 0.85;
-  if (count <= 24) return 0.75;
-  return 0.65;
+  if (count <= 16) return 0.9;
+  if (count <= 24) return 0.82;
+  return 0.75;
 }

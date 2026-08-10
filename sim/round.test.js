@@ -10,9 +10,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { BTN_JUMP, BTN_RIGHT } from '../shared/protocol.js';
-import { STEP_MS } from '../shared/tuning.js';
+import { COHORTS } from '../shared/palette.js';
+import { PHYS, STEP_MS } from '../shared/tuning.js';
 import { addPlayer, createWorld, step } from './world.js';
-import { ANSWER_Y, FLOOR_Y, GRID, buildArena, answerId, snapToGrid } from './levels.js';
+import { ANSWER_Y, FLOOR_Y, GRID, buildArena, answerId, snapToGrid, spawnFor } from './levels.js';
 import {
   BASE_POINTS,
   DEBRIS_LIFE_MS,
@@ -335,6 +336,40 @@ test('a player can actually reach every answer platform by jumping', () => {
       assert.ok(landed, `${n} answers: platform ${i} is reachable with a plain jump`);
     }
   }
+});
+
+test('the training year is a costume, never a gameplay difference', () => {
+  // PGY1/2/3 avatars are DRAWN at different heights. The moment that leaks into
+  // the collision box it becomes an advantage — a shorter player fits under a
+  // platform a taller one doesn't, and the year someone happens to be in starts
+  // deciding rounds. The sim has no idea cohorts exist, and this is what says
+  // so out loud.
+  const sim = JSON.stringify(Object.entries(PHYS).sort());
+  for (const c of COHORTS) {
+    assert.notEqual(c.height, undefined, `${c.key} has a drawn height`);
+  }
+  assert.equal(JSON.stringify(Object.entries(PHYS).sort()), sim, 'reading cohorts touches nothing');
+
+  // Every player in the world is the same size as every other, whatever they
+  // are wearing.
+  const world = createWorld(buildArena(4));
+  const sizes = new Set();
+  for (let id = 1; id <= 6; id++) {
+    const p = addPlayer(world, id);
+    sizes.add(`${p.w}x${p.h}`);
+  }
+  assert.equal(sizes.size, 1, `one body size for everyone, got ${[...sizes].join(', ')}`);
+  assert.equal([...sizes][0], `${PHYS.PLAYER_W}x${PHYS.PLAYER_H}`);
+});
+
+test('no two players spawn on exactly the same pixel', () => {
+  // Perfect overlap is the one crowd case no amount of character design can
+  // survive: the avatar underneath is simply not on screen.
+  const xs = Array.from({ length: 40 }, (_, i) => spawnFor(i).x);
+  assert.equal(new Set(xs).size, xs.length, 'all 40 spawn positions are distinct');
+  const sorted = [...xs].sort((a, b) => a - b);
+  const closest = Math.min(...sorted.slice(1).map((x, i) => x - sorted[i]));
+  assert.ok(closest > PHYS.PLAYER_W * 0.6, `nearest pair is ${closest.toFixed(1)}px apart`);
 });
 
 test('answer platforms are a whole number of tiles wide', () => {

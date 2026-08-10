@@ -1,17 +1,28 @@
 /**
- * Player identity: 12 colors x 4 hat silhouettes = 48 unique identities.
+ * Player identity: three axes — cohort, colour, accessory.
  *
- * Never color alone. At 30 players on one screen, hue alone is not separable —
- * across a room, under projector gamma, and for colorblind players. The hat is
- * the disambiguator, and the phone shows both fullscreen so "look at your phone,
- * then find that on screen" is the actual mechanism.
+ * The budget this is all designed against: at 30 players an avatar is drawn
+ * around 30x42 px and viewed from five metres. A feature needs roughly 3px to
+ * be noticed at all, which is 10% of the body width. So the rule every shape
+ * here obeys is that it must **break the outline**. The eye reads silhouette
+ * first, and a blob above the head sits against open sky rather than against a
+ * busy body. Anything drawn inside the outline — face detail, a badge, fine
+ * pattern — is invisible across a room and is not worth the pixels.
  *
- * Players pick their color; the server assigns the hat. That split is what lets
- * people choose without breaking the uniqueness the identity system depends on —
- * four players can all be jade, and they get four different hats.
+ * Never colour alone, either. Twelve hues are not separable at that size across
+ * a room, under projector gamma, or for a colourblind player. The accessory is
+ * the disambiguator, and the phone shows both so "look at your phone, then find
+ * that on screen" is the actual mechanism.
  *
- * Colors avoid adjacent saturated red/blue pairs and anything that muddies when
- * a projector crushes saturation.
+ * Who chooses what:
+ *   - The player picks cohort, colour and accessory.
+ *   - The server resolves collisions, preferring to keep the colour and move
+ *     the accessory, because a 30x42 block of hue is the stronger signal.
+ * That split is what lets people choose without breaking the uniqueness the
+ * whole identity system depends on.
+ *
+ * Colours avoid adjacent saturated red/blue pairs and anything that muddies
+ * when a projector crushes saturation.
  *
  * NO IMPORTS: this file is inlined into the phone page with its `export`
  * keywords stripped (see server/http.js), the same way the protocol is.
@@ -32,49 +43,121 @@ export const COLORS = [
   { name: 'bone', hex: '#e8e2d4' },
 ];
 
-/** Hat silhouettes, drawn as simple shapes so they read at 28px. */
-export const HATS = /** @type {const} */ (['none', 'cap', 'horns', 'antenna']);
+/**
+ * Training years.
+ *
+ * `height` scales how tall the avatar is DRAWN. It never touches the collision
+ * box — see render.js and the fairness test in sim/round.test.js. Cohort is a
+ * costume, never a gameplay difference.
+ *
+ * Height is a comparative cue: a clump of PGY1s beside a clump of PGY3s is
+ * obvious, one PGY2 alone on a platform is not. That's the right shape for a
+ * coarse three-state signal, and it's why the accessory pools carry the load
+ * as well.
+ *
+ * The 0.85–1.15 spread is wider than it first looks like it needs to be. A
+ * tighter 0.9–1.1 got swamped: accessory silhouettes vary the total height of a
+ * sprite by about as much again, so the cohort signal has to clear that noise
+ * to be readable at all. Headroom is fine either way — at the largest size the
+ * tallest avatar's head still sits ~23px below the signboards.
+ */
+export const COHORTS = [
+  { key: 'pgy1', label: 'PGY1', height: 0.85 },
+  { key: 'pgy2', label: 'PGY2', height: 1.0 },
+  { key: 'pgy3', label: 'PGY3', height: 1.15 },
+];
 
-/** How each hat is shown on the phone, where there is no canvas to draw on. */
-export const HAT_GLYPH = /** @type {const} */ ({
-  none: '●',
-  cap: '🧢',
-  horns: '🤘',
-  antenna: '📡',
-});
-
-/** Total distinct looks. Deliberately above MAX_PLAYERS, so nobody is turned away. */
-export const LOOK_COUNT = 48;
+/** Accessories per cohort. Fixed at four so 12 colours x 4 = 48 slots per year. */
+export const POOL_SIZE = 4;
 
 /**
- * Deterministic identity for a player index, so reconnects keep their look and
- * the first 12 players all get distinct colors before any hat repeats.
+ * Twelve accessories in cohort order: indices 0-3 are PGY1, 4-7 PGY2, 8-11
+ * PGY3. Because the pools are disjoint index ranges, two cohorts can never
+ * contend for the same (colour, accessory) pair — the partition falls out of
+ * the numbering rather than needing to be enforced.
+ *
+ * Every one of these sits above or beside the head. `shades` is the weakest of
+ * the twelve and is drawn overhanging the head sides for that reason; it earns
+ * its place on the phone more than at five metres.
+ */
+export const ACCESSORIES = [
+  { key: 'bow', label: 'Bow', glyph: '🎀' },
+  { key: 'bonnet', label: 'Bonnet', glyph: '👒' },
+  { key: 'ears', label: 'Ears', glyph: '🐰' },
+  { key: 'curl', label: 'Curl', glyph: '🌱' },
+
+  { key: 'cap', label: 'Cap', glyph: '🧢' },
+  { key: 'visor', label: 'Visor', glyph: '🥽' },
+  { key: 'antenna', label: 'Antenna', glyph: '📡' },
+  { key: 'tuft', label: 'Tuft', glyph: '⚡' },
+
+  { key: 'crown', label: 'Crown', glyph: '👑' },
+  { key: 'phones', label: 'Phones', glyph: '🎧' },
+  { key: 'horns', label: 'Horns', glyph: '🤘' },
+  { key: 'shades', label: 'Shades', glyph: '🕶️' },
+];
+
+/** Total distinct looks. Far above MAX_PLAYERS, so nobody is turned away. */
+export const LOOK_COUNT = COLORS.length * ACCESSORIES.length;
+
+/** The middle year. What a player holds before they've chosen. */
+export const DEFAULT_COHORT = 1;
+
+/**
+ * The accessory indices a cohort may use.
+ * @param {number} cohortIndex
+ * @returns {number[]}
+ */
+export function poolFor(cohortIndex) {
+  const c = clampCohort(cohortIndex);
+  return Array.from({ length: POOL_SIZE }, (_, i) => c * POOL_SIZE + i);
+}
+
+/** @param {number} hatIndex @returns {number} which cohort an accessory belongs to */
+export function cohortOfAccessory(hatIndex) {
+  return Math.floor(clampHat(hatIndex) / POOL_SIZE);
+}
+
+/** @param {number} i @returns {number} */
+export function clampCohort(i) {
+  return Number.isInteger(i) && i >= 0 && i < COHORTS.length ? i : DEFAULT_COHORT;
+}
+
+/** @param {number} i @returns {number} */
+export function clampHat(i) {
+  return Number.isInteger(i) && i >= 0 && i < ACCESSORIES.length ? i : 0;
+}
+
+/**
+ * Deterministic starting identity for a player index, so the first twelve
+ * joiners all get distinct colours before any accessory repeats.
  * @param {number} index
+ * @param {number} [cohortIndex]
  * @returns {{colorIndex:number, hatIndex:number, color:string, hat:string}}
  */
-export function identityFor(index) {
-  const colorIndex = index % COLORS.length;
-  const hatIndex = Math.floor(index / COLORS.length) % HATS.length;
+export function identityFor(index, cohortIndex = DEFAULT_COHORT) {
+  const colorIndex = ((index % COLORS.length) + COLORS.length) % COLORS.length;
+  const slot = Math.floor(Math.abs(index) / COLORS.length) % POOL_SIZE;
+  const hatIndex = clampCohort(cohortIndex) * POOL_SIZE + slot;
   return {
     colorIndex,
     hatIndex,
     color: COLORS[colorIndex].hex,
-    hat: HATS[hatIndex],
+    hat: ACCESSORIES[hatIndex].key,
   };
 }
 
 /**
- * A readable name for a look, e.g. "Jade Cap". Used for anyone who hasn't typed
- * their own, and it follows them if they change colour.
+ * A readable name for a look, e.g. "Jade Crown". Used for anyone who hasn't
+ * typed their own, and it follows them if they change anything.
  * @param {number} colorIndex
  * @param {number} hatIndex
  * @returns {string}
  */
 export function lookName(colorIndex, hatIndex) {
-  const c = COLORS[colorIndex % COLORS.length].name;
-  const h = HATS[hatIndex % HATS.length];
-  const cap = /** @param {string} s */ (s) => s[0].toUpperCase() + s.slice(1);
-  return hatIndex % HATS.length === 0 ? cap(c) : `${cap(c)} ${cap(h)}`;
+  const c = COLORS[((colorIndex % COLORS.length) + COLORS.length) % COLORS.length].name;
+  const a = ACCESSORIES[clampHat(hatIndex)].label;
+  return `${c[0].toUpperCase() + c.slice(1)} ${a}`;
 }
 
 /**

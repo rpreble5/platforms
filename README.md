@@ -102,10 +102,10 @@ path, and those are the terms that dominate.
    `localStorage`. No token, or an unknown one, mints a new player.
 3. Node replies with `HELLO_ACK`: the player's id, a token to remember, and the
    look it has provisionally assigned them.
-4. The phone shows the **setup card** — name, and a grid of the twelve colours.
+4. The phone shows the **setup card** — name, training year, colour, accessory.
 5. They tap **I'm ready**. The phone sends `SET_LOOK`; Node resolves it and
    echoes back what they actually got; the display's roster updates and their
-   avatar appears on the floor in that colour.
+   avatar appears on the floor in that look.
 6. The host presses `Enter` on the display to start.
 
 Late joiners run the same path at any time and drop straight into the round in
@@ -113,13 +113,53 @@ progress. A reconnect — dropped WiFi, backgrounded tab, closed lid — re-send
 the same token and resumes the same avatar, same look, same score, with no
 setup card in the way.
 
-**Colour is a request, not a command.** Twelve colours cannot cover thirty
+**Everything is a request, not a command.** Twelve colours cannot cover thirty
 players, and colour alone isn't separable anyway across a room, under projector
-gamma, or for a colourblind player. So the player picks the colour and *the
-server picks the hat*: four people can all be jade and get four different hats,
-and the (colour, hat) pair stays unique for everybody. If all four hats in a
-colour are gone, the server moves that player to the nearest colour with a free
-slot — and the picker greys out full colours before it comes to that.
+gamma, or for a colourblind player. So the player asks for a colour and an
+accessory, and the server resolves collisions so the **(colour, accessory) pair
+stays unique for everybody**. When the exact pair is taken it keeps the colour
+and moves the accessory — a 30×42 block of hue is the stronger signal at the
+back of the room — and only once all four of a colour's slots are gone does the
+colour move to the nearest one with room. The picker greys out full colours
+before it comes to that.
+
+## Telling thirty people apart
+
+Everything about the characters is designed against one number: at a full house
+an avatar is drawn about **30×42px** and viewed from five metres, and name
+labels have already switched off (`render.js`). A feature needs roughly 3px to
+be noticed, which is 10% of the body width. That gives one hard rule:
+
+> **Only things that break the outline are visible.** The eye reads silhouette
+> first, and a shape above the head sits against open sky instead of against a
+> busy body. Detail *inside* the outline — face markings, a badge, fine pattern
+> — is invisible across a room and not worth the pixels.
+
+All twelve accessories in `shared/palette.js` obey that, and they're drawn in
+fractions of `w`/`h` rather than pixels so they survive the avatar shrinking as
+the room fills. `shades` is the one that wants to live on the face; it's drawn
+overhanging both sides for exactly that reason.
+
+Three axes carry identity:
+
+| axis | who chooses | what it's for |
+|---|---|---|
+| colour (12) | player | which one is me |
+| accessory (4 per year) | player | disambiguates people sharing a colour |
+| drawn height (0.85 / 1.0 / 1.15) | training year | which cohort, at a glance |
+
+**Training year is a costume, never a gameplay difference.** `PLAYER_H` is 56
+for everybody; only the *sprite* is scaled, growing upward from the feet so the
+collision box, jump arc and landing pixel are identical across years. There's a
+test in `sim/round.test.js` that says so, because this is the one way the
+feature could quietly become an advantage.
+
+Height is a **comparative** cue — a clump of PGY1s beside a clump of PGY3s is
+obvious, one PGY2 alone on a platform is not. That's the right shape for a
+coarse three-state signal, and it's why the accessory pools carry load too. The
+0.85–1.15 spread is wider than it looks like it needs to be because accessory
+silhouettes vary total sprite height by about as much again; a tighter spread
+got swamped.
 
 Whatever the server settles on is what goes back to the phone, and the phone
 wears it: the top bar takes the player's colour at full strength, with the hat

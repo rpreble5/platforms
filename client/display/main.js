@@ -52,7 +52,7 @@ world.spawn = { x: 1920 / 2 - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 
 let lastPhase = game.phase;
 const flash = new LatencyFlash();
 
-/** @type {Map<number, {name:string, color:string, hat:string, connected:boolean}>} */
+/** @type {Map<number, import('./render.js').Look>} */
 const roster = new Map();
 /** @type {Map<number, {rttP50:number, rttP95:number, loss:number}>} */
 const net = new Map();
@@ -133,7 +133,13 @@ function onJson(msg) {
       const seen = new Set([LOCAL_ID]);
       for (const p of msg.players) {
         seen.add(p.id);
-        roster.set(p.id, { name: p.name, color: p.color, hat: p.hat, connected: p.connected });
+        roster.set(p.id, {
+          name: p.name,
+          color: p.color,
+          hat: p.hat,
+          cohortIndex: p.cohortIndex,
+          connected: p.connected,
+        });
         addPlayer(world, p.id);
       }
       // Players are only ever removed from the roster on a full refresh; a

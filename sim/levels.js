@@ -110,6 +110,11 @@ export function answerId(i) {
 export function spawnFor(index) {
   const lanes = 24;
   const lane = index % lanes;
-  const x = EDGE_MARGIN + ((lane + 0.5) / lanes) * (WORLD_W - EDGE_MARGIN * 2);
+  // Past 24 players the lanes wrap, and without this offset the 25th player
+  // starts on *exactly* the same pixel as the 1st. Two perfectly stacked
+  // avatars are the worst case for telling anyone apart — the one on top hides
+  // the other completely — so wrapped players sit half a lane over.
+  const wrap = Math.floor(index / lanes) % 2;
+  const x = EDGE_MARGIN + ((lane + 0.5 + wrap * 0.5) / lanes) * (WORLD_W - EDGE_MARGIN * 2);
   return { x: x - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
 }

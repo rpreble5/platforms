@@ -219,6 +219,8 @@ export class Relay {
         const record = this.roster.setLook(conn.player.id, {
           name: typeof msg.name === 'string' ? msg.name : undefined,
           colorIndex: Number.isInteger(msg.colorIndex) ? msg.colorIndex : undefined,
+          hatIndex: Number.isInteger(msg.hatIndex) ? msg.hatIndex : undefined,
+          cohortIndex: Number.isInteger(msg.cohortIndex) ? msg.cohortIndex : undefined,
         });
         if (!record) return;
         // Echo the resolved look back, always. The player may not have got the
@@ -329,7 +331,9 @@ export class Relay {
       hat: r.hat,
       colorIndex: r.colorIndex,
       hatIndex: r.hatIndex,
-      free: this.roster.freeByColor(),
+      cohortIndex: r.cohortIndex,
+      cohortSet: r.cohortSet,
+      free: this.roster.freeByColor(r.cohortIndex),
     });
   }
 
@@ -348,8 +352,19 @@ export class Relay {
   #flushLooks() {
     if (!this.#looksDirty) return;
     this.#looksDirty = false;
-    const frame = encodeJson({ type: 'LOOKS', free: this.roster.freeByColor() });
-    for (const conn of this.phoneByPlayerId.values()) this.#send(conn, frame);
+    // Availability is per year, so this is built once per year rather than once
+    // per phone — three encodes instead of thirty.
+    /** @type {Map<number, Uint8Array>} */
+    const byCohort = new Map();
+    for (const conn of this.phoneByPlayerId.values()) {
+      const c = conn.player?.cohortIndex ?? 0;
+      let frame = byCohort.get(c);
+      if (!frame) {
+        frame = encodeJson({ type: 'LOOKS', free: this.roster.freeByColor(c) });
+        byCohort.set(c, frame);
+      }
+      this.#send(conn, frame);
+    }
   }
 
   /** @param {Uint8Array} bytes */

@@ -6,6 +6,7 @@
  */
 
 import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
+import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
 import { drawFloor, drawSky } from './stage.js';
@@ -19,6 +20,7 @@ import { UI } from './theme.js';
  * @property {string} name
  * @property {string} color
  * @property {string} hat
+ * @property {number} [cohortIndex]
  * @property {boolean} connected
  */
 
@@ -99,14 +101,27 @@ export function render(cx, world, roster, game, opts) {
 
     if (findMe) drawFindMe(cx, it.x + w / 2, it.y + h / 2, w, world.t, look.color);
 
-    const sprite = getAvatar(look.color, look.hat, Math.round(w), Math.round(h));
-    cx.drawImage(sprite, Math.round(it.x - AVATAR_PAD), Math.round(it.y - AVATAR_PAD));
+    // Training year is a DRAWN height only. The collision box above is the same
+    // 40x56 for everybody, so the jump arc and the landing pixel are identical
+    // across cohorts and the year can never be a gameplay advantage. The sprite
+    // grows upward from the feet, which is also what makes the difference
+    // legible: baseline-aligned heights are trivial to compare, free-floating
+    // ones are not.
+    const drawnH = h * COHORTS[clampCohort(look.cohortIndex ?? -1)].height;
+    const top = it.y + h - drawnH;
+
+    const sprite = getAvatar(look.color, look.hat, Math.round(w), Math.round(drawnH));
+    cx.drawImage(sprite, Math.round(it.x - AVATAR_PAD), Math.round(top - AVATAR_PAD));
 
     // Labels auto-hide once the room is crowded — 30 overlapping names is worse
     // than none. Find-me always keeps its own label.
-    if (scale > 0.7 || findMe || count <= 20) {
+    //
+    // Keyed on the player count, not on `scale`, so the two can be tuned
+    // separately: raising the scale floor below should not silently switch
+    // thirty names back on. Raise this number if the room reads fine with them.
+    if (count <= 24 || findMe) {
       const label = getLabel(look.name, findMe ? '#ffffff' : shade(look.color, 0.55));
-      cx.drawImage(label, Math.round(it.x + w / 2 - label.width / 2), Math.round(it.y - 40));
+      cx.drawImage(label, Math.round(it.x + w / 2 - label.width / 2), Math.round(top - 40));
     }
   }
   cx.globalAlpha = 1;

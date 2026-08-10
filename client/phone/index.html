@@ -112,7 +112,22 @@
   }
   #nameIn:focus { outline:none; border-color:#4aa8ff; }
 
-  #swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  #years { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .yr {
+    padding:16px 0; border-radius:12px; text-align:center;
+    font:800 17px/1 inherit; color:#8792a6; background:#141822;
+    border:3px solid transparent; touch-action:manipulation;
+  }
+  .yr.sel { color:#0b0d12; background:#e8edf5; border-color:#fff; }
+
+  #swatches, #gear { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .gr {
+    aspect-ratio:1; border-radius:14px; display:grid; place-items:center;
+    font-size:26px; background:#141822; border:3px solid transparent;
+    position:relative; touch-action:manipulation;
+  }
+  .gr.sel { border-color:#fff; background:#232a38; }
+  .gr.out { opacity:.25; }
   .sw {
     aspect-ratio:1; border-radius:14px; position:relative;
     border:3px solid transparent; display:grid; place-items:center;
@@ -165,8 +180,12 @@
     <div class="lbl">Your name</div>
     <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
            autocapitalize="words" spellcheck="false" enterkeyhint="done">
+    <div class="lbl">Your year</div>
+    <div id="years"></div>
     <div class="lbl">Your colour</div>
     <div id="swatches"></div>
+    <div class="lbl" id="gearLbl">Your accessory</div>
+    <div id="gear"></div>
     <button id="go" disabled>Connecting…</button>
     <p id="setupNote">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
   </div>
@@ -187,6 +206,7 @@
   var elSwatch = $('swatch'), elOverlay = $('overlay'), elOvh = $('ovh'), elOvp = $('ovp');
   var elFlag = $('flagbtn'), elMsg = $('msg');
   var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
+  var elYears = $('years'), elGear = $('gear');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
   // ------------------------------------------------------------------ identity
@@ -217,6 +237,8 @@
   // every reconnect, and only the first one is a join.
   var joined = false;
   var pickedColor = -1;
+  var pickedGear = -1;      // global accessory index; its range implies the year
+  var pickedYear = -1;      // deliberately unset: nobody should land in a year by accident
   var freeByColor = null;   // number[12] from the server, or null before first ack
 
   // ------------------------------------------------------------------ input state
@@ -339,9 +361,19 @@
     document.body.style.background = msg.color;
     $('bar').style.background = msg.color;
     $('bar').classList.add('lit');
-    elSwatch.textContent = HAT_GLYPH[msg.hat] || '●';
-    setStatus('you are ' + msg.name);
+    elSwatch.textContent = (ACCESSORIES[msg.hatIndex] || {}).glyph || '●';
+    setStatus('you are ' + msg.name + ' · ' + (COHORTS[msg.cohortIndex] || {}).label);
     if (typeof msg.colorIndex === 'number') pickedColor = msg.colorIndex;
+    // Only adopt the server's year and accessory once the player has actually
+    // committed to one. Before that the record holds a placeholder, and echoing
+    // it into the picker would silently answer the one question the card exists
+    // to ask. After a reload mid-party the flag comes back true with the token,
+    // so a returning player is not made to pick again.
+    if (msg.cohortSet) {
+      if (typeof msg.cohortIndex === 'number') pickedYear = msg.cohortIndex;
+      if (typeof msg.hatIndex === 'number') pickedGear = msg.hatIndex;
+      buildGear();
+    }
     if (msg.free) freeByColor = msg.free;
     paintSwatches();
   }
@@ -622,52 +654,107 @@
   // neighbouring colour if all four of yours are gone. Whatever comes back is
   // what the picker then shows.
 
-  function buildSwatches() {
-    for (var i = 0; i < COLORS.length; i++) {
+  function buildPickers() {
+    for (var y = 0; y < COHORTS.length; y++) {
       var b = document.createElement('div');
-      b.className = 'sw';
-      b.style.background = COLORS[i].hex;
-      b.dataset.i = String(i);
-      b.innerHTML = '<span class="g"></span><span class="n"></span>';
-      elSwatches.appendChild(b);
+      b.className = 'yr';
+      b.dataset.i = String(y);
+      b.textContent = COHORTS[y].label;
+      elYears.appendChild(b);
     }
-    elSwatches.addEventListener('pointerdown', function (e) {
-      var el = e.target.closest ? e.target.closest('.sw') : null;
+    for (var i = 0; i < COLORS.length; i++) {
+      var s = document.createElement('div');
+      s.className = 'sw';
+      s.style.background = COLORS[i].hex;
+      s.dataset.i = String(i);
+      s.innerHTML = '<span class="g"></span><span class="n"></span>';
+      elSwatches.appendChild(s);
+    }
+    // The accessory row is rebuilt whenever the year changes, so it starts empty.
+
+    tapper(elYears, '.yr', function (i) {
+      if (i === pickedYear) return;
+      pickedYear = i;
+      // The accessory they were wearing does not exist in the new year's pool.
+      pickedGear = poolFor(i)[0];
+      buildGear();
+      paintSwatches();
+    });
+    tapper(elSwatches, '.sw', function (i) { pickedColor = i; paintSwatches(); });
+    tapper(elGear, '.gr', function (i) { pickedGear = i; paintSwatches(); });
+  }
+
+  /** One delegated pointerdown per row, skipping anything greyed out. */
+  function tapper(root, sel, fn) {
+    root.addEventListener('pointerdown', function (e) {
+      var el = e.target.closest ? e.target.closest(sel) : null;
       if (!el || el.classList.contains('out')) return;
       e.preventDefault();
-      pickedColor = Number(el.dataset.i);
-      paintSwatches();
+      fn(Number(el.dataset.i));
       vibrate(8);
     }, opts);
   }
 
+  function buildGear() {
+    elGear.innerHTML = '';
+    if (pickedYear < 0) return;
+    var pool = poolFor(pickedYear);
+    for (var k = 0; k < pool.length; k++) {
+      var g = document.createElement('div');
+      g.className = 'gr';
+      g.dataset.i = String(pool[k]);
+      g.textContent = ACCESSORIES[pool[k]].glyph;
+      elGear.appendChild(g);
+    }
+  }
+
   function paintSwatches() {
-    var kids = elSwatches.children;
-    for (var i = 0; i < kids.length; i++) {
-      var el = kids[i];
-      var free = freeByColor ? freeByColor[i] : HATS.length;
+    var chosen = pickedYear >= 0;
+    $('gearLbl').style.opacity = chosen ? '1' : '.3';
+
+    for (var y = 0; y < elYears.children.length; y++) {
+      elYears.children[y].classList.toggle('sel', y === pickedYear);
+    }
+    for (var i = 0; i < elSwatches.children.length; i++) {
+      var el = elSwatches.children[i];
+      var free = freeByColor ? freeByColor[i] : POOL_SIZE;
       // Your own slot is already spent from the server's point of view, so
       // don't grey out the colour you're standing in.
       var out = free <= 0 && i !== pickedColor;
       el.classList.toggle('out', out);
       el.classList.toggle('sel', i === pickedColor);
-      el.querySelector('.n').textContent = free > 0 && free < HATS.length ? String(free) : '';
+      el.querySelector('.n').textContent = free > 0 && free < POOL_SIZE ? String(free) : '';
       el.querySelector('.g').textContent = i === pickedColor ? '✓' : '';
     }
+    for (var k = 0; k < elGear.children.length; k++) {
+      var gEl = elGear.children[k];
+      gEl.classList.toggle('sel', Number(gEl.dataset.i) === pickedGear);
+    }
+
+    // A year is the one thing with no sensible default, so it gates the button.
+    elGo.disabled = !connected || !chosen;
+    elGo.textContent = !connected ? 'Connecting…'
+      : !chosen ? 'Pick your year'
+      : joined ? 'Save' : "I'm ready";
   }
 
   function openSetup() {
     elMsg.style.display = 'none';
     elSetup.classList.add('on');
     elOverlay.classList.remove('hidden');
-    elGo.disabled = !connected;
-    elGo.textContent = connected ? (joined ? 'Save' : "I'm ready") : 'Connecting…';
+    buildGear();
     paintSwatches();
   }
 
   function submitSetup() {
-    if (!connected) return;
-    sendJson({ type: 'SET_LOOK', name: elNameIn.value, colorIndex: pickedColor });
+    if (!connected || pickedYear < 0) return;
+    sendJson({
+      type: 'SET_LOOK',
+      name: elNameIn.value,
+      colorIndex: pickedColor,
+      hatIndex: pickedGear,
+      cohortIndex: pickedYear,
+    });
     try { localStorage.setItem(NAME_KEY, elNameIn.value); } catch (e) {}
     savedName = elNameIn.value;
     elNameIn.blur();
@@ -684,7 +771,7 @@
     vibrate(15);
   }
 
-  buildSwatches();
+  buildPickers();
   elGo.addEventListener('click', function (e) { e.preventDefault(); submitSetup(); });
   elNameIn.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); submitSetup(); }
