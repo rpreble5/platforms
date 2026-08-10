@@ -93,6 +93,43 @@ path, and those are the terms that dominate.
   join URL may be for the network the phones aren't on. The terminal lists every
   address it found — try another one.
 
+## What happens when someone joins
+
+1. They scan the QR on the display, or type the URL the display prints. Both go
+   to the same page; every unknown path lands there too, so a mistyped URL
+   still joins the game instead of 404ing at a player mid-party.
+2. The phone opens a WebSocket and sends `HELLO` with whatever token it has in
+   `localStorage`. No token, or an unknown one, mints a new player.
+3. Node replies with `HELLO_ACK`: the player's id, a token to remember, and the
+   look it has provisionally assigned them.
+4. The phone shows the **setup card** — name, and a grid of the twelve colours.
+5. They tap **I'm ready**. The phone sends `SET_LOOK`; Node resolves it and
+   echoes back what they actually got; the display's roster updates and their
+   avatar appears on the floor in that colour.
+6. The host presses `Enter` on the display to start.
+
+Late joiners run the same path at any time and drop straight into the round in
+progress. A reconnect — dropped WiFi, backgrounded tab, closed lid — re-sends
+the same token and resumes the same avatar, same look, same score, with no
+setup card in the way.
+
+**Colour is a request, not a command.** Twelve colours cannot cover thirty
+players, and colour alone isn't separable anyway across a room, under projector
+gamma, or for a colourblind player. So the player picks the colour and *the
+server picks the hat*: four people can all be jade and get four different hats,
+and the (colour, hat) pair stays unique for everybody. If all four hats in a
+colour are gone, the server moves that player to the nearest colour with a free
+slot — and the picker greys out full colours before it comes to that.
+
+Whatever the server settles on is what goes back to the phone, and the phone
+wears it: the top bar takes the player's colour at full strength, with the hat
+in the chip. "Look at your phone, then find that on screen" is the whole
+mechanism for picking yourself out of thirty avatars, so it has to be the
+resolved look, never the requested one.
+
+Tapping the colour chip in the bar reopens the card, so a name typo or a colour
+someone regrets is fixable without rejoining.
+
 ## Art and assets
 
 The stage draws from sprites in `assets/` when they exist and falls back to

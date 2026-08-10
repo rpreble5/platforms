@@ -47,9 +47,11 @@ function makeBuilder(root) {
       const html = readFileSync(path.join(root, 'client/phone/index.html'), 'utf8');
       const protocol = stripExports(readFileSync(path.join(root, 'shared/protocol.js'), 'utf8'));
       const tuning = stripExports(readFileSync(path.join(root, 'shared/tuning.js'), 'utf8'));
+      const palette = stripExports(readFileSync(path.join(root, 'shared/palette.js'), 'utf8'));
       const out = html
         .replace('/*__PROTOCOL__*/', () => protocol)
-        .replace('/*__TUNING__*/', () => tuning);
+        .replace('/*__TUNING__*/', () => tuning)
+        .replace('/*__PALETTE__*/', () => palette);
       const raw = Buffer.from(out, 'utf8');
       return { gz: gzipSync(raw, { level: 9 }), raw };
     },

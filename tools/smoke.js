@@ -229,11 +229,49 @@ await phonePage.waitForFunction(
 const shown = await phonePage.textContent('#name');
 assert(!!shown && shown !== 'connecting…', `phone page joined as "${shown}"`);
 
-// The gamepad must work by touch, which is what the pointer handlers are for.
+// ---------------------------------------------------------------- the setup card
+//
+// Name and colour, then "I'm ready". This gate is also where fullscreen and the
+// wake lock get their user gesture, so nothing downstream works until it's done.
+await phonePage.waitForSelector('#setup.on', { timeout: 5000 });
+const PICK = 4; // jade
+await phonePage.fill('#nameIn', 'Bosco');
+await phonePage.locator(`.sw[data-i="${PICK}"]`).click();
+assert(
+  await phonePage
+    .locator(`.sw[data-i="${PICK}"]`)
+    .evaluate((/** @type {Element} */ el) => el.classList.contains('sel')),
+  'tapping a swatch selects that colour'
+);
+await phonePage.locator('#go').click();
+await phonePage.waitForSelector('#overlay', { state: 'hidden', timeout: 5000 });
+
+// The bar shows what the SERVER settled on, not what was typed, so this has to
+// wait for the echo rather than read straight after the tap.
 await phonePage.waitForFunction(
-  () => /** @type {any} */ (globalThis).WebSocket && true,
+  () => document.getElementById('name')?.textContent === 'Bosco',
   null,
-  { timeout: 2000 }
+  { timeout: 5000 }
+);
+ok('the phone shows the name the server confirmed');
+
+// The pick has to survive the round trip and land on the display, or the whole
+// "look at your phone, then find that on screen" mechanism is broken.
+await display.waitForFunction(
+  () =>
+    [.../** @type {any} */ (globalThis).__platforms.roster.values()].some(
+      (/** @type {any} */ v) => v.name === 'Bosco'
+    ),
+  null,
+  { timeout: 5000 }
+);
+const onDisplay = await display.evaluate(() => {
+  const r = /** @type {any} */ (globalThis).__platforms.roster;
+  return [...r.values()].find((/** @type {any} */ v) => v.name === 'Bosco');
+});
+assert(
+  onDisplay.color === '#2fc98d',
+  `the display got the chosen colour (${onDisplay.color}) and a hat (${onDisplay.hat})`
 );
 const box = /** @type {{x:number,y:number,width:number,height:number}} */ (
   await phonePage.locator('#jump').boundingBox()

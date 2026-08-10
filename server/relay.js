@@ -48,6 +48,9 @@ import { Roster, sanitizeName } from './roster.js';
  */
 
 export class Relay {
+  /** Set when colour availability changes; flushed on the watchdog tick. */
+  #looksDirty = false;
+
   /**
    * @param {import('node:http').Server} httpServer
    */
@@ -72,12 +75,16 @@ export class Relay {
     /** @type {unknown} */
     this.checkpoint = null;
     this.checkpointAt = 0;
+    this.#looksDirty = false;
 
     this.wss.on('connection', (/** @type {WS} */ ws, /** @type {import('node:http').IncomingMessage} */ req) => this.#onConnection(ws, req));
 
     // Staleness watchdog. Third and last layer of the dropped-release guard:
     // full mask in every packet, a 400ms phone heartbeat, and this.
-    this.watchdog = setInterval(() => this.#sweep(), 250);
+    this.watchdog = setInterval(() => {
+      this.#sweep();
+      this.#flushLooks();
+    }, 250);
     this.watchdog.unref?.();
   }
 
@@ -198,21 +205,28 @@ export class Relay {
         conn.player = record;
         this.phoneByPlayerId.set(record.id, conn);
 
-        this.#send(
-          conn,
-          encodeJson({
-            type: 'HELLO_ACK',
-            playerId: record.id,
-            token: record.token,
-            name: record.name,
-            color: record.color,
-            hat: record.hat,
-          })
-        );
+        this.#send(conn, this.#identityFrame('HELLO_ACK', record, res.isNew));
         this.#broadcastRoster();
+        this.#looksDirty = true;
         this.#broadcastDisplays(
           encodeJson({ type: res.isNew ? 'PLAYER_JOIN' : 'PLAYER_REJOIN', playerId: record.id })
         );
+        break;
+      }
+
+      case 'SET_LOOK': {
+        if (!conn.player) return;
+        const record = this.roster.setLook(conn.player.id, {
+          name: typeof msg.name === 'string' ? msg.name : undefined,
+          colorIndex: Number.isInteger(msg.colorIndex) ? msg.colorIndex : undefined,
+        });
+        if (!record) return;
+        // Echo the resolved look back, always. The player may not have got the
+        // colour they asked for, and the phone is the thing they'll be looking
+        // at when they try to find themselves on screen.
+        this.#send(conn, this.#identityFrame('LOOK', record, false));
+        this.#broadcastRoster();
+        this.#looksDirty = true;
         break;
       }
 
@@ -295,8 +309,47 @@ export class Relay {
     }
   }
 
+  /**
+   * The player's own identity, as resolved by the server. Sent on join and
+   * again after every change.
+   * @param {string} type
+   * @param {PlayerRecord} r
+   * @param {boolean} isNew
+   * @returns {Uint8Array}
+   */
+  #identityFrame(type, r, isNew) {
+    return encodeJson({
+      type,
+      isNew,
+      playerId: r.id,
+      token: r.token,
+      name: r.name,
+      named: r.named,
+      color: r.color,
+      hat: r.hat,
+      colorIndex: r.colorIndex,
+      hatIndex: r.hatIndex,
+      free: this.roster.freeByColor(),
+    });
+  }
+
   #broadcastRoster() {
     this.#broadcastDisplays(encodeJson({ type: 'ROSTER', players: this.roster.publicList() }));
+  }
+
+  /**
+   * Colour availability, to every phone with the picker open.
+   *
+   * Coalesced onto the watchdog tick rather than sent per change: during the
+   * join rush this is 30 phones x 30 joins, and nine hundred tiny frames spread
+   * over the exact minute everyone is contending for airtime is a bad trade for
+   * a picker that nobody is looking at that closely.
+   */
+  #flushLooks() {
+    if (!this.#looksDirty) return;
+    this.#looksDirty = false;
+    const frame = encodeJson({ type: 'LOOKS', free: this.roster.freeByColor() });
+    for (const conn of this.phoneByPlayerId.values()) this.#send(conn, frame);
   }
 
   /** @param {Uint8Array} bytes */

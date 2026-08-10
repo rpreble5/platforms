@@ -26,9 +26,15 @@
     padding-top:env(safe-area-inset-top);
     background:#11141c; border-bottom:1px solid #1e2431; z-index:3;
   }
+  /* The bar wears the player's colour at full strength. This is the identity
+     anchor — "look at your phone, then find that on screen" — and a 34px chip
+     was not enough to hold in your head while scanning thirty avatars. The
+     control surface below stays dark, because contrast there is about hitting
+     the right zone in a dim room. */
   #swatch {
     width:34px; height:34px; border-radius:9px; flex:none;
-    display:grid; place-items:center; font-size:18px; background:#333;
+    display:grid; place-items:center; font-size:18px;
+    background:rgba(11,13,18,.28); box-shadow:inset 0 0 0 2px rgba(11,13,18,.35);
   }
   #who { flex:1; min-width:0; }
   #name { font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -38,19 +44,31 @@
   #flagbtn { padding:8px 10px; margin:-8px -6px -8px 0; color:#3d4657; font-size:15px; }
   #flagbtn.on { color:#ffd93d; }
 
+  /* Set once the look is known. Everything in the bar flips to dark ink; the
+     whole palette is light enough to carry it. */
+  #bar.lit { border-bottom-color:rgba(11,13,18,.4); }
+  #bar.lit #name { color:#0b0d12; }
+  #bar.lit #status { color:rgba(11,13,18,.62); }
+  #bar.lit #rtt { color:rgba(11,13,18,.55); }
+  #bar.lit #rtt b { color:#0b0d12; }
+  #bar.lit #flagbtn { color:rgba(11,13,18,.35); }
+  #bar.lit #flagbtn.on { color:#0b0d12; }
+
   #surface { position:absolute; inset:11vh 0 0 0; top:max(11vh,56px); display:flex; z-index:1; }
   .zone {
     flex:1; display:grid; place-items:center; position:relative;
     font-size:min(13vw,58px); color:#39425a;
-    background:#141822; border-left:1px solid #0b0d12;
+    /* Not opaque: the body carries the player colour, and a little of it
+       bleeding through ties the controls to the identity in the bar. */
+    background:rgba(20,24,34,.88); border-left:1px solid #0b0d12;
     /* compositor-only press feedback: no layout, no paint, no rAF */
     transition:transform .04s linear, background-color .04s linear;
     will-change:transform;
   }
   .zone:first-child { border-left:0; }
-  #jump { flex:2; background:#1a2030; color:#4c5878; }
-  .zone.down { transform:scale(.96); background:#2f3a52; }
-  #jump.down { background:#3d4a6b; }
+  #jump { flex:2; background:rgba(26,32,48,.86); color:#4c5878; }
+  .zone.down { transform:scale(.96); background:rgba(47,58,82,.92); }
+  #jump.down { background:rgba(61,74,107,.92); }
 
   /* Full-screen white flash for the 240fps camera test. Painted on its own
      layer so it composites without a relayout. */
@@ -67,12 +85,53 @@
   #overlay {
     position:absolute; inset:0; z-index:20; background:#0b0d12;
     display:grid; place-items:center; text-align:center; padding:28px;
+    /* The one place on this page allowed to scroll: a short phone plus an open
+       keyboard can leave the button below the fold. */
+    overflow-y:auto; touch-action:pan-y;
   }
   #overlay.hidden { display:none; }
   #overlay h1 { font-size:22px; margin-bottom:10px; }
-  #overlay p { font-size:14px; font-weight:500; color:#9aa4b6; line-height:1.5; max-width:30ch; }
+  #overlay p { font-size:14px; font-weight:500; color:#9aa4b6; line-height:1.5; max-width:30ch; margin:0 auto; }
   #overlay .big { font-size:52px; margin-bottom:14px; }
   #nosleep { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+
+  /* ---------------------------------------------------------------- setup */
+  #setup { display:none; width:100%; max-width:380px; text-align:left; }
+  #setup.on { display:block; }
+  #setup h1 { text-align:center; }
+  #setup .lbl {
+    font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+    color:#6c7789; margin:20px 0 8px;
+  }
+  /* 16px minimum, or iOS Safari zooms the whole page on focus and the layout
+     never recovers. */
+  #nameIn {
+    width:100%; font:700 20px/1 inherit; color:#fff; background:#141822;
+    border:2px solid #232a38; border-radius:12px; padding:14px 16px;
+    -webkit-user-select:text; user-select:text; touch-action:auto;
+  }
+  #nameIn:focus { outline:none; border-color:#4aa8ff; }
+
+  #swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .sw {
+    aspect-ratio:1; border-radius:14px; position:relative;
+    border:3px solid transparent; display:grid; place-items:center;
+    font-size:20px; transition:transform .06s linear;
+  }
+  .sw.sel { border-color:#fff; transform:scale(1.06); }
+  /* Taken colours stay visible rather than vanishing — the grid holding still
+     matters more than hiding four of twelve options. */
+  .sw.out { opacity:.22; }
+  .sw .g { color:rgba(0,0,0,.7); font-weight:900; }
+  .sw .n { position:absolute; bottom:3px; right:6px; font:700 10px/1 ui-monospace,monospace; color:rgba(0,0,0,.6); }
+  #go, .sw { touch-action:manipulation; }
+
+  #go {
+    width:100%; margin-top:22px; padding:18px; border-radius:14px; border:0;
+    font:800 19px/1 inherit; color:#0b0d12; background:#3ddc9a;
+  }
+  #go[disabled] { background:#2b3446; color:#6c7789; }
+  #setupNote { text-align:center; margin-top:14px; font-size:12px; color:#6c7789; }
 </style>
 </head>
 <body>
@@ -95,16 +154,28 @@
 <video id="nosleep" muted playsinline loop preload="auto"></video>
 
 <div id="overlay">
-  <div>
+  <div id="msg">
     <div class="big">🎮</div>
-    <h1 id="ovh">Tap to join</h1>
-    <p id="ovp">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
+    <h1 id="ovh">Joining…</h1>
+    <p id="ovp">Connecting to the game.</p>
+  </div>
+
+  <div id="setup">
+    <h1>Who are you?</h1>
+    <div class="lbl">Your name</div>
+    <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
+           autocapitalize="words" spellcheck="false" enterkeyhint="done">
+    <div class="lbl">Your colour</div>
+    <div id="swatches"></div>
+    <button id="go" disabled>Connecting…</button>
+    <p id="setupNote">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
   </div>
 </div>
 
 <script>
 /*__PROTOCOL__*/
 /*__TUNING__*/
+/*__PALETTE__*/
 
 (function () {
   'use strict';
@@ -114,10 +185,9 @@
   var elSurface = $('surface'), elFlash = $('flash'), elTint = $('tint');
   var elName = $('name'), elStatus = $('status'), elRtt = $('rtt').firstElementChild;
   var elSwatch = $('swatch'), elOverlay = $('overlay'), elOvh = $('ovh'), elOvp = $('ovp');
-  var elFlag = $('flagbtn');
+  var elFlag = $('flagbtn'), elMsg = $('msg');
+  var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
-
-  var HAT_GLYPH = { none: '●', cap: '🧢', horns: '🤘', antenna: '📡' };
 
   // ------------------------------------------------------------------ identity
   //
@@ -128,15 +198,26 @@
   // tab its own identity. Real players never pass it. See /testpad.
   var seat = new URLSearchParams(location.search).get('seat') || '';
   var TOKEN_KEY = 'platforms.token' + (seat ? '.' + seat : '');
+  var NAME_KEY = 'platforms.name' + (seat ? '.' + seat : '');
 
-  var token = null;
-  try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { /* private mode */ }
+  var token = null, savedName = '';
+  try {
+    token = localStorage.getItem(TOKEN_KEY);
+    savedName = localStorage.getItem(NAME_KEY) || '';
+  } catch (e) { /* private mode */ }
   var clientSalt = hash32(token || String(Math.random()));
   /** Stagger periodic sends, or 30 phones sync on second boundaries and
    *  manufacture their own airtime contention. */
   var phase = clientSalt % HEARTBEAT_MS;
 
   var playerId = 0;
+
+  // Setup state. `joined` is the latch that stops a mid-game reconnect from
+  // throwing the picker back over the controls: HELLO_ACK arrives again on
+  // every reconnect, and only the first one is a join.
+  var joined = false;
+  var pickedColor = -1;
+  var freeByColor = null;   // number[12] from the server, or null before first ack
 
   // ------------------------------------------------------------------ input state
   var held = 0;          // authoritative mask, recomputed from live pointers
@@ -171,7 +252,7 @@
       connected = true;
       backoff = 250;
       setStatus('connected');
-      sendJson({ type: 'HELLO', token: token || undefined });
+      sendJson({ type: 'HELLO', token: token || undefined, name: savedName || undefined });
       // Re-assert the current mask right away: the server may have watchdogged
       // us to zero while we were away.
       lastSentMask = -1;
@@ -205,7 +286,14 @@
       }
     };
 
-    ws.onclose = function () { connected = false; setStatus('reconnecting…'); scheduleReconnect(); };
+    ws.onclose = function () {
+      connected = false;
+      setStatus('reconnecting…');
+      // Before the first join there are no controls behind the overlay, so say
+      // what is wrong instead of leaving a dead "tap to join" on screen.
+      if (!joined) showMessage('📡', 'Can’t reach the game', 'Check you are on the same WiFi as the host, then wait a moment.');
+      scheduleReconnect();
+    };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
   }
 
@@ -216,27 +304,46 @@
   }
 
   function onJson(msg) {
-    if (msg.type === 'HELLO_ACK') {
+    if (msg.type === 'HELLO_ACK' || msg.type === 'LOOK') {
       playerId = msg.playerId;
       token = msg.token;
       try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
       phase = hash32(token) % HEARTBEAT_MS;
-      elName.textContent = msg.name;
-      // The phone IS the identity anchor: whole-screen colour plus hat glyph.
-      // "Look at your phone, then find that on screen" is the whole mechanism
-      // for picking yourself out of 30 avatars.
-      document.body.style.background = msg.color;
-      elSwatch.style.background = msg.color;
-      elSwatch.style.color = '#0b0d12';
-      elSwatch.textContent = HAT_GLYPH[msg.hat] || '●';
-      setStatus('you are ' + msg.name);
-      hideOverlay();
+      applyLook(msg);
+
+      if (msg.type === 'HELLO_ACK' && !joined) {
+        // Prefill from what the server settled on, so the fields always show a
+        // real identity rather than a guess that might not survive the round
+        // trip.
+        if (pickedColor < 0) pickedColor = msg.colorIndex;
+        if (!elNameIn.value) elNameIn.value = msg.named ? msg.name : '';
+        elNameIn.placeholder = msg.name;
+        openSetup();
+      }
+    } else if (msg.type === 'LOOKS') {
+      freeByColor = msg.free;
+      paintSwatches();
     } else if (msg.type === 'KICK') {
-      showOverlay('👋', 'Disconnected', msg.reason || '');
+      showMessage('👋', 'Disconnected', msg.reason || '');
       try { ws.close(); } catch (e) {}
     } else if (msg.type === 'STATE' && msg.msg) {
       setStatus(msg.msg);
     }
+  }
+
+  // The phone IS the identity anchor: whole-screen colour plus hat glyph.
+  // "Look at your phone, then find that on screen" is the whole mechanism for
+  // picking yourself out of 30 avatars, so this runs on every identity change.
+  function applyLook(msg) {
+    elName.textContent = msg.name;
+    document.body.style.background = msg.color;
+    $('bar').style.background = msg.color;
+    $('bar').classList.add('lit');
+    elSwatch.textContent = HAT_GLYPH[msg.hat] || '●';
+    setStatus('you are ' + msg.name);
+    if (typeof msg.colorIndex === 'number') pickedColor = msg.colorIndex;
+    if (msg.free) freeByColor = msg.free;
+    paintSwatches();
   }
 
   function sendJson(obj) {
@@ -492,8 +599,10 @@
   });
 
   // ------------------------------------------------------------------ overlay
-  function showOverlay(icon, head, body) {
-    elOverlay.querySelector('.big').textContent = icon;
+  function showMessage(icon, head, body) {
+    elSetup.classList.remove('on');
+    elMsg.style.display = '';
+    elMsg.querySelector('.big').textContent = icon;
     elOvh.textContent = head;
     elOvp.textContent = body;
     elOverlay.classList.remove('hidden');
@@ -501,15 +610,90 @@
   function hideOverlay() { elOverlay.classList.add('hidden'); }
   function setStatus(s) { elStatus.textContent = s; }
 
-  // A user gesture is required before video playback and vibration are allowed,
-  // so the join tap does double duty.
-  elOverlay.addEventListener('pointerdown', function (e) {
-    e.preventDefault();
-    hideOverlay();
-    keepAwake();
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(function () {});
+  // ------------------------------------------------------------------ setup
+  //
+  // Shown before the controls, and reachable again from the swatch in the top
+  // bar. Picking a colour is also the gesture that unlocks fullscreen, wake lock
+  // and vibration — all three need a real user interaction, and hanging them off
+  // a tap the player was going to make anyway beats asking for one.
+  //
+  // Colour is a request. The server owns the answer, because 12 colours cannot
+  // cover 30 players: it pairs your colour with a free hat, and moves you to a
+  // neighbouring colour if all four of yours are gone. Whatever comes back is
+  // what the picker then shows.
+
+  function buildSwatches() {
+    for (var i = 0; i < COLORS.length; i++) {
+      var b = document.createElement('div');
+      b.className = 'sw';
+      b.style.background = COLORS[i].hex;
+      b.dataset.i = String(i);
+      b.innerHTML = '<span class="g"></span><span class="n"></span>';
+      elSwatches.appendChild(b);
     }
+    elSwatches.addEventListener('pointerdown', function (e) {
+      var el = e.target.closest ? e.target.closest('.sw') : null;
+      if (!el || el.classList.contains('out')) return;
+      e.preventDefault();
+      pickedColor = Number(el.dataset.i);
+      paintSwatches();
+      vibrate(8);
+    }, opts);
+  }
+
+  function paintSwatches() {
+    var kids = elSwatches.children;
+    for (var i = 0; i < kids.length; i++) {
+      var el = kids[i];
+      var free = freeByColor ? freeByColor[i] : HATS.length;
+      // Your own slot is already spent from the server's point of view, so
+      // don't grey out the colour you're standing in.
+      var out = free <= 0 && i !== pickedColor;
+      el.classList.toggle('out', out);
+      el.classList.toggle('sel', i === pickedColor);
+      el.querySelector('.n').textContent = free > 0 && free < HATS.length ? String(free) : '';
+      el.querySelector('.g').textContent = i === pickedColor ? '✓' : '';
+    }
+  }
+
+  function openSetup() {
+    elMsg.style.display = 'none';
+    elSetup.classList.add('on');
+    elOverlay.classList.remove('hidden');
+    elGo.disabled = !connected;
+    elGo.textContent = connected ? (joined ? 'Save' : "I'm ready") : 'Connecting…';
+    paintSwatches();
+  }
+
+  function submitSetup() {
+    if (!connected) return;
+    sendJson({ type: 'SET_LOOK', name: elNameIn.value, colorIndex: pickedColor });
+    try { localStorage.setItem(NAME_KEY, elNameIn.value); } catch (e) {}
+    savedName = elNameIn.value;
+    elNameIn.blur();
+    hideOverlay();
+    if (!joined) {
+      joined = true;
+      // First tap only: these all require a user gesture, and re-requesting
+      // fullscreen on a later save would be obnoxious.
+      keepAwake();
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(function () {});
+      }
+    }
+    vibrate(15);
+  }
+
+  buildSwatches();
+  elGo.addEventListener('click', function (e) { e.preventDefault(); submitSetup(); });
+  elNameIn.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); submitSetup(); }
+  });
+  // Reopening from the top bar. Not a control-surface tap, so it must not fall
+  // through to the movement zones.
+  elSwatch.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    if (joined) openSetup();
   }, opts);
 
   function hash32(s) {
