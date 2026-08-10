@@ -84,6 +84,9 @@ origin shares one token and they kick each other in a loop). It is for
 functional and crowding checks only: no radio, no touch digitizer, no TV in the
 path, and those are the terms that dominate.
 
+`/sprites` is the accessory authoring page — every shape on its own year's body
+at the three sizes the game draws, with clipping flagged.
+
 ### Two things that look exactly like client isolation but aren't
 
 - **The host firewall.** macOS prompts on first run; Windows Defender blocks
@@ -132,10 +135,36 @@ be noticed, which is 10% of the body width. That gives one hard rule:
 > busy body. Detail *inside* the outline — face markings, a badge, fine pattern
 > — is invisible across a room and not worth the pixels.
 
-All twelve accessories in `shared/palette.js` obey that, and they're drawn in
-fractions of `w`/`h` rather than pixels so they survive the avatar shrinking as
-the room fills. `shades` is the one that wants to live on the face; it's drawn
-overhanging both sides for exactly that reason.
+All twelve accessories obey that. `shades` is the one that wants to live on the
+face; it's drawn overhanging both sides for exactly that reason.
+
+### Drawing an accessory
+
+They're **path data**, not code — `client/display/accessory-art.js`. Draw on a
+**100 × 100 artboard** mapped onto the body box: x 0–100 spans the width, y 0
+is the top of the head, 36 the eye line, 100 the feet. Negative y is above the
+head, and x may go outside 0–100 freely.
+
+```js
+crown: {
+  reach: { top: 32, left: 0, right: 0 },
+  parts: [{ fill: 'bright', d: 'M6 0 L6 -20 L28 -8 L50 -32 L72 -8 L94 -20 L94 0 Z' }],
+}
+```
+
+`fill` is a **role** — `light`, `bright`, `dark`, `ink`, `glass` — resolved
+against the player's own colour at draw time, which is what keeps an accessory
+recognisably theirs across all twelve palette colours. Never a literal hex.
+
+Then add a matching row to `ACCESSORIES` in `shared/palette.js`, in the index
+range of the year that should have it (pools are index ranges: `cohort*POOL_SIZE`
+onward).
+
+**Iterate at `/sprites`.** Every accessory on its own year's body at the three
+sizes the game actually draws, with anything overflowing the sprite canvas
+flagged and measured. Worth using rather than trusting a vector tool, because
+the artboard *stretches*: the body is taller than it is wide, so a circle drawn
+square lands as an ellipse — by 1.05× on a PGY1 and 1.96× on a PGY3.
 
 Four axes carry identity:
 
@@ -462,10 +491,15 @@ server/     http.js (static + inlined phone page), relay.js (WS), roster.js (ide
 shared/     protocol.js (wire format), tuning.js (all constants), palette.js, qr.js
 sim/        PURE, no DOM: world.js, player.js, collide.js  -- Node runs these in tests
 client/display/  main.js (loop), input-bus.js, render.js, hud.js, latency-flash.js
+                 sprites.js (avatar cache), accessory-art.js (accessory paths)
 client/phone/    index.html -- the entire gamepad, one file
 client/testpad/  N gamepads on one machine, for testing without a crowd
-tools/      loadgen.js, smoke.js, make-nosleep.sh
+tools/      loadgen.js, smoke.js, testsheet.js, make-nosleep.sh
 ```
+
+`accessory-art.js` is deliberately DOM-free so a Node test can validate it, and
+it is deliberately *not* in `shared/` — `palette.js` gets inlined into the phone
+page, and the phone needs an accessory's name and glyph but never its geometry.
 
 `shared/protocol.js` is imported unchanged by Node and the display page, and is
 **inlined into the phone page at boot** with its `export` keywords stripped — so
@@ -478,10 +512,11 @@ congestion moment of the night.
 ```bash
 npm run dev        # server with --watch
 npm start          # server
-npm test           # sim determinism + physics + relay integration (24 tests)
+npm test           # sim determinism + physics + relay + identity + art data
 npm run typecheck  # tsc over JSDoc types, no build step
 npm run smoke      # drive the real pages in Chromium; --shots, --crowd 28
 npm run loadgen    # synthetic clients
+npm run testsheet  # a test tilesheet at assets/platform.png
 bash tools/make-nosleep.sh   # build the keep-awake videos (needs ffmpeg)
 ```
 

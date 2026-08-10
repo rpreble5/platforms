@@ -83,13 +83,24 @@ test('the accessory only moves once every pattern in that pair is gone', () => {
 });
 
 test('the colour moves only when a whole colour is exhausted', () => {
+  // Phrased against however many slots a colour actually holds, and capped at
+  // the roster limit — POOL_SIZE is expected to grow to 12, which would put
+  // SLOTS_PER_COLOR above the 40-player cap and make a literal
+  // "fill it then add one more" test impossible to run.
   const r = new Roster();
-  const players = joinMany(r, SLOTS_PER_COLOR + 1);
+  const want = Math.min(SLOTS_PER_COLOR + 1, 40);
+  const players = joinMany(r, want);
   for (const p of players) r.setLook(p.id, { cohortIndex: 1, colorIndex: 3 });
 
-  const got = players.map((p) => p.colorIndex);
-  assert.equal(got.filter((c) => c === 3).length, SLOTS_PER_COLOR, 'sixteen fit in one colour');
-  assert.notEqual(got[SLOTS_PER_COLOR], 3, 'the seventeenth was moved');
+  const inColour = players.filter((p) => p.colorIndex === 3).length;
+  assert.equal(
+    inColour,
+    Math.min(SLOTS_PER_COLOR, want),
+    'everyone who fits in the colour got it'
+  );
+  if (want > SLOTS_PER_COLOR) {
+    assert.notEqual(players[SLOTS_PER_COLOR].colorIndex, 3, 'the one that did not fit moved');
+  }
   assert.equal(new Set(looks(r)).size, players.length);
 });
 

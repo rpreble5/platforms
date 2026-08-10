@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --test 'sim/*.test.js' 'shared/*.test.js' 'server/*.test.js'",
+    "test": "node --test 'sim/*.test.js' 'shared/*.test.js' 'server/*.test.js' 'client/display/*.test.js'",
     "typecheck": "tsc -p jsconfig.json --noEmit",
     "loadgen": "node tools/loadgen.js",
     "smoke": "node tools/smoke.js",

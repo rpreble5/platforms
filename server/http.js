@@ -131,6 +131,13 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
+    // Accessory authoring loop: every shape on its own year's body, at the three
+    // sizes the game draws, with anything clipped by the sprite margin flagged.
+    if (pathname === '/sprites' || pathname === '/sprites/') {
+      sendFile(res, path.join(root, 'client/display/sprites-preview.html'));
+      return;
+    }
+
     // Many gamepads on one machine, for functional testing without a room full
     // of phones. Says nothing about latency — see the note in the page itself.
     if (pathname === '/testpad' || pathname === '/testpad/') {

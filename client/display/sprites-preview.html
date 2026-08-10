@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Accessory preview</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #332a52; color: #e6e0f5;
+    font: 500 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  header {
+    padding: 14px 20px; background: #241d3c; border-bottom: 1px solid #443a68;
+    display: flex; gap: 20px; align-items: baseline; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 2;
+  }
+  h1 { font-size: 15px; margin: 0; letter-spacing: .04em; color: #9ff5c9; }
+  header p { margin: 0; color: #9a90bd; font-size: 13px; }
+  kbd {
+    background: #443a68; border-radius: 4px; padding: 1px 6px;
+    font: 600 12px ui-monospace, Menlo, monospace;
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px; padding: 18px 20px;
+  }
+  .card { background: #3b3160; border: 1px solid #4d4177; border-radius: 12px; padding: 12px 14px; }
+  .card.warn { border-color: #ff8a5c; }
+  .name { font-weight: 800; font-size: 15px; }
+  .meta { color: #9a90bd; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .warnmsg { color: #ffb08a; font-size: 12px; margin-top: 4px; }
+  .row { display: flex; align-items: flex-end; gap: 14px; margin-top: 10px; min-height: 92px; }
+  .sizes { color: #7a6fa3; font-size: 11px; margin-top: 2px; }
+  section > h2 {
+    margin: 22px 20px 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+    color: #9a90bd; font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ACCESSORY PREVIEW</h1>
+  <p>
+    Every accessory on its own year's body, at the three sizes the game actually
+    draws. Edit <kbd>client/display/accessory-art.js</kbd> and refresh.
+  </p>
+</header>
+
+<div id="out"></div>
+
+<script type="module">
+// Absolute paths: this page is served at /sprites, so anything relative would
+// resolve against that rather than against the file's own directory.
+import { ACCESSORY_ART } from '/client/display/accessory-art.js';
+import { AVATAR_PAD, getAvatar } from '/client/display/sprites.js';
+import { ACCESSORIES, COHORTS, COLORS, POOL_SIZE } from '/shared/palette.js';
+
+const PLAYER_W = 40;
+const PLAYER_H = 56;
+// The scales in shared/tuning.js: a near-empty room, a middling one, a full one.
+const SCALES = [
+  { players: 8, s: 1 },
+  { players: 16, s: 0.9 },
+  { players: 30, s: 0.75 },
+];
+
+const out = document.getElementById('out');
+
+COHORTS.forEach((cohort, year) => {
+  const section = document.createElement('section');
+  const h2 = document.createElement('h2');
+  h2.textContent = `${cohort.label} — ${cohort.shape}, height ${cohort.height}`;
+  section.appendChild(h2);
+
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+
+  const pool = ACCESSORIES.slice(year * POOL_SIZE, year * POOL_SIZE + POOL_SIZE);
+  for (const acc of pool) {
+    const art = ACCESSORY_ART[acc.key];
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    // Reach is in artboard units — a fraction of the body height. Turn it into
+    // pixels at each size and compare against the sprite canvas margin, because
+    // anything past that is silently cropped rather than drawn.
+    const overflow = SCALES.map(({ players, s }) => {
+      const h = PLAYER_H * s * cohort.height;
+      const px = (art.reach.top / 100) * h;
+      return { players, lost: px - AVATAR_PAD };
+    }).filter((o) => o.lost > 0.5);
+
+    if (overflow.length) card.classList.add('warn');
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = acc.label;
+    card.appendChild(name);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent =
+      `${acc.key} · reach ↑${art.reach.top} ←${art.reach.left} →${art.reach.right} · ` +
+      `${art.parts.length} part${art.parts.length === 1 ? '' : 's'}`;
+    card.appendChild(meta);
+
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const { s } of SCALES) {
+      const w = Math.round(PLAYER_W * s);
+      const h = Math.round(PLAYER_H * s * cohort.height);
+      const sprite = getAvatar(COLORS[(year * 4) % COLORS.length].hex, acc.key, w, h, 'solid', cohort.shape);
+      const holder = document.createElement('div');
+      const cv = document.createElement('canvas');
+      cv.width = sprite.width;
+      cv.height = sprite.height;
+      /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d')).drawImage(sprite, 0, 0);
+      holder.appendChild(cv);
+      const cap = document.createElement('div');
+      cap.className = 'sizes';
+      cap.textContent = `${w}×${h}`;
+      holder.appendChild(cap);
+      row.appendChild(holder);
+    }
+    card.appendChild(row);
+
+    if (overflow.length) {
+      const msg = document.createElement('div');
+      msg.className = 'warnmsg';
+      msg.textContent =
+        'clipped: ' +
+        overflow.map((o) => `${o.lost.toFixed(1)}px lost at ${o.players} players`).join(', ');
+      card.appendChild(msg);
+    }
+
+    grid.appendChild(card);
+  }
+
+  section.appendChild(grid);
+  out.appendChild(section);
+});
+</script>
+</body>
+</html>
