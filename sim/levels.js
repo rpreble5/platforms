@@ -14,6 +14,14 @@ import { PHYS, WORLD_H, WORLD_W } from '../shared/tuning.js';
 
 /** @typedef {import('./collide.js').Platform} Platform */
 
+/**
+ * The tile grid, in display pixels. Answer boards are assembled from repeating
+ * tiles rather than one stretched image, so every board dimension has to be a
+ * whole number of tiles — which is also what makes boards of *different* sizes
+ * free: any multiple of GRID is a legal width.
+ */
+export const GRID = 24;
+
 /** Top of the floor. */
 export const FLOOR_Y = WORLD_H - 100;
 /**
@@ -22,18 +30,22 @@ export const FLOOR_Y = WORLD_H - 100;
  * a game that never demands precision cannot be ruined by latency.
  */
 export const ANSWER_Y = FLOOR_Y - 160;
-export const ANSWER_H = 28;
 /**
- * How tall the answer platform is *drawn*, versus the 28px it actually
+ * Collision height: the top tile row. Answer platforms are one-way and landing
+ * uses a swept test, so a thin surface is safe — nobody can tunnel through it.
+ */
+export const ANSWER_H = GRID;
+/**
+ * How tall the answer platform is *drawn*, versus the one tile row it actually
  * collides with. The extra hangs below the surface and carries the answer
  * text, so the platform IS the signboard rather than having a label bolted
  * under it.
  *
- * The ceiling on this number is the crowd: an avatar standing on the floor at
- * full size reaches y=924, and the platform surface is at 820, so anything
- * past ~100px would be covered by people's heads. 76 leaves 28px of air.
+ * Three tile rows. The ceiling on this number is the crowd: an avatar standing
+ * on the floor at full size reaches y=924, and the platform surface is at 820,
+ * so anything past ~100px would be covered by people's heads.
  */
-export const ANSWER_SIGN_H = 76;
+export const ANSWER_SIGN_H = GRID * 3;
 
 const EDGE_MARGIN = 70;
 const MIN_GAP = 60;
@@ -51,7 +63,10 @@ export function buildArena(n) {
   ];
 
   const usable = WORLD_W - EDGE_MARGIN * 2;
-  const width = Math.floor((usable - MIN_GAP * (count - 1)) / count);
+  // Snap the board to whole tiles and give the remainder to the gaps. Gaps are
+  // the right place for slack: they're empty air, so a few odd pixels there
+  // cost nothing, while an odd pixel on a board is a half-drawn tile.
+  const width = snapToGrid((usable - MIN_GAP * (count - 1)) / count);
   const gap = count > 1 ? Math.floor((usable - width * count) / (count - 1)) : 0;
 
   for (let i = 0; i < count; i++) {
@@ -68,6 +83,17 @@ export function buildArena(n) {
   }
 
   return platforms;
+}
+
+/**
+ * Largest legal board width at or below `px` — a whole number of tiles, and
+ * never zero. Anything that wants a board of a particular size goes through
+ * here, so the rounding rule lives in exactly one place.
+ * @param {number} px
+ * @returns {number}
+ */
+export function snapToGrid(px) {
+  return Math.max(GRID, Math.floor(px / GRID) * GRID);
 }
 
 /** @param {number} i @returns {string} */

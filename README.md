@@ -99,17 +99,18 @@ The stage draws from sprites in `assets/` when they exist and falls back to
 shapes in code when they don't, so the game runs with that folder empty and you
 can add art one file at a time. The HUD names whatever is still procedural.
 
-Exact dimensions, slice points and tiling constraints:
-**[docs/ART-SPEC.md](docs/ART-SPEC.md)**.
+File formats and layouts: **[docs/ART-SPEC.md](docs/ART-SPEC.md)**.
 
-Two things worth knowing before you draw anything:
+Two structural things worth knowing:
 
-- **The environment is desaturated on purpose.** Twelve saturated player colours
-  have to pop off it at 26px from across a room. Scenery that competes with them
-  is a bug however good it looks alone.
-- **The platform is the signboard.** The top 28px is what you land on; the 48px
-  below hangs under it and carries the answer text. They're one object, so the
-  label falls with the platform on reveal and there's never a question about
+- **Boards are tiled, not stretched.** `platform.png` is a 3×3 tilesheet; the
+  middle column repeats to fill whatever width a board needs. Nothing ever
+  smears, and any multiple of `GRID` (24px) is a legal board width, so varying
+  board sizes costs nothing on the art side. `npm run testsheet` writes a test
+  pattern for checking the tiling.
+- **The platform is the signboard.** The top tile row is what you land on; the
+  two rows below hang under it and carry the answer text. They're one object, so
+  the label falls with the platform on reveal and there's never a question about
   which answer belongs to which ledge. It's also the only layout that fits — an
   avatar standing on the floor reaches y=924 and the platform surface is at 820,
   so a separate floating label had nowhere to go.

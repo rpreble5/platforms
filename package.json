@@ -13,7 +13,8 @@
     "test": "node --test 'sim/*.test.js' 'shared/*.test.js' 'server/*.test.js'",
     "typecheck": "tsc -p jsconfig.json --noEmit",
     "loadgen": "node tools/loadgen.js",
-    "smoke": "node tools/smoke.js"
+    "smoke": "node tools/smoke.js",
+    "testsheet": "node tools/testsheet.js assets/platform.png"
   },
   "dependencies": {
     "ws": "^8.18.0"

@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { BTN_JUMP, BTN_RIGHT } from '../shared/protocol.js';
 import { STEP_MS } from '../shared/tuning.js';
 import { addPlayer, createWorld, step } from './world.js';
-import { ANSWER_Y, FLOOR_Y, buildArena, answerId } from './levels.js';
+import { ANSWER_Y, FLOOR_Y, GRID, buildArena, answerId, snapToGrid } from './levels.js';
 import {
   BASE_POINTS,
   DEBRIS_LIFE_MS,
@@ -335,6 +335,35 @@ test('a player can actually reach every answer platform by jumping', () => {
       assert.ok(landed, `${n} answers: platform ${i} is reachable with a plain jump`);
     }
   }
+});
+
+test('answer platforms are a whole number of tiles wide', () => {
+  // The board is assembled from repeating tiles, so a width that isn't a
+  // multiple of GRID means a half-drawn tile at one end.
+  for (const n of [2, 3, 4]) {
+    for (const p of buildArena(n).filter((q) => q.id?.startsWith('ans'))) {
+      assert.equal(p.w % GRID, 0, `${n} answers: ${p.id} is ${p.w} wide`);
+    }
+  }
+});
+
+test('boards stay separated once their widths are snapped to the grid', () => {
+  // Rounding widths down hands the slack to the gaps, so gaps can only grow.
+  // If that ever inverts, two boards touch and the arena reads as one shelf.
+  for (const n of [2, 3, 4]) {
+    const ans = buildArena(n).filter((q) => q.id?.startsWith('ans'));
+    for (let i = 1; i < ans.length; i++) {
+      const gap = ans[i].x - (ans[i - 1].x + ans[i - 1].w);
+      assert.ok(gap >= 60, `${n} answers: gap ${i} is ${gap}px`);
+    }
+  }
+});
+
+test('snapToGrid rounds down and never returns nothing', () => {
+  assert.equal(snapToGrid(GRID * 4), GRID * 4);
+  assert.equal(snapToGrid(GRID * 4 + 1), GRID * 4);
+  assert.equal(snapToGrid(GRID - 1), GRID);
+  assert.equal(snapToGrid(0), GRID);
 });
 
 test('the jump clears an answer platform with real margin', () => {

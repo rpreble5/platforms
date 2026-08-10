@@ -19,17 +19,18 @@ export const artState = {
 };
 
 /**
- * Display-space geometry for each sprite. Source files are authored at 2x
- * these numbers; see docs/ART-SPEC.md, which is generated from this table.
+ * Where each sprite lives, and the only display-space numbers the *game* owns
+ * rather than the file. Everything else — cell size, aspect, source
+ * dimensions — is read off the image at load time, so any resolution works and
+ * a new file never needs a matching code change.
  */
 export const SPRITES = /** @type {const} */ ({
-  // Full-screen backdrop. No alpha needed.
-  bg: { url: '/assets/bg.png', w: 1920, h: 1080 },
-  // The answer signboard: 3-slice horizontally, fixed height, variable width.
-  // `cap` is in SOURCE pixels — the fixed end pieces that must not stretch.
-  platform: { url: '/assets/platform.png', h: 76, cap: 128 },
-  // Ground. Tiles horizontally; only the top ~100px is ever on screen.
-  floor: { url: '/assets/floor.png', w: 256, h: 120 },
+  // Full-screen backdrop, 16:9, stretched to fill.
+  bg: { url: '/assets/bg.png' },
+  // A 3x3 tilesheet. Corners placed once, middle column repeated across.
+  platform: { url: '/assets/platform.png' },
+  // One square tile, repeated horizontally at this display width.
+  floor: { url: '/assets/floor.png', w: 256 },
 });
 
 /**
@@ -61,32 +62,87 @@ export function has(name) {
 }
 
 /**
- * Horizontal 3-slice — what Unity calls a Sliced sprite, restricted to the one
- * axis that varies here. The end caps draw at their authored size so corners
- * and bevels keep their shape; only the middle stretches.
+ * Draw a box of any width from a 3x3 tilesheet: corners placed once, the middle
+ * column repeated across to fill.
  *
- * Answer platforms are 400px wide with four answers and 860 with two. With a
- * 128px cap on a 512px source drawn at half scale, that stretches the middle
- * 2.13x to 5.72x — invisible on a flat fill, very visible on a texture, so
- * detail belongs in the caps.
+ * Repeating rather than stretching is the whole point. A stretched sprite
+ * smears anything that isn't a flat fill, and it pins every board to one shape;
+ * a tiled one renders any width at native resolution, which is what makes
+ * boards of different sizes free.
+ *
+ * Nothing here assumes a particular file size — the cell is a third of whatever
+ * was loaded, so a 192px sheet and a 768px sheet both just work.
  *
  * @param {CanvasRenderingContext2D} cx
- * @param {HTMLImageElement} img
- * @param {number} capSrc width of each end cap, in SOURCE pixels
+ * @param {HTMLImageElement} img 3x3 sheet, square
  * @param {number} x @param {number} y @param {number} w @param {number} h
  */
-export function draw3Slice(cx, img, capSrc, x, y, w, h) {
-  const sh = img.naturalHeight;
-  const sw = img.naturalWidth;
-  const scale = h / sh;
-  // Cap width in destination pixels, never more than half the target.
-  const cap = Math.min(capSrc * scale, w / 2);
-  const midSrc = Math.max(1, sw - capSrc * 2);
-  const midDst = Math.max(0, w - cap * 2);
+export function drawTileBox(cx, img, x, y, w, h) {
+  const cell = img.naturalWidth / 3;
+  if (!cell || w <= 0 || h <= 0) return;
 
-  cx.drawImage(img, 0, 0, capSrc, sh, x, y, cap, h);
-  if (midDst > 0) cx.drawImage(img, capSrc, 0, midSrc, sh, x + cap, y, midDst, h);
-  cx.drawImage(img, sw - capSrc, 0, capSrc, sh, x + w - cap, y, cap, h);
+  const rowH = h / 3;
+  const scale = rowH / cell;
+  // End cells keep their aspect, but never eat more than half the box — a board
+  // narrower than two tiles is better as two squeezed ends than as an end and
+  // a hole.
+  const capW = Math.min(cell * scale, w / 2);
+  const midW = Math.max(0, w - capW * 2);
+
+  for (let row = 0; row < 3; row++) {
+    const sy = row * cell;
+    const dy = y + row * rowH;
+
+    cx.drawImage(img, 0, sy, cell, cell, x, dy, capW, rowH);
+    cx.drawImage(img, 2 * cell, sy, cell, cell, x + w - capW, dy, capW, rowH);
+
+    if (midW <= 0) continue;
+    const pat = middlePattern(cx, img, row, cell);
+    if (!pat) continue;
+    cx.save();
+    // Half a pixel of overlap under each end cell. The canvas is scaled to the
+    // screen, so a butt joint between fill and cap lands on a fractional device
+    // pixel and shows as a hairline of background. Tucking the fill under the
+    // caps hides it without touching the rounded outer corners.
+    cx.beginPath();
+    cx.rect(x + capW - 0.5, dy, midW + 1, rowH);
+    cx.clip();
+    cx.translate(x + capW - 0.5, dy);
+    cx.scale(scale, scale);
+    cx.fillStyle = pat;
+    cx.fillRect(0, 0, (midW + 1) / scale, cell);
+    cx.restore();
+  }
+}
+
+/** @type {Map<string, CanvasPattern|null>} */
+const cellPatterns = new Map();
+
+/**
+ * A repeating pattern built from one middle-column cell. Going through a
+ * pattern rather than a drawImage loop leaves the repetition to the browser, so
+ * there are no seams between copies however the canvas is scaled.
+ *
+ * @param {CanvasRenderingContext2D} cx
+ * @param {HTMLImageElement} img @param {number} row @param {number} cell
+ * @returns {CanvasPattern|null}
+ */
+function middlePattern(cx, img, row, cell) {
+  const key = `${img.src}|${row}`;
+  const hit = cellPatterns.get(key);
+  if (hit !== undefined) return hit;
+
+  const off = document.createElement('canvas');
+  off.width = cell;
+  off.height = cell;
+  const ocx = off.getContext('2d');
+  let pat = null;
+  if (ocx) {
+    ocx.drawImage(img, cell, row * cell, cell, cell, 0, 0, cell, cell);
+    pat = cx.createPattern(off, 'repeat');
+  }
+  cellPatterns.set(key, pat);
+  return pat;
 }
 
 /** @type {Map<string, CanvasPattern>} */

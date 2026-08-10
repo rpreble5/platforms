@@ -15,7 +15,7 @@
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { ANSWER_H, ANSWER_SIGN_H, FLOOR_Y } from '../../sim/levels.js';
-import { SPRITES, art, draw3Slice, drawTiled, has } from './art.js';
+import { SPRITES, art, drawTileBox, drawTiled, has } from './art.js';
 import { FONT, INK, SKY, STAGE, UI } from './theme.js';
 
 /** @typedef {import('../../sim/collide.js').Platform} Platform */
@@ -99,7 +99,7 @@ export function drawSign(cx, p, opts = {}) {
   const y = p.y + dy;
 
   if (has('platform')) {
-    draw3Slice(cx, art.platform, SPRITES.platform.cap, p.x, y, p.w, ANSWER_SIGN_H);
+    drawTileBox(cx, art.platform, p.x, y, p.w, ANSWER_SIGN_H);
   } else {
     const r = 10;
     cx.fillStyle = STAGE.platEdge;
