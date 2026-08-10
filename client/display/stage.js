@@ -74,13 +74,15 @@ function drawHills(cx, baseY, r, count, phase, fill) {
 export function drawFloor(cx, p) {
   const visibleH = WORLD_H - FLOOR_Y + 4;
   if (has('floor')) {
+    // Nothing drawn over the top of the sprite: the whole visible band is the
+    // artwork's, so a supplied tile isn't cut by a hardcoded surface line.
     drawTiled(cx, art.floor, p.x, p.y, p.w, visibleH, SPRITES.floor.w);
-  } else {
-    cx.fillStyle = STAGE.floorBody;
-    cx.fillRect(p.x, p.y, p.w, visibleH);
-    cx.fillStyle = STAGE.floorTop;
-    cx.fillRect(p.x, p.y, p.w, 14);
+    return;
   }
+  cx.fillStyle = STAGE.floorBody;
+  cx.fillRect(p.x, p.y, p.w, visibleH);
+  cx.fillStyle = STAGE.floorTop;
+  cx.fillRect(p.x, p.y, p.w, 14);
   cx.fillStyle = STAGE.floorEdge;
   cx.fillRect(p.x, p.y + 14, p.w, 4);
 }

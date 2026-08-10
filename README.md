@@ -99,7 +99,7 @@ The stage draws from sprites in `assets/` when they exist and falls back to
 shapes in code when they don't, so the game runs with that folder empty and you
 can add art one file at a time. The HUD names whatever is still procedural.
 
-Dimensions, slice points, palette and generation prompts:
+Exact dimensions, slice points and tiling constraints:
 **[docs/ART-SPEC.md](docs/ART-SPEC.md)**.
 
 Two things worth knowing before you draw anything:

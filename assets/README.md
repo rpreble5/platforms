@@ -4,7 +4,7 @@ Sprites for the display. **Everything here is optional** — each one has a
 procedural fallback, so the game runs with this folder empty and you can add
 files one at a time and watch each appear.
 
-Dimensions, palette and generation prompts: [`docs/ART-SPEC.md`](../docs/ART-SPEC.md).
+Dimensions, slicing and tiling constraints: [`docs/ART-SPEC.md`](../docs/ART-SPEC.md).
 
 | file | needed | drawn instead if missing |
 |---|---|---|

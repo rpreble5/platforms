@@ -65,9 +65,10 @@ export function has(name) {
  * axis that varies here. The end caps draw at their authored size so corners
  * and bevels keep their shape; only the middle stretches.
  *
- * Answer platforms are 400px wide with four answers and 860 with two, so the
- * middle stretches between about 4x and 11x. That is invisible on a flat fill
- * and very visible on a texture — keep detail in the caps.
+ * Answer platforms are 400px wide with four answers and 860 with two. With a
+ * 128px cap on a 512px source drawn at half scale, that stretches the middle
+ * 2.13x to 5.72x — invisible on a flat fill, very visible on a texture, so
+ * detail belongs in the caps.
  *
  * @param {CanvasRenderingContext2D} cx
  * @param {HTMLImageElement} img
