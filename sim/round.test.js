@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { BTN_JUMP, BTN_RIGHT } from '../shared/protocol.js';
+import { BTN_JUMP, BTN_LEFT, BTN_RIGHT } from '../shared/protocol.js';
 import { COHORTS } from '../shared/palette.js';
 import { PHYS, STEP_MS } from '../shared/tuning.js';
 import { addPlayer, createWorld, step } from './world.js';
@@ -17,6 +17,8 @@ import {
   ANSWER_Y,
   FLOOR_Y,
   GRID,
+  ISLAND_Y,
+  PERCH_Y,
   RANGE_ID,
   RANGE_MIN_W,
   buildArena,
@@ -323,12 +325,12 @@ test('two players who arrive together score the same despite different lag', () 
   assert.equal(a, b, 'a 20ms difference does not change the score at all');
 });
 
-test('a player can actually reach every answer platform by jumping', () => {
+test('a player can actually reach every row-layout answer with a plain jump', () => {
   // Layout guard. If a platform is ever placed out of reach, the game becomes
   // unfair in a way no amount of latency work can fix.
-  for (const n of [2, 3, 4]) {
+  for (const n of [2, 3, 4, 5]) {
     for (let i = 0; i < n; i++) {
-      const world = createWorld(buildArena(n));
+      const world = createWorld(buildArena(n, 'row'));
       const p = addPlayer(world, 1);
       const plat = /** @type {any} */ (world.platforms.find((q) => q.id === answerId(i)));
 
@@ -351,6 +353,69 @@ test('a player can actually reach every answer platform by jumping', () => {
       assert.ok(landed, `${n} answers: platform ${i} is reachable with a plain jump`);
     }
   }
+});
+
+test('every island answer is reachable: floor to perch to answer', () => {
+  // The same guard for the layered layout. The final hop is simulated with a
+  // dumb steer-toward-the-target bot — if that bot can make the jump, a person
+  // with eyes can.
+  for (const n of [2, 3, 4, 5]) {
+    const world = createWorld(buildArena(n));
+    const p = /** @type {any} */ (addPlayer(world, 1));
+    const perches = world.platforms.filter((q) => String(q.id).startsWith('perch'));
+    assert.ok(perches.length >= 1, `${n} answers: perches exist`);
+    assert.ok(!perches.some((q) => q.y !== PERCH_Y), 'all perches on one tier');
+
+    // Floor -> perch is the row layout's proven 160px jump; assert the tier
+    // and sim only the novel hop.
+    assert.equal(FLOOR_Y - PERCH_Y, FLOOR_Y - ANSWER_Y, 'perch rise = the proven answer rise');
+
+    for (let i = 0; i < n; i++) {
+      const ans = /** @type {any} */ (world.platforms.find((q) => q.id === answerId(i)));
+      assert.equal(ans.y, ISLAND_Y, 'answers share one tier');
+      const target = ans.x + ans.w / 2;
+      const perch = /** @type {any} */ (
+        [...perches].sort(
+          (a, b) => Math.abs(a.x + a.w / 2 - target) - Math.abs(b.x + b.w / 2 - target)
+        )[0]
+      );
+
+      // Stand on the nearest perch, as close to the answer as the perch allows.
+      p.x = Math.max(perch.x, Math.min(perch.x + perch.w - p.w, target - p.w / 2));
+      p.y = perch.y - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      step(world, STEP_MS);
+      assert.equal(p.standingOn?.id, perch.id, 'starts on the perch');
+
+      p.input.pressEdge |= BTN_JUMP;
+      let landed = false;
+      for (let k = 0; k < 300; k++) {
+        const dx = target - (p.x + p.w / 2);
+        p.input.held = Math.abs(dx) > 24 ? (dx > 0 ? BTN_RIGHT : BTN_LEFT) : 0;
+        step(world, STEP_MS);
+        if (p.standingOn?.id === ans.id) {
+          landed = true;
+          break;
+        }
+      }
+      assert.ok(landed, `${n} answers: answer ${i} is reachable from perch ${perch.id}`);
+    }
+  }
+});
+
+test('perches survive the reveal — only wrong answers crumble', () => {
+  const { world, game } = rig();
+  addPlayer(world, 1);
+  startGame(game, world);
+  run(world, game, 3100);
+  const before = world.platforms.filter((p) => String(p.id).startsWith('perch')).length;
+  assert.ok(before > 0, 'the arena has perches');
+
+  run(world, game, 12900); // through the buzzer into REVEAL
+  const after = world.platforms.filter((p) => String(p.id).startsWith('perch')).length;
+  assert.equal(after, before, 'every perch is still solid');
+  assert.ok(game.debris.every((p) => String(p.id).startsWith('ans')), 'only answers fell');
 });
 
 test('the training year is a costume, never a gameplay difference', () => {
@@ -390,24 +455,30 @@ test('no two players spawn on exactly the same pixel', () => {
   assert.ok(closest > PHYS.PLAYER_W * 0.6, `nearest pair is ${closest.toFixed(1)}px apart`);
 });
 
-test('answer platforms are a whole number of tiles wide', () => {
-  // The board is assembled from repeating tiles, so a width that isn't a
+test('answer boards and perches are a whole number of tiles wide', () => {
+  // Boards are assembled from repeating tiles, so a width that isn't a
   // multiple of GRID means a half-drawn tile at one end.
-  for (const n of [2, 3, 4]) {
-    for (const p of buildArena(n).filter((q) => q.id?.startsWith('ans'))) {
-      assert.equal(p.w % GRID, 0, `${n} answers: ${p.id} is ${p.w} wide`);
+  for (const layout of /** @type {const} */ (['row', 'islands'])) {
+    for (const n of [2, 3, 4, 5]) {
+      for (const p of buildArena(n, layout).filter(
+        (q) => q.id?.startsWith('ans') || String(q.id).startsWith('perch')
+      )) {
+        assert.equal(p.w % GRID, 0, `${layout}/${n}: ${p.id} is ${p.w} wide`);
+      }
     }
   }
 });
 
-test('boards stay separated once their widths are snapped to the grid', () => {
-  // Rounding widths down hands the slack to the gaps, so gaps can only grow.
-  // If that ever inverts, two boards touch and the arena reads as one shelf.
-  for (const n of [2, 3, 4]) {
-    const ans = buildArena(n).filter((q) => q.id?.startsWith('ans'));
-    for (let i = 1; i < ans.length; i++) {
-      const gap = ans[i].x - (ans[i - 1].x + ans[i - 1].w);
-      assert.ok(gap >= 60, `${n} answers: gap ${i} is ${gap}px`);
+test('boards stay separated in both layouts', () => {
+  // If two boards ever touch, the arena reads as one shelf and the answers
+  // stop being distinct targets.
+  for (const layout of /** @type {const} */ (['row', 'islands'])) {
+    for (const n of [2, 3, 4, 5]) {
+      const ans = buildArena(n, layout).filter((q) => q.id?.startsWith('ans'));
+      for (let i = 1; i < ans.length; i++) {
+        const gap = ans[i].x - (ans[i - 1].x + ans[i - 1].w);
+        assert.ok(gap >= 60, `${layout}/${n}: gap ${i} is ${gap}px`);
+      }
     }
   }
 });

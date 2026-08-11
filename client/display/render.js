@@ -10,7 +10,7 @@ import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
-import { drawFloor, drawSky } from './stage.js';
+import { drawFloor, drawPerch, drawSky } from './stage.js';
 import { UI } from './theme.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
@@ -75,6 +75,8 @@ export function render(cx, world, roster, game, opts) {
     // which is never drawn); each piece is rendered exactly like the floor.
     if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) {
       drawFloor(cx, p);
+    } else if (p.id?.startsWith('perch')) {
+      drawPerch(cx, p);
     }
   }
   drawSigns(cx, world, game);

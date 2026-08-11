@@ -1,13 +1,17 @@
 /**
  * Arena layout. Pure — no DOM.
  *
- * All answer platforms sit at the same height directly above a full-width
- * floor, so every answer is reached the same way: run to it, jump straight up.
+ * Two choice layouts share one fairness rule: within a layout, every answer
+ * sits at the same height and costs the same number of jumps. If answers were
+ * at different heights or hop counts, some would be harder to reach than
+ * others, and a player who wanted the hard one would lose points to the layout
+ * rather than to their knowledge. They'd be right to complain.
  *
- * That geometry is a fairness decision. If answers were at different heights or
- * distances, some would be harder to reach than others, and a player who wanted
- * the hard one would lose points to the layout rather than to their knowledge.
- * They'd be right to complain. Equal height, equal width, one jump each.
+ *  - `row` — the original: answers one jump above the floor. Run, jump, done.
+ *  - `islands` (default) — answers two jumps up, out of direct reach from the
+ *    floor, with a tier of non-answer perches between. Every answer is one
+ *    diagonal hop from an adjacent perch, and every perch one jump from the
+ *    floor: exactly two committed jumps per answer, whichever answer it is.
  */
 
 import { PHYS, WORLD_H, WORLD_W } from '../shared/tuning.js';
@@ -119,11 +123,39 @@ export function buildRangeArena(q) {
 }
 
 /**
- * @param {number} n number of answers, 2-4
+ * Perch tier: same rise as the row layout's answers, so it's the same proven
+ * jump. Island tier doubles it — 320px is beyond the ~220px apex, which is
+ * what makes the perches mandatory rather than decorative.
+ */
+export const PERCH_Y = FLOOR_Y - 160;
+export const ISLAND_Y = FLOOR_Y - 320;
+/** Perches are stepping stones, not destinations — big enough to land on with slack. */
+export const PERCH_W = GRID * 9;
+/**
+ * Elevated answer boards are capped so they read as islands rather than
+ * shelves. 20 tiles; the 2-answer row layout would otherwise produce 840px
+ * monsters half a screen wide.
+ */
+const ISLAND_MAX_W = GRID * 20;
+
+/**
+ * @param {number} n number of answers, 2-5
+ * @param {'row'|'islands'} [layout]
  * @returns {Platform[]}
  */
-export function buildArena(n) {
-  const count = Math.max(2, Math.min(4, n));
+export function buildArena(n, layout = 'islands') {
+  return layout === 'row' ? buildRowArena(n) : buildIslandArena(n);
+}
+
+/**
+ * The original single-jump row. Kept for question packs that want the plain
+ * sprint (`"layout": "row"`), and as the geometry the physics comments in
+ * tuning.js were derived against.
+ * @param {number} n
+ * @returns {Platform[]}
+ */
+export function buildRowArena(n) {
+  const count = Math.max(2, Math.min(5, n));
 
   /** @type {Platform[]} */
   const platforms = [
@@ -148,6 +180,73 @@ export function buildArena(n) {
       // onto it instead of bonking and blaming the game.
       oneWay: true,
     });
+  }
+
+  return platforms;
+}
+
+/**
+ * Answers as high islands, perches between them.
+ *
+ * Answers sit centred in `n` equal slots; perches sit at the slot boundaries,
+ * one tier down. Placing perches at the boundaries guarantees each answer
+ * horizontally overlaps (or nearly touches) an adjacent perch, so the final
+ * hop is a near-vertical jump — reachable with the same slack as everything
+ * else in this game. The 2-answer arena adds a perch at each outer edge so
+ * both flanks have a route and the middle perch isn't a single choke point.
+ *
+ * The perch count changing with the answer count (3, 2, 3, 4 for n=2..5) is
+ * what makes each arena feel like a different level without any layout being
+ * harder than another.
+ * @param {number} n
+ * @returns {Platform[]}
+ */
+export function buildIslandArena(n) {
+  const count = Math.max(2, Math.min(5, n));
+
+  /** @type {Platform[]} */
+  const platforms = [
+    { id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 },
+  ];
+
+  const usable = WORLD_W - EDGE_MARGIN * 2;
+  const spacing = usable / count;
+  const width = Math.min(snapToGrid(spacing - MIN_GAP), ISLAND_MAX_W);
+
+  for (let i = 0; i < count; i++) {
+    const center = EDGE_MARGIN + (i + 0.5) * spacing;
+    platforms.push({
+      id: answerId(i),
+      x: center - width / 2,
+      y: ISLAND_Y,
+      w: width,
+      h: ANSWER_H,
+      oneWay: true,
+    });
+  }
+
+  let perch = 0;
+  for (let j = 0; j < count - 1; j++) {
+    platforms.push({
+      id: `perch${perch++}`,
+      x: EDGE_MARGIN + (j + 1) * spacing - PERCH_W / 2,
+      y: PERCH_Y,
+      w: PERCH_W,
+      h: ANSWER_H,
+      oneWay: true,
+    });
+  }
+  if (count === 2) {
+    for (const x of [EDGE_MARGIN, WORLD_W - EDGE_MARGIN - PERCH_W]) {
+      platforms.push({
+        id: `perch${perch++}`,
+        x,
+        y: PERCH_Y,
+        w: PERCH_W,
+        h: ANSWER_H,
+        oneWay: true,
+      });
+    }
   }
 
   return platforms;

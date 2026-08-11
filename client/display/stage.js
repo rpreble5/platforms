@@ -162,6 +162,29 @@ export function drawSignText(cx, p, text, opts = {}) {
 }
 
 /**
+ * A perch: a stepping-stone platform that is not an answer. Same construction
+ * as a signboard's landing surface but with no skirt and a dimmer face — the
+ * skirt is what says "this means something", and a perch deliberately doesn't.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {Platform} p
+ */
+export function drawPerch(cx, p) {
+  const h = ANSWER_H + 12;
+  if (has('platform')) {
+    drawTileBox(cx, art.platform, p.x, p.y, p.w, h);
+    return;
+  }
+  cx.fillStyle = STAGE.platEdge;
+  cx.beginPath();
+  cx.roundRect(p.x, p.y, p.w, h, 8);
+  cx.fill();
+  cx.fillStyle = STAGE.platTop;
+  cx.beginPath();
+  cx.roundRect(p.x + 3, p.y + 3, p.w - 6, ANSWER_H - 8, 6);
+  cx.fill();
+}
+
+/**
  * The number line for a range round, drawn on the floor's face — BELOW the
  * surface the players stand on. Feet sit at FLOOR_Y and sprites grow upward,
  * so nothing down here is ever covered by the crowd, no matter how full the

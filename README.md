@@ -58,7 +58,9 @@ reload, so editing them and hitting refresh is the whole edit loop. Two kinds
 of question share the deck:
 
 ```jsonc
-// Multiple choice: stand on the platform with the right answer.
+// Multiple choice (2-5 answers): get onto the platform with the right answer.
+// Answers sit two jumps up, reached via non-answer perch platforms; add
+// "layout": "row" for the old flat single-jump arena.
 { "text": "Capital of Australia?", "answers": ["Sydney", "Canberra"], "correct": 1 }
 
 // Range: a number line is drawn along the floor; stand inside the correct

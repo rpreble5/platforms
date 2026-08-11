@@ -74,6 +74,7 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {'range'} [type]
  * @property {string[]} [answers]
  * @property {number} [correct]
+ * @property {'row'|'islands'} [layout] choice arenas only; islands if absent
  * @property {number} [min]
  * @property {number} [max]
  * @property {[number, number]} [answer]
@@ -300,7 +301,7 @@ export function nextQuestion(g, world) {
   world.platforms =
     q.type === 'range'
       ? buildRangeArena(/** @type {import('./levels.js').RangeQuestion} */ (q))
-      : buildArena(q.answers?.length ?? 2);
+      : buildArena(q.answers?.length ?? 2, q.layout);
   respawnAll(world);
   enter(g, world, PHASE.INTRO);
 }

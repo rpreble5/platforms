@@ -57,6 +57,11 @@
       "text": "Which country has the most time zones?",
       "answers": ["Russia", "USA", "France", "China"],
       "correct": 2
+    },
+    {
+      "text": "How many bones are in the adult human body?",
+      "answers": ["186", "198", "206", "212", "226"],
+      "correct": 2
     }
   ]
 }

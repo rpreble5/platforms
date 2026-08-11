@@ -236,9 +236,13 @@ export function loadQuestions(root) {
       problems.push(`${where}: missing text or answers — skipped`);
       return false;
     }
-    if (q.answers.length < 2 || q.answers.length > 4) {
-      problems.push(`${where}: ${q.answers.length} answers, must be 2-4 — skipped`);
+    if (q.answers.length < 2 || q.answers.length > 5) {
+      problems.push(`${where}: ${q.answers.length} answers, must be 2-5 — skipped`);
       return false;
+    }
+    if (q.layout !== undefined && q.layout !== 'row' && q.layout !== 'islands') {
+      problems.push(`${where}: unknown layout "${q.layout}" — using islands`);
+      delete q.layout;
     }
     if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.answers.length) {
       problems.push(`${where}: "correct" is out of range — skipped`);
