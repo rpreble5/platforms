@@ -266,11 +266,33 @@ export function loadQuestions(root) {
     return true;
   });
 
+  // The showdown block is optional and separate from the quiz deck — a list
+  // of true/false statements for the sudden-death mode.
+  /** @type {{statements: any[], answerMs?: number} | null} */
+  let showdown = null;
+  if (pack.showdown) {
+    const statements = (Array.isArray(pack.showdown.statements) ? pack.showdown.statements : [])
+      .filter((/** @type {any} */ st, /** @type {number} */ i) => {
+        if (typeof st?.text !== 'string' || typeof st?.answer !== 'boolean') {
+          problems.push(`showdown #${i + 1}: needs text and a boolean answer — skipped`);
+          return false;
+        }
+        if (st.text.length > 110) problems.push(`showdown #${i + 1}: ${st.text.length} chars (>110 is hard to read fast)`);
+        return true;
+      });
+    if (statements.length) {
+      showdown = { statements };
+      if (Number.isFinite(pack.showdown.answerMs)) showdown.answerMs = pack.showdown.answerMs;
+    } else {
+      problems.push('showdown: no valid statements — block ignored');
+    }
+  }
+
   if (problems.length) {
     console.log('\n  \x1b[33m!\x1b[0m  questions/default.json:');
     for (const m of problems) console.log(`       ${m}`);
     console.log('');
   }
 
-  return { pack: pack.pack ?? 'default', answerMs: pack.answerMs ?? 12000, questions };
+  return { pack: pack.pack ?? 'default', answerMs: pack.answerMs ?? 12000, questions, showdown };
 }

@@ -45,8 +45,9 @@ with no phone at all.
 | key | on the display |
 |---|---|
 | **`Enter`** | **start the game / skip to the next question** |
+| `S` | start the showdown (sudden-death true/false, from the lobby) |
 | `P` | pause |
-| `R` | restart from question one |
+| `R` | restart from question one / abort the showdown |
 | `A` `D` / arrows | move the local test avatar |
 | space / `W` | jump |
 | `H` | per-player RTT / loss table |
@@ -69,6 +70,19 @@ of question share the deck:
 // falls away — along with everyone standing on it.
 { "type": "range", "text": "Appropriate dose of drug X?",
   "min": 0, "max": 20, "answer": [8, 10], "unit": "mg" }
+```
+
+There is also a separate **showdown** — sudden-death true/false, floor split
+into TRUE and FALSE halves, wrong half collapses each statement, last player
+standing wins. It is its own mode with no points and no scoreboard contact,
+started from the lobby (`S` on the display, or the host page button), and
+authored as a top-level block in the same file:
+
+```jsonc
+"showdown": { "answerMs": 6000, "statements": [
+  { "text": "An octopus has three hearts", "answer": true },
+  ...
+] }
 ```
 
 ---

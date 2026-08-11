@@ -46,6 +46,7 @@
   button:disabled { opacity: .35; }
   #next { background: #2f7a5a; font-size: 26px; padding: 28px; }
   #pause { background: #4d4177; }
+  #showdown { background: #5c2320; color: #ffb08a; }
   #restart { background: #46213f; color: #ff9db0; font-size: 17px; padding: 16px; }
   #restart.armed { background: #a12f3d; color: #fff; }
 
@@ -74,6 +75,7 @@
 
 <button id="next">Start game</button>
 <button id="pause">Pause</button>
+<button id="showdown" hidden>Start showdown ☠</button>
 <div class="spacer"></div>
 <button id="restart">Restart from question 1</button>
 <footer>Commands go to the display. Enter / P / R on its keyboard still work.</footer>
@@ -91,7 +93,8 @@ const key = location.hash.slice(1);
 const $ = (id) => document.getElementById(id);
 const dot = $('dot'), phaseEl = $('phase'), qnum = $('qnum'), timer = $('timer'),
       qtext = $('qtext'), players = $('players'), gate = $('gate'),
-      nextBtn = $('next'), pauseBtn = $('pause'), restartBtn = $('restart');
+      nextBtn = $('next'), pauseBtn = $('pause'), restartBtn = $('restart'),
+      showdownBtn = $('showdown');
 
 if (!key) {
   gate.classList.remove('hidden');
@@ -149,9 +152,11 @@ function render() {
   if (!state) return;
   const inLobby = state.phase === 'LOBBY';
   const over = state.phase === 'GAME_OVER';
+  const sd = String(state.phase ?? '').startsWith('SHOWDOWN');
 
   phaseEl.textContent = state.paused ? 'PAUSED' : state.phase ?? '–';
-  phaseEl.className = state.paused ? 'paused' : state.phase === 'ANSWER' ? 'answer' : '';
+  phaseEl.className =
+    state.paused ? 'paused' : state.phase === 'ANSWER' || sd ? 'answer' : '';
   qnum.textContent = !inLobby && state.qCount ? `Q${(state.qIndex ?? 0) + 1}/${state.qCount}` : '';
   timer.textContent =
     state.answerLeftMs != null && !state.paused ? Math.ceil(state.answerLeftMs / 1000) + 's' : '';
@@ -160,15 +165,21 @@ function render() {
     : over
       ? 'Game over. Final scores are on the screen.'
       : (state.text ?? '…');
-  players.textContent = `${Math.max(0, (state.players ?? 1) - 1)} players`;
+  const n = Math.max(0, (state.players ?? 1) - 1);
+  players.textContent = sd && state.alive != null ? `${state.alive} alive / ${n}` : `${n} players`;
 
-  nextBtn.textContent = inLobby ? 'Start game' : over ? 'Play again' : 'Skip to next question ▸';
+  nextBtn.textContent = sd
+    ? 'Skip statement ▸'
+    : inLobby ? 'Start game' : over ? 'Play again' : 'Skip to next question ▸';
   pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
-  pauseBtn.disabled = inLobby || over;
+  pauseBtn.disabled = (inLobby || over) && !sd;
+  showdownBtn.hidden = !state.canShowdown;
+  restartBtn.textContent = sd ? 'Abort showdown' : 'Restart from question 1';
 }
 
 nextBtn.addEventListener('click', () => cmd('next'));
 pauseBtn.addEventListener('click', () => cmd(state?.paused ? 'resume' : 'pause'));
+showdownBtn.addEventListener('click', () => cmd('showdown'));
 
 // Restart nukes the whole game, so it takes two taps: arm, then confirm.
 let armTimer = 0;

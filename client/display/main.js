@@ -24,10 +24,12 @@ import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJ
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
-import { PHASE, answerWindow, createGame, currentQuestion, skip, startGame, stepRound } from '../../sim/round.js';
+import { PHASE, answerWindow, createGame, currentQuestion, respawnAll, skip, startGame, stepRound } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
+import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
 import { drawConfetti } from './fx.js';
 import { drawRoundOverlay } from './round-ui.js';
+import { drawShowdown } from './showdown-ui.js';
 import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
 import { render } from './render.js';
@@ -166,19 +168,28 @@ function onJson(msg) {
       // keyboard has — the display stays the only authority over the game.
       switch (msg.cmd) {
         case 'next':
-          if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
+          if (showdown) sdSkip(showdown, world);
+          else if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
           else skip(game, world);
           break;
         case 'pause':
-          game.paused = true;
+          if (showdown) showdown.paused = true;
+          else game.paused = true;
           hud.note = 'PAUSED by host — press P or use the host page to resume';
           break;
         case 'resume':
-          game.paused = false;
+          if (showdown) showdown.paused = false;
+          else game.paused = false;
           hud.note = '';
           break;
         case 'restart':
-          startGame(game, world);
+          if (showdown) endShowdown();
+          else startGame(game, world);
+          break;
+        case 'showdown':
+          if (!showdown && (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER)) {
+            startShowdown();
+          }
           break;
         default:
           break;
@@ -188,6 +199,36 @@ function onJson(msg) {
     default:
       break;
   }
+}
+
+// ------------------------------------------------------------------ showdown
+
+/** @type {import('../../sim/showdown.js').Showdown | null} */
+let showdown = null;
+/** @type {{statements: {text:string, answer:boolean}[], answerMs?: number} | null} */
+let showdownSpec = null;
+
+function startShowdown() {
+  if (!showdownSpec) {
+    hud.note = 'no showdown block in questions/default.json';
+    return;
+  }
+  // The keyboard test player sits out: an idle avatar that survives on luck
+  // could win the whole thing, and the victor screen isn't for the laptop.
+  showdown = createShowdown(
+    showdownSpec,
+    world,
+    [...world.players.keys()].filter((id) => id !== LOCAL_ID)
+  );
+  hud.note = '';
+}
+
+function endShowdown() {
+  showdown = null;
+  world.platforms = buildArena(4);
+  respawnAll(world);
+  game.phase = PHASE.LOBBY;
+  game.phaseT = 0;
 }
 
 // ------------------------------------------------------------------ the loop
@@ -213,10 +254,12 @@ function frame(now) {
     bus.applyMask(LOCAL_ID, localMask);
     bus.drainInto(world);
     flash.observe(world);
-    stepRound(game, world, STEP_MS);
+    if (showdown) stepShowdown(showdown, world, STEP_MS);
+    else stepRound(game, world, STEP_MS);
     acc -= STEP_MS;
     steps++;
   }
+  if (showdown?.phase === SD_PHASE.DONE) endShowdown();
   lastSteps = steps;
 
   if (game.phase !== lastPhase) {
@@ -233,10 +276,14 @@ function frame(now) {
     lastPhase = game.phase;
   }
 
-  render(cx, world, roster, game, { qr: game.phase === PHASE.LOBBY ? qr : null, joinUrl });
-  drawConfetti(cx, game, world);
+  render(cx, world, roster, game, {
+    qr: game.phase === PHASE.LOBBY && !showdown ? qr : null,
+    joinUrl,
+  });
+  if (!showdown) drawConfetti(cx, game, world);
   flash.draw(cx);
-  drawRoundOverlay(cx, game, roster, world.players.size);
+  if (showdown) drawShowdown(cx, showdown, world, roster);
+  else drawRoundOverlay(cx, game, roster, world.players.size);
   drawHud(cx, {
     bus,
     roster,
@@ -257,18 +304,37 @@ function frame(now) {
     lastCheckpoint = now;
     send({
       type: 'CHECKPOINT',
-      state: {
-        tick: world.tick,
-        players: world.players.size,
-        phase: game.phase,
-        qIndex: game.qIndex,
-        qCount: game.questions.length,
-        text: currentQuestion(game)?.text ?? null,
-        paused: game.paused,
-        answerLeftMs:
-          game.phase === PHASE.ANSWER ? Math.max(0, answerWindow(game) - game.phaseT) : null,
-        scores: Object.fromEntries(game.scores),
-      },
+      state: showdown
+        ? {
+            tick: world.tick,
+            players: world.players.size,
+            phase: `SHOWDOWN · ${showdown.phase}`,
+            qIndex: showdown.index,
+            qCount: showdown.statements.length,
+            text: currentStatement(showdown)?.text ?? null,
+            paused: showdown.paused,
+            alive: showdown.alive.size,
+            canShowdown: false,
+            answerLeftMs:
+              showdown.phase === SD_PHASE.ANSWER
+                ? Math.max(0, showdown.answerMs - showdown.phaseT)
+                : null,
+          }
+        : {
+            tick: world.tick,
+            players: world.players.size,
+            phase: game.phase,
+            qIndex: game.qIndex,
+            qCount: game.questions.length,
+            text: currentQuestion(game)?.text ?? null,
+            paused: game.paused,
+            canShowdown:
+              !!showdownSpec &&
+              (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER),
+            answerLeftMs:
+              game.phase === PHASE.ANSWER ? Math.max(0, answerWindow(game) - game.phaseT) : null,
+            scores: Object.fromEntries(game.scores),
+          },
     });
   }
 }
@@ -298,18 +364,29 @@ function onKey(e, down) {
       return;
     }
     if (k === 'enter') {
-      if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
+      if (showdown) sdSkip(showdown, world);
+      else if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
       else skip(game, world);
       e.preventDefault();
       return;
     }
     if (k === 'p') {
-      game.paused = !game.paused;
-      hud.note = game.paused ? 'PAUSED — press P to resume' : '';
+      if (showdown) {
+        showdown.paused = !showdown.paused;
+        hud.note = showdown.paused ? 'PAUSED — press P to resume' : '';
+      } else {
+        game.paused = !game.paused;
+        hud.note = game.paused ? 'PAUSED — press P to resume' : '';
+      }
       return;
     }
     if (k === 'r') {
-      startGame(game, world);
+      if (showdown) endShowdown();
+      else startGame(game, world);
+      return;
+    }
+    if (k === 's' && !showdown && (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER)) {
+      startShowdown();
       return;
     }
   }
@@ -421,6 +498,7 @@ async function init() {
     const pack = await fetch('/api/questions').then((r) => r.json());
     if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
     else hud.note = 'no questions loaded — check questions/default.json';
+    if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
   } catch {
     hud.note = 'could not load questions';
   }
@@ -447,7 +525,11 @@ async function init() {
   // Debug handle. Useful from the console at the venue ("why is player 7 not
   // moving?") and used by the browser smoke test.
   Object.assign(globalThis, {
-    __platforms: { world, bus, roster, net, PHYS, flash, get game() { return game; } },
+    __platforms: {
+      world, bus, roster, net, PHYS, flash,
+      get game() { return game; },
+      get showdown() { return showdown; },
+    },
   });
 
   connect();

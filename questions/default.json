@@ -1,6 +1,21 @@
 {
   "pack": "default",
   "answerMs": 12000,
+  "showdown": {
+    "answerMs": 6000,
+    "statements": [
+      { "text": "The Great Wall of China is visible from space", "answer": false },
+      { "text": "Adults have more bones than newborns", "answer": false },
+      { "text": "Sound travels faster in water than in air", "answer": true },
+      { "text": "Goldfish have a three-second memory", "answer": false },
+      { "text": "Venus is the hottest planet in the solar system", "answer": true },
+      { "text": "Humans share more than half their DNA with bananas", "answer": true },
+      { "text": "Lightning never strikes the same place twice", "answer": false },
+      { "text": "An octopus has three hearts", "answer": true },
+      { "text": "The tongue has zones for different tastes", "answer": false },
+      { "text": "Honey never spoils", "answer": true }
+    ]
+  },
   "questions": [
     {
       "text": "Which planet has the most moons?",

@@ -287,7 +287,7 @@ export class Relay {
         // Only an authenticated host, and only verbs the display knows. The
         // relay stays dumb: it forwards the command, the display owns the game.
         if (conn.role !== 'host') return;
-        if (!['next', 'pause', 'resume', 'restart'].includes(msg.cmd)) return;
+        if (!['next', 'pause', 'resume', 'restart', 'showdown'].includes(msg.cmd)) return;
         this.#broadcastDisplays(encodeJson({ type: 'HOST_CMD', cmd: msg.cmd }));
         break;
       }
