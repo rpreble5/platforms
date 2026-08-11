@@ -21,6 +21,7 @@ import {
   PERCH_Y,
   RANGE_ID,
   RANGE_MIN_W,
+  TIER,
   buildArena,
   buildRangeArena,
   answerId,
@@ -400,6 +401,55 @@ test('every island answer is reachable: floor to perch to answer', () => {
         }
       }
       assert.ok(landed, `${n} answers: answer ${i} is reachable from perch ${perch.id}`);
+    }
+  }
+});
+
+test('every board in the stacked layouts is climbable from the floor', () => {
+  // Reachability as a graph: a hop works if it rises exactly one TIER and the
+  // horizontal gap is comfortably inside the jump's drift (120px; the arc
+  // covers ~200px while rising a tier). BFS from the floor must reach every
+  // platform — answers AND perches, because an unreachable perch is a trap
+  // that looks like a route.
+  /** @param {any} a @param {any} b @returns {number} */
+  const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0);
+
+  for (const layout of /** @type {const} */ (['pyramid', 'reverse-pyramid'])) {
+    for (const n of [2, 3, 4, 5]) {
+      const plats = buildArena(n, layout);
+      const reached = new Set(['floor']);
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const from of plats) {
+          if (!reached.has(String(from.id))) continue;
+          for (const to of plats) {
+            if (reached.has(String(to.id))) continue;
+            if (from.y - to.y === TIER && gap(from, to) <= 120) {
+              reached.add(String(to.id));
+              grew = true;
+            }
+          }
+        }
+      }
+      for (const p of plats) {
+        assert.ok(reached.has(String(p.id)), `${layout}/${n}: ${p.id} is reachable`);
+        assert.ok(p.y >= 340, `${layout}/${n}: ${p.id} stays below the question banner`);
+      }
+
+      // Boards sharing a tier must not touch, or they read as one platform.
+      const byTier = new Map();
+      for (const p of plats.filter((q) => q.id !== 'floor')) {
+        const row = byTier.get(p.y) ?? [];
+        row.push(p);
+        byTier.set(p.y, row);
+      }
+      for (const row of byTier.values()) {
+        row.sort((/** @type {any} */ a, /** @type {any} */ b) => a.x - b.x);
+        for (let i = 1; i < row.length; i++) {
+          const g = row[i].x - (row[i - 1].x + row[i - 1].w);
+          assert.ok(g >= 40, `${layout}/${n}: ${row[i - 1].id}/${row[i].id} gap ${g}px`);
+        }
+      }
     }
   }
 });

@@ -240,7 +240,10 @@ export function loadQuestions(root) {
       problems.push(`${where}: ${q.answers.length} answers, must be 2-5 — skipped`);
       return false;
     }
-    if (q.layout !== undefined && q.layout !== 'row' && q.layout !== 'islands') {
+    if (
+      q.layout !== undefined &&
+      !['row', 'islands', 'pyramid', 'reverse-pyramid'].includes(q.layout)
+    ) {
       problems.push(`${where}: unknown layout "${q.layout}" — using islands`);
       delete q.layout;
     }

@@ -59,8 +59,9 @@ of question share the deck:
 
 ```jsonc
 // Multiple choice (2-5 answers): get onto the platform with the right answer.
-// Answers sit two jumps up, reached via non-answer perch platforms; add
-// "layout": "row" for the old flat single-jump arena.
+// Answers sit two jumps up, reached via non-answer perch platforms. Optional
+// "layout": "row" (flat single-jump), "pyramid" or "reverse-pyramid" (answers
+// stacked at different heights — deliberately uneven, pick your spice).
 { "text": "Capital of Australia?", "answers": ["Sydney", "Canberra"], "correct": 1 }
 
 // Range: a number line is drawn along the floor; stand inside the correct

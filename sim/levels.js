@@ -12,6 +12,11 @@
  *    floor, with a tier of non-answer perches between. Every answer is one
  *    diagonal hop from an adjacent perch, and every perch one jump from the
  *    floor: exactly two committed jumps per answer, whichever answer it is.
+ *  - `pyramid` / `reverse-pyramid` — answers at DIFFERENT heights, stacked
+ *    into a peak (or a valley). These deliberately trade the equal-effort
+ *    rule for shape and drama, which is why they are opt-in per question
+ *    rather than a default: the deck author is choosing the spice. Both are
+ *    left-right symmetric, and every hop is the same 160px rise as always.
  */
 
 import { PHYS, WORLD_H, WORLD_W } from '../shared/tuning.js';
@@ -138,13 +143,27 @@ export const PERCH_W = GRID * 9;
  */
 const ISLAND_MAX_W = GRID * 20;
 
+/** One hop of height. Every tier in every layout is a multiple of this. */
+export const TIER = FLOOR_Y - PERCH_Y;
+
+/** @param {number} t @returns {number} y of a platform surface t hops up */
+export function tierY(t) {
+  return FLOOR_Y - TIER * t;
+}
+
+/** @typedef {'row'|'islands'|'pyramid'|'reverse-pyramid'} Layout */
+
 /**
  * @param {number} n number of answers, 2-5
- * @param {'row'|'islands'} [layout]
+ * @param {Layout} [layout]
  * @returns {Platform[]}
  */
 export function buildArena(n, layout = 'islands') {
-  return layout === 'row' ? buildRowArena(n) : buildIslandArena(n);
+  if (layout === 'row') return buildRowArena(n);
+  if (layout === 'pyramid' || layout === 'reverse-pyramid') {
+    return buildTieredArena(n, layout);
+  }
+  return buildIslandArena(n);
 }
 
 /**
@@ -248,6 +267,89 @@ export function buildIslandArena(n) {
       });
     }
   }
+
+  return platforms;
+}
+
+/** Board width in the tiered layouts: 14 tiles, small enough to stack. */
+const TIER_BOARD_W = GRID * 14;
+
+/**
+ * Hand-placed tier maps for the stacked layouts, one per answer count.
+ * `ans` and `perch` are [centerX, tier] pairs; answers keep deck order left
+ * to right. Placements obey two rules the reachability test enforces:
+ * every board is reachable from the floor through hops that rise exactly one
+ * TIER with at most a small horizontal gap, and nothing on a shared tier
+ * touches. Highest surface is tier 4 (y=340) — any higher collides with the
+ * question banner.
+ *
+ * @type {Record<string, Record<number, {ans: number[][], perch: number[][]}>>}
+ */
+const TIERED = {
+  pyramid: {
+    2: { ans: [[630, 2], [1290, 2]], perch: [[350, 1], [960, 1], [1570, 1], [960, 3]] },
+    3: { ans: [[550, 2], [960, 3], [1370, 2]], perch: [[250, 1], [960, 1], [1670, 1]] },
+    4: {
+      ans: [[430, 2], [745, 3], [1175, 3], [1490, 2]],
+      perch: [[178, 1], [960, 1], [1742, 1], [960, 2]],
+    },
+    5: {
+      ans: [[350, 2], [655, 3], [960, 4], [1265, 3], [1570, 2]],
+      perch: [[178, 1], [960, 1], [1742, 1], [960, 2]],
+    },
+  },
+  'reverse-pyramid': {
+    2: { ans: [[250, 3], [1670, 3]], perch: [[400, 1], [1520, 1], [178, 2], [1742, 2]] },
+    3: { ans: [[250, 3], [960, 1], [1670, 3]], perch: [[400, 1], [1520, 1], [178, 2], [1742, 2]] },
+    4: {
+      ans: [[250, 3], [745, 1], [1175, 1], [1670, 3]],
+      perch: [[400, 1], [1520, 1], [178, 2], [1742, 2]],
+    },
+    5: {
+      ans: [[250, 3], [605, 2], [960, 1], [1315, 2], [1670, 3]],
+      perch: [[350, 1], [1570, 1], [178, 2], [1742, 2]],
+    },
+  },
+};
+
+/**
+ * A stacked arena from a tier map: pyramid rises toward the centre, reverse
+ * pyramid toward the edges. The 5-answer pyramid is the full ziggurat —
+ * adjacent answer boards overlap slightly in x, one tier apart, so the
+ * pyramid face itself is climbable step by step.
+ * @param {number} n
+ * @param {'pyramid'|'reverse-pyramid'} layout
+ * @returns {Platform[]}
+ */
+export function buildTieredArena(n, layout) {
+  const count = Math.max(2, Math.min(5, n));
+  const spec = TIERED[layout][count];
+
+  /** @type {Platform[]} */
+  const platforms = [
+    { id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 },
+  ];
+
+  spec.ans.forEach(([center, tier], i) => {
+    platforms.push({
+      id: answerId(i),
+      x: center - TIER_BOARD_W / 2,
+      y: tierY(tier),
+      w: TIER_BOARD_W,
+      h: ANSWER_H,
+      oneWay: true,
+    });
+  });
+  spec.perch.forEach(([center, tier], j) => {
+    platforms.push({
+      id: `perch${j}`,
+      x: center - PERCH_W / 2,
+      y: tierY(tier),
+      w: PERCH_W,
+      h: ANSWER_H,
+      oneWay: true,
+    });
+  });
 
   return platforms;
 }

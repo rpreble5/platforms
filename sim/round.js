@@ -74,7 +74,7 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {'range'} [type]
  * @property {string[]} [answers]
  * @property {number} [correct]
- * @property {'row'|'islands'} [layout] choice arenas only; islands if absent
+ * @property {import('./levels.js').Layout} [layout] choice arenas only; islands if absent
  * @property {number} [min]
  * @property {number} [max]
  * @property {[number, number]} [answer]
