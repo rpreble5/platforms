@@ -11,7 +11,7 @@
  *    format even though the phone loads no modules.
  */
 
-import { createReadStream, readFileSync, statSync } from 'node:fs';
+import { createReadStream, readdirSync, readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
@@ -88,13 +88,24 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
 
     if (pathname === '/api/questions') {
       try {
-        const pack = loadQuestions(root);
+        // The pack param is matched against the actual directory listing, so
+        // it can only ever name a file that exists in questions/ — no paths.
+        const want = url.searchParams.get('pack');
+        const known = listPacks(root).map((p) => p.file);
+        const file = want && known.includes(want) ? want : 'default.json';
+        const pack = loadQuestions(root, file);
         res.writeHead(200, { 'Content-Type': MIME['.json'] });
         res.end(JSON.stringify(pack));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': MIME['.json'] });
         res.end(JSON.stringify({ error: String(err) }));
       }
+      return;
+    }
+
+    if (pathname === '/api/packs') {
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      res.end(JSON.stringify(listPacks(root)));
       return;
     }
 
@@ -200,17 +211,49 @@ function sendFile(res, abs) {
 
 
 /**
- * Read and sanity-check the question pack. Read fresh each request so editing
- * questions.json and reloading the display is the whole edit loop.
+ * Every question pack in questions/, with just enough metadata for a menu.
+ * Read fresh on each call — dropping a new pack file in and reloading the
+ * display is the whole workflow.
+ * @param {string} root
+ * @returns {Array<{file:string, name:string, questions:number, showdown:boolean}>}
+ */
+export function listPacks(root) {
+  const dir = path.join(root, 'questions');
+  /** @type {string[]} */
+  let files = [];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+  } catch {
+    return [];
+  }
+  return files.map((file) => {
+    try {
+      const j = JSON.parse(readFileSync(path.join(dir, file), 'utf8'));
+      return {
+        file,
+        name: typeof j.pack === 'string' ? j.pack : file.replace(/\.json$/, ''),
+        questions: Array.isArray(j.questions) ? j.questions.length : 0,
+        showdown: !!j.showdown?.statements?.length,
+      };
+    } catch {
+      return { file, name: `${file} (broken)`, questions: 0, showdown: false };
+    }
+  });
+}
+
+/**
+ * Read and sanity-check a question pack. Read fresh each request so editing
+ * questions/*.json and reloading the display is the whole edit loop.
  *
  * Problems are reported loudly but do not stop the game: refusing to start a
  * party because one answer is 29 characters long would be the wrong trade. The
  * length caps exist because of across-the-room readability, and an over-long
  * answer will simply be shrunk to fit by the renderer.
  * @param {string} root
+ * @param {string} [packFile] basename within questions/; callers validate
  */
-export function loadQuestions(root) {
-  const file = path.join(root, 'questions/default.json');
+export function loadQuestions(root, packFile = 'default.json') {
+  const file = path.join(root, 'questions', path.basename(packFile));
   const pack = JSON.parse(readFileSync(file, 'utf8'));
 
   /** @type {string[]} */
@@ -294,5 +337,11 @@ export function loadQuestions(root) {
     console.log('');
   }
 
-  return { pack: pack.pack ?? 'default', answerMs: pack.answerMs ?? 12000, questions, showdown };
+  return {
+    pack: pack.pack ?? 'default',
+    file: path.basename(packFile),
+    answerMs: pack.answerMs ?? 12000,
+    questions,
+    showdown,
+  };
 }

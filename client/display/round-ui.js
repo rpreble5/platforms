@@ -91,15 +91,27 @@ function fallOffset(t) {
 }
 
 /**
+ * @typedef {object} MenuView
+ * @property {Array<{file:string, name:string, questions:number, showdown:boolean}>} packs
+ * @property {number} packIndex
+ * @property {number} sel
+ * @property {boolean} loading
+ * @property {Array<'pack'|'time'|'quiz'|'showdown'>} items
+ * @property {number} answerMs
+ */
+
+/**
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/round.js').Game} g
  * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  * @param {number} playerCount
+ * @param {MenuView | null} [menu]
  */
-export function drawRoundOverlay(cx, g, roster, playerCount) {
+export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
   switch (g.phase) {
     case PHASE.LOBBY:
-      drawLobby(cx, playerCount);
+      if (menu) drawMenu(cx, menu, playerCount);
+      else drawLobby(cx, playerCount);
       break;
     case PHASE.INTRO:
     case PHASE.ANSWER:
@@ -117,6 +129,90 @@ export function drawRoundOverlay(cx, g, roster, playerCount) {
     default:
       break;
   }
+}
+
+/**
+ * The lobby menu. An overlay panel, deliberately NOT a screen: the world runs
+ * live behind it, so people warm up, find their avatar, and keep joining
+ * while the host picks a pack. Setup time is play time.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {MenuView} menu
+ * @param {number} playerCount
+ */
+function drawMenu(cx, menu, playerCount) {
+  const joined = Math.max(0, playerCount - 1);
+  const pack = menu.packs[menu.packIndex];
+  const rowH = 64;
+  const w = 880;
+  const h = 196 + menu.items.length * rowH;
+  // Right of the latency HUD's column, left of the QR: the one strip of sky
+  // nothing else claims.
+  const x0 = 420;
+  panel(cx, x0, 64, w, h);
+
+  cx.fillStyle = UI.paper;
+  cx.font = `800 58px ${FONT.display}`;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'alphabetic';
+  cx.fillText('Scan to join', x0 + 40, 142);
+
+  cx.font = `600 26px ${FONT.ui}`;
+  cx.fillStyle = joined ? UI.correct : UI.dim;
+  cx.fillText(
+    joined ? `${joined} player${joined === 1 ? '' : 's'} in — run around, more can join any time` : 'waiting for players…',
+    x0 + 40, 186
+  );
+
+  /** @param {'pack'|'time'|'quiz'|'showdown'} item @returns {[string, string]} */
+  const rowText = (item) => {
+    switch (item) {
+      case 'pack':
+        return [
+          'Pack',
+          menu.loading
+            ? 'loading…'
+            : pack
+              ? `◂ ${pack.name} (${pack.questions} questions${pack.showdown ? ' + showdown' : ''}) ▸`
+              : '—',
+        ];
+      case 'time':
+        return ['Answer time', `◂ ${Math.round(menu.answerMs / 1000)}s ▸`];
+      case 'quiz':
+        return ['Start quiz', ''];
+      case 'showdown':
+        return ['Start showdown ☠', 'no points — last one standing'];
+      default:
+        return ['', ''];
+    }
+  };
+
+  let ry = 236;
+  menu.items.forEach((item, i) => {
+    const selected = i === menu.sel;
+    if (selected) {
+      cx.fillStyle = 'rgba(255,255,255,0.08)';
+      cx.beginPath();
+      cx.roundRect(x0 + 24, ry - 40, w - 48, 56, 12);
+      cx.fill();
+    }
+    const [label, value] = rowText(item);
+    cx.font = `800 32px ${FONT.display}`;
+    cx.fillStyle = selected ? UI.gold : UI.paper;
+    cx.fillText(`${selected ? '▸ ' : '  '}${label}`, x0 + 40, ry);
+
+    if (value) {
+      cx.textAlign = 'right';
+      cx.font = `600 26px ${FONT.ui}`;
+      cx.fillStyle = selected ? UI.paper : UI.dim;
+      cx.fillText(value, x0 + w - 40, ry);
+      cx.textAlign = 'left';
+    }
+    ry += rowH;
+  });
+
+  cx.font = `500 20px ${FONT.ui}`;
+  cx.fillStyle = UI.dim;
+  cx.fillText('↑↓ select · ←→ change · Enter go · or drive it from the host page', x0 + 40, 64 + h - 28);
 }
 
 /**

@@ -47,6 +47,8 @@
   #next { background: #2f7a5a; font-size: 26px; padding: 28px; }
   #pause { background: #4d4177; }
   #showdown { background: #5c2320; color: #ffb08a; }
+  #menurow { display: flex; gap: 12px; }
+  #menurow button { font-size: 16px; padding: 16px 12px; }
   #restart { background: #46213f; color: #ff9db0; font-size: 17px; padding: 16px; }
   #restart.armed { background: #a12f3d; color: #fff; }
 
@@ -74,6 +76,10 @@
 </div>
 
 <button id="next">Start game</button>
+<div id="menurow" hidden>
+  <button id="pack">Pack</button>
+  <button id="atime">Time</button>
+</div>
 <button id="pause">Pause</button>
 <button id="showdown" hidden>Start showdown ☠</button>
 <div class="spacer"></div>
@@ -94,7 +100,8 @@ const $ = (id) => document.getElementById(id);
 const dot = $('dot'), phaseEl = $('phase'), qnum = $('qnum'), timer = $('timer'),
       qtext = $('qtext'), players = $('players'), gate = $('gate'),
       nextBtn = $('next'), pauseBtn = $('pause'), restartBtn = $('restart'),
-      showdownBtn = $('showdown');
+      showdownBtn = $('showdown'), menuRow = $('menurow'),
+      packBtn = $('pack'), timeBtn = $('atime');
 
 if (!key) {
   gate.classList.remove('hidden');
@@ -175,11 +182,19 @@ function render() {
   pauseBtn.disabled = (inLobby || over) && !sd;
   showdownBtn.hidden = !state.canShowdown;
   restartBtn.textContent = sd ? 'Abort showdown' : 'Restart from question 1';
+
+  menuRow.hidden = !state.menu;
+  if (state.menu) {
+    packBtn.textContent = `Pack: ${state.menu.packs[state.menu.packIndex] ?? '?'} ▸`;
+    timeBtn.textContent = `Time: ${Math.round(state.menu.answerMs / 1000)}s ▸`;
+  }
 }
 
 nextBtn.addEventListener('click', () => cmd('next'));
 pauseBtn.addEventListener('click', () => cmd(state?.paused ? 'resume' : 'pause'));
 showdownBtn.addEventListener('click', () => cmd('showdown'));
+packBtn.addEventListener('click', () => cmd('packnext'));
+timeBtn.addEventListener('click', () => cmd('timenext'));
 
 // Restart nukes the whole game, so it takes two taps: arm, then confirm.
 let armTimer = 0;

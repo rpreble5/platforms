@@ -1,0 +1,26 @@
+{
+  "pack": "Warm-up",
+  "answerMs": 9000,
+  "questions": [
+    {
+      "text": "Which of these is a real bone?",
+      "answers": ["Funny bone", "Stapes", "Wish bone"],
+      "correct": 1,
+      "layout": "row"
+    },
+    {
+      "text": "How many chambers does the human heart have?",
+      "answers": ["2", "3", "4", "5"],
+      "correct": 2,
+      "layout": "row"
+    },
+    {
+      "type": "range",
+      "text": "About how many litres of blood does an adult have?",
+      "min": 0,
+      "max": 12,
+      "answer": [4.5, 5.5],
+      "unit": "L"
+    }
+  ]
+}

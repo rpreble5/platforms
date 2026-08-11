@@ -191,6 +191,12 @@ function onJson(msg) {
             startShowdown();
           }
           break;
+        case 'packnext':
+          if (menuOpen()) void selectPack(menu.packIndex + 1);
+          break;
+        case 'timenext':
+          if (menuOpen()) cycleTime(1);
+          break;
         default:
           break;
       }
@@ -199,6 +205,88 @@ function onJson(msg) {
     default:
       break;
   }
+}
+
+// ------------------------------------------------------------------ menu
+
+/**
+ * The lobby menu. It's an overlay, not a mode: the world keeps simulating and
+ * phones keep joining underneath it the whole time — warming up in the arena
+ * IS the lobby experience.
+ */
+const menu = {
+  /** @type {Array<{file:string, name:string, questions:number, showdown:boolean}>} */
+  packs: [],
+  packIndex: 0,
+  // The cursor starts on "Start quiz" (row 2), so a plain Enter in the lobby
+  // still does what it has always done — including for the smoke test.
+  sel: 2,
+  loading: false,
+};
+
+/** Menu rows, in display order. Showdown appears only when the pack has one. */
+function menuItems() {
+  /** @type {Array<'pack'|'time'|'quiz'|'showdown'>} */
+  const items = ['pack', 'time', 'quiz'];
+  if (showdownSpec) items.push('showdown');
+  // Switching to a pack without a showdown can strand the cursor one row past
+  // the end; pull it back rather than crash the key handler.
+  if (menu.sel >= items.length) menu.sel = items.length - 1;
+  return items;
+}
+
+function menuOpen() {
+  return !showdown && game.phase === PHASE.LOBBY;
+}
+
+/**
+ * Load a pack by index into the live game. Only ever called in the lobby,
+ * where scores are empty and losing the Game object costs nothing.
+ * @param {number} index
+ */
+async function selectPack(index) {
+  if (!menu.packs.length) return;
+  menu.packIndex = ((index % menu.packs.length) + menu.packs.length) % menu.packs.length;
+  menu.loading = true;
+  try {
+    const file = menu.packs[menu.packIndex].file;
+    const pack = await fetch(`/api/questions?pack=${encodeURIComponent(file)}`).then((r) => r.json());
+    if (pack?.questions?.length) {
+      game = createGame(pack.questions, pack.answerMs);
+      showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
+      hud.note = '';
+    } else {
+      hud.note = `${file}: no valid questions`;
+    }
+  } catch {
+    hud.note = 'could not load pack';
+  }
+  menu.loading = false;
+  lastCheckpoint = 0;
+}
+
+/** The answer-time setting cycles through party-sensible windows. */
+const TIME_STEPS = [8000, 12000, 15000, 20000];
+
+/** @param {number} dir */
+function cycleTime(dir) {
+  const i = TIME_STEPS.findIndex((t) => t >= game.answerMs - 1);
+  const at = i === -1 ? 1 : i;
+  game.answerMs = TIME_STEPS[(at + dir + TIME_STEPS.length) % TIME_STEPS.length];
+  lastCheckpoint = 0;
+}
+
+/** @param {'pack'|'time'|'quiz'|'showdown'} item @param {number} dir */
+function menuAdjust(item, dir) {
+  if (item === 'pack') void selectPack(menu.packIndex + dir);
+  else if (item === 'time') cycleTime(dir);
+}
+
+/** @param {'pack'|'time'|'quiz'|'showdown'} item */
+function menuActivate(item) {
+  if (item === 'quiz') startGame(game, world);
+  else if (item === 'showdown') startShowdown();
+  else menuAdjust(item, 1);
 }
 
 // ------------------------------------------------------------------ showdown
@@ -283,7 +371,7 @@ function frame(now) {
   if (!showdown) drawConfetti(cx, game, world);
   flash.draw(cx);
   if (showdown) drawShowdown(cx, showdown, world, roster);
-  else drawRoundOverlay(cx, game, roster, world.players.size);
+  else drawRoundOverlay(cx, game, roster, world.players.size, menuOpen() ? { ...menu, items: menuItems(), answerMs: game.answerMs } : null);
   drawHud(cx, {
     bus,
     roster,
@@ -331,6 +419,14 @@ function frame(now) {
             canShowdown:
               !!showdownSpec &&
               (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER),
+            menu:
+              game.phase === PHASE.LOBBY && menu.packs.length
+                ? {
+                    packs: menu.packs.map((p) => p.name),
+                    packIndex: menu.packIndex,
+                    answerMs: game.answerMs,
+                  }
+                : null,
             answerLeftMs:
               game.phase === PHASE.ANSWER ? Math.max(0, answerWindow(game) - game.phaseT) : null,
             scores: Object.fromEntries(game.scores),
@@ -365,8 +461,19 @@ function onKey(e, down) {
     }
     if (k === 'enter') {
       if (showdown) sdSkip(showdown, world);
-      else if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
+      else if (menuOpen()) menuActivate(menuItems()[menu.sel]);
+      else if (game.phase === PHASE.GAME_OVER) startGame(game, world);
       else skip(game, world);
+      e.preventDefault();
+      return;
+    }
+    // In the lobby the arrow keys belong to the menu; the test avatar keeps
+    // A/D/space. Everywhere else arrows stay on the avatar.
+    if (menuOpen() && (k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') && !tune.on) {
+      const items = menuItems();
+      if (k === 'arrowup') menu.sel = (menu.sel + items.length - 1) % items.length;
+      else if (k === 'arrowdown') menu.sel = (menu.sel + 1) % items.length;
+      else menuAdjust(items[menu.sel], k === 'arrowright' ? 1 : -1);
       e.preventDefault();
       return;
     }
@@ -499,6 +606,11 @@ async function init() {
     if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
     else hud.note = 'no questions loaded — check questions/default.json';
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
+    const packs = await fetch('/api/packs').then((r) => r.json());
+    if (Array.isArray(packs) && packs.length) {
+      menu.packs = packs;
+      menu.packIndex = Math.max(0, packs.findIndex((/** @type {any} */ p) => p.file === pack?.file));
+    }
   } catch {
     hud.note = 'could not load questions';
   }

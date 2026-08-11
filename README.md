@@ -44,7 +44,8 @@ with no phone at all.
 
 | key | on the display |
 |---|---|
-| **`Enter`** | **start the game / skip to the next question** |
+| **`Enter`** | **activate the menu row / skip to the next question** |
+| `↑` `↓` `←` `→` | in the lobby: navigate the menu, change pack / answer time |
 | `S` | start the showdown (sudden-death true/false, from the lobby) |
 | `P` | pause |
 | `R` | restart from question one / abort the showdown |
@@ -54,9 +55,12 @@ with no phone at all.
 | `T` | live physics tuning (`←→` pick, `↑↓` adjust, shift for ×5, `P` prints a paste-able block) |
 | `F` | arm the flash-test target |
 
-Questions live in `questions/default.json` and are re-read on every display
-reload, so editing them and hitting refresh is the whole edit loop. Two kinds
-of question share the deck:
+Questions live in `questions/*.json` — every file there is a selectable pack
+in the lobby menu (name it with a top-level `"pack"` field). Packs are re-read
+on every selection, so editing one and re-picking it is the whole edit loop.
+The lobby is a live arena: players join, run and warm up underneath the menu
+while the host picks a pack and answer time. Two kinds of question share a
+deck:
 
 ```jsonc
 // Multiple choice (2-5 answers): get onto the platform with the right answer.
