@@ -23,6 +23,7 @@ import { UI } from './theme.js';
  * @property {string} hat
  * @property {string} [pattern]
  * @property {number} [cohortIndex]
+ * @property {boolean} [cohortSet]
  * @property {boolean} connected
  */
 

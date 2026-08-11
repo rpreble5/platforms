@@ -9,6 +9,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 
 import { qrToTerminal } from '../shared/qr.js';
 import { createHandler } from './http.js';
@@ -23,6 +24,15 @@ const dev = process.argv.includes('--watch') || process.env.NODE_ENV !== 'produc
 const lanAddr = bestLanAddress();
 const joinUrl = lanAddr ? `http://${lanAddr.address}:${PORT}/` : `http://localhost:${PORT}/`;
 
+// The host key gates the remote-control page. Four characters from an
+// unambiguous alphabet: it lives in a URL fragment the host taps once, and
+// the only attacker is a resident who peeked at the QR — not the internet.
+const HOST_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const hostKey =
+  process.env.HOST_KEY ??
+  [...randomBytes(4)].map((b) => HOST_ALPHABET[b % HOST_ALPHABET.length]).join('');
+const hostUrl = `${joinUrl}host#${hostKey}`;
+
 /** @type {Relay} */
 let relay;
 
@@ -34,7 +44,7 @@ const server = http.createServer(
     getJoinUrl: () => joinUrl,
   })
 );
-relay = new Relay(server);
+relay = new Relay(server, { hostKey });
 
 // Mirror the display's checkpoint to disk so a Node restart doesn't lose it.
 const stateDir = path.join(root, 'state');
@@ -59,6 +69,7 @@ server.listen(PORT, HOST, () => {
   console.log('');
   console.log(`  players   ${bold(joinUrl)}`);
   console.log(`  display   ${bold(`http://localhost:${PORT}/display/`)}`);
+  console.log(`  host      ${bold(hostUrl)}  (keep the key to yourself)`);
   console.log('');
 
   const others = lanAddresses().filter((a) => a.address !== addr?.address);

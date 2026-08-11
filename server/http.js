@@ -131,6 +131,14 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
+    // The host's remote control. The page itself is public; the WebSocket
+    // requires the key from the URL fragment, which never reaches the server
+    // in the HTTP request — so serving the page to a curious player is free.
+    if (pathname === '/host' || pathname === '/host/') {
+      sendFile(res, path.join(root, 'client/host/index.html'));
+      return;
+    }
+
     // Accessory authoring loop: every shape on its own year's body, at the three
     // sizes the game draws, with anything clipped by the sprite margin flagged.
     if (pathname === '/sprites' || pathname === '/sprites/') {

@@ -53,8 +53,10 @@ export class Relay {
 
   /**
    * @param {import('node:http').Server} httpServer
+   * @param {{hostKey?: string}} [opts] hostKey gates the /host remote control;
+   *   without one, HOST_HELLO is always rejected.
    */
-  constructor(httpServer) {
+  constructor(httpServer, opts = {}) {
     // (1) Before the upgrade — covers phones, the display, and plain HTTP alike.
     httpServer.on('connection', (socket) => socket.setNoDelay(true));
 
@@ -72,6 +74,9 @@ export class Relay {
     this.phoneByPlayerId = new Map();
     /** @type {Set<Conn>} */
     this.displays = new Set();
+    /** @type {Set<Conn>} */
+    this.hosts = new Set();
+    this.hostKey = opts.hostKey ?? null;
     /** @type {unknown} */
     this.checkpoint = null;
     this.checkpointAt = 0;
@@ -257,6 +262,33 @@ export class Relay {
         if (conn.role !== 'display') return;
         this.checkpoint = msg.state;
         this.checkpointAt = Date.now();
+        // The checkpoint doubles as the host page's status feed — same data,
+        // same 500ms cadence, no second reporting path to keep honest.
+        if (this.hosts.size) {
+          const frame = encodeJson({ type: 'HOST_STATE', state: msg.state });
+          for (const h of this.hosts) this.#send(h, frame);
+        }
+        break;
+      }
+
+      case 'HOST_HELLO': {
+        if (!this.hostKey || msg.key !== this.hostKey) {
+          this.#send(conn, encodeJson({ type: 'KICK', reason: 'Wrong host key.' }));
+          conn.ws.close();
+          return;
+        }
+        conn.role = 'host';
+        this.hosts.add(conn);
+        this.#send(conn, encodeJson({ type: 'HOST_STATE', state: this.checkpoint }));
+        break;
+      }
+
+      case 'HOST_CMD': {
+        // Only an authenticated host, and only verbs the display knows. The
+        // relay stays dumb: it forwards the command, the display owns the game.
+        if (conn.role !== 'host') return;
+        if (!['next', 'pause', 'resume', 'restart'].includes(msg.cmd)) return;
+        this.#broadcastDisplays(encodeJson({ type: 'HOST_CMD', cmd: msg.cmd }));
         break;
       }
 
@@ -281,6 +313,7 @@ export class Relay {
   #onClose(conn) {
     this.conns.delete(conn);
     this.displays.delete(conn);
+    this.hosts.delete(conn);
     if (conn.player) {
       const held = this.phoneByPlayerId.get(conn.player.id);
       if (held === conn) {

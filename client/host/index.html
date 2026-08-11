@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Host controls</title>
+<style>
+  /* One phone, one thumb, a dark room. Everything oversized on purpose. */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: #14101f; color: #e8e2d4;
+    font: 500 16px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    user-select: none; -webkit-user-select: none;
+  }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  #dot { width: 12px; height: 12px; border-radius: 50%; background: #f25f5c; flex: none; }
+  #dot.on { background: #3ddc9a; }
+  header b { letter-spacing: .06em; font-size: 14px; color: #9a90bd; }
+  #players { margin-left: auto; font: 600 14px ui-monospace, Menlo, monospace; color: #9a90bd; }
+
+  #card {
+    background: #201a33; border: 1px solid #3a3157; border-radius: 16px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  #phase {
+    display: inline-block; font: 800 13px ui-monospace, Menlo, monospace;
+    letter-spacing: .1em; padding: 3px 10px; border-radius: 999px;
+    background: #3a3157; color: #cfc6e8;
+  }
+  #phase.answer { background: #1d4b38; color: #3ddc9a; }
+  #phase.paused { background: #5c2320; color: #ff8a5c; }
+  #qnum { font: 600 13px ui-monospace, Menlo, monospace; color: #7a6fa3; margin-left: 8px; }
+  #timer { float: right; font: 800 24px ui-monospace, Menlo, monospace; color: #ffd93d; }
+  #qtext { margin: 10px 0 0; font-size: 19px; font-weight: 700; min-height: 3em; }
+
+  button {
+    width: 100%; border: 0; border-radius: 16px; color: inherit;
+    font: 800 22px/1 inherit; padding: 22px; margin-bottom: 12px;
+    background: #3a3157; touch-action: manipulation;
+  }
+  button:active { transform: scale(0.98); filter: brightness(1.15); }
+  button:disabled { opacity: .35; }
+  #next { background: #2f7a5a; font-size: 26px; padding: 28px; }
+  #pause { background: #4d4177; }
+  #restart { background: #46213f; color: #ff9db0; font-size: 17px; padding: 16px; }
+  #restart.armed { background: #a12f3d; color: #fff; }
+
+  #gate {
+    position: fixed; inset: 0; background: #14101f; display: flex;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 32px; font-size: 17px; color: #9a90bd;
+  }
+  #gate.hidden { display: none; }
+  .spacer { flex: 1; }
+  footer { text-align: center; color: #4d4472; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="dot"></div>
+  <b>HOST</b>
+  <span id="players">–</span>
+</header>
+
+<div id="card">
+  <span id="phase">CONNECTING</span><span id="qnum"></span><span id="timer"></span>
+  <p id="qtext">Waiting for the display…</p>
+</div>
+
+<button id="next">Start game</button>
+<button id="pause">Pause</button>
+<div class="spacer"></div>
+<button id="restart">Restart from question 1</button>
+<footer>Commands go to the display. Enter / P / R on its keyboard still work.</footer>
+
+<div id="gate" class="hidden"></div>
+
+<script>
+'use strict';
+// This page is deliberately dependency-free: JSON frames behind type byte 0,
+// same as the rest of the cold path. The key rides in the URL fragment so it
+// never appears in an HTTP request line.
+const T_JSON = 0;
+const key = location.hash.slice(1);
+
+const $ = (id) => document.getElementById(id);
+const dot = $('dot'), phaseEl = $('phase'), qnum = $('qnum'), timer = $('timer'),
+      qtext = $('qtext'), players = $('players'), gate = $('gate'),
+      nextBtn = $('next'), pauseBtn = $('pause'), restartBtn = $('restart');
+
+if (!key) {
+  gate.classList.remove('hidden');
+  gate.textContent = 'No key in the URL. Open the exact host link printed in the server console (it ends with #XXXX).';
+}
+
+/** @type {WebSocket | null} */
+let ws = null;
+let rejected = false;
+let state = null;
+
+function connect() {
+  if (rejected || !key) return;
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => sendJson({ type: 'HOST_HELLO', key });
+  ws.onclose = () => {
+    dot.classList.remove('on');
+    if (!rejected) setTimeout(connect, 1000);
+  };
+  ws.onmessage = (ev) => {
+    const bytes = new Uint8Array(ev.data);
+    if (!bytes.length || bytes[0] !== T_JSON) return;
+    let msg;
+    try { msg = JSON.parse(new TextDecoder().decode(bytes.subarray(1))); } catch { return; }
+    if (msg.type === 'KICK') {
+      rejected = true;
+      gate.classList.remove('hidden');
+      gate.textContent = 'Key rejected. Re-open the host link from the server console — the key changes on every server restart.';
+      return;
+    }
+    if (msg.type === 'HOST_STATE') {
+      dot.classList.add('on');
+      state = msg.state;
+      render();
+    }
+  };
+}
+
+function sendJson(obj) {
+  if (!ws || ws.readyState !== 1) return;
+  const body = new TextEncoder().encode(JSON.stringify(obj));
+  const b = new Uint8Array(body.length + 1);
+  b[0] = T_JSON;
+  b.set(body, 1);
+  ws.send(b);
+}
+
+function cmd(c) {
+  sendJson({ type: 'HOST_CMD', cmd: c });
+  if (navigator.vibrate) navigator.vibrate(15);
+}
+
+function render() {
+  if (!state) return;
+  const inLobby = state.phase === 'LOBBY';
+  const over = state.phase === 'GAME_OVER';
+
+  phaseEl.textContent = state.paused ? 'PAUSED' : state.phase ?? '–';
+  phaseEl.className = state.paused ? 'paused' : state.phase === 'ANSWER' ? 'answer' : '';
+  qnum.textContent = !inLobby && state.qCount ? `Q${(state.qIndex ?? 0) + 1}/${state.qCount}` : '';
+  timer.textContent =
+    state.answerLeftMs != null && !state.paused ? Math.ceil(state.answerLeftMs / 1000) + 's' : '';
+  qtext.textContent = inLobby
+    ? 'In the lobby — waiting for players to join.'
+    : over
+      ? 'Game over. Final scores are on the screen.'
+      : (state.text ?? '…');
+  players.textContent = `${Math.max(0, (state.players ?? 1) - 1)} players`;
+
+  nextBtn.textContent = inLobby ? 'Start game' : over ? 'Play again' : 'Skip to next question ▸';
+  pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+  pauseBtn.disabled = inLobby || over;
+}
+
+nextBtn.addEventListener('click', () => cmd('next'));
+pauseBtn.addEventListener('click', () => cmd(state?.paused ? 'resume' : 'pause'));
+
+// Restart nukes the whole game, so it takes two taps: arm, then confirm.
+let armTimer = 0;
+restartBtn.addEventListener('click', () => {
+  if (restartBtn.classList.contains('armed')) {
+    restartBtn.classList.remove('armed');
+    restartBtn.textContent = 'Restart from question 1';
+    clearTimeout(armTimer);
+    cmd('restart');
+  } else {
+    restartBtn.classList.add('armed');
+    restartBtn.textContent = 'Tap again to confirm restart';
+    armTimer = setTimeout(() => {
+      restartBtn.classList.remove('armed');
+      restartBtn.textContent = 'Restart from question 1';
+    }, 3000);
+  }
+});
+
+connect();
+</script>
+</body>
+</html>

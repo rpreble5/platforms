@@ -24,7 +24,7 @@ import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJ
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
-import { PHASE, createGame, skip, startGame, stepRound } from '../../sim/round.js';
+import { PHASE, answerWindow, createGame, currentQuestion, skip, startGame, stepRound } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { drawRoundOverlay } from './round-ui.js';
 import { loadArt } from './art.js';
@@ -139,6 +139,7 @@ function onJson(msg) {
           hat: p.hat,
           pattern: p.pattern,
           cohortIndex: p.cohortIndex,
+          cohortSet: p.cohortSet,
           connected: p.connected,
         });
         addPlayer(world, p.id);
@@ -158,6 +159,30 @@ function onJson(msg) {
     }
     case 'NET_STATS':
       net.set(msg.playerId, { rttP50: msg.rttP50, rttP95: msg.rttP95, loss: msg.loss });
+      break;
+    case 'HOST_CMD':
+      // The host phone's remote control, relayed by the server. Same verbs the
+      // keyboard has — the display stays the only authority over the game.
+      switch (msg.cmd) {
+        case 'next':
+          if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
+          else skip(game, world);
+          break;
+        case 'pause':
+          game.paused = true;
+          hud.note = 'PAUSED by host — press P or use the host page to resume';
+          break;
+        case 'resume':
+          game.paused = false;
+          hud.note = '';
+          break;
+        case 'restart':
+          startGame(game, world);
+          break;
+        default:
+          break;
+      }
+      lastCheckpoint = 0; // report the new state immediately, not in 500ms
       break;
     default:
       break;
@@ -235,6 +260,11 @@ function frame(now) {
         players: world.players.size,
         phase: game.phase,
         qIndex: game.qIndex,
+        qCount: game.questions.length,
+        text: currentQuestion(game)?.text ?? null,
+        paused: game.paused,
+        answerLeftMs:
+          game.phase === PHASE.ANSWER ? Math.max(0, answerWindow(game) - game.phaseT) : null,
         scores: Object.fromEntries(game.scores),
       },
     });

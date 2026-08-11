@@ -10,8 +10,9 @@
  */
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
+import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
-import { PHASE, answerWindow, currentQuestion, standings } from '../../sim/round.js';
+import { PHASE, answerWindow, currentQuestion, standings, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { FONT, UI } from './theme.js';
 
@@ -92,7 +93,7 @@ function fallOffset(t) {
 /**
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/round.js').Game} g
- * @param {Map<number, {name:string, color:string}>} roster
+ * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  * @param {number} playerCount
  */
 export function drawRoundOverlay(cx, g, roster, playerCount) {
@@ -200,21 +201,74 @@ function drawQuestion(cx, g) {
 }
 
 /**
+ * Year-vs-year standings, or null unless at least two years actually have
+ * scored players — a solo keyboard test should never show an empty rivalry.
+ * @param {import('../../sim/round.js').Game} g
+ * @param {Map<number, {cohortIndex?: number, cohortSet?: boolean}>} roster
+ * @returns {Array<{count:number, total:number, avg:number}> | null}
+ */
+function teamsFor(g, roster) {
+  const teams = teamStandings(g.scores, (id) => {
+    const look = roster.get(id);
+    return look?.cohortSet ? clampCohort(look.cohortIndex ?? -1) : -1;
+  });
+  return teams.filter((t) => t.count > 0).length >= 2 ? teams : null;
+}
+
+/**
+ * The rivalry strip: PGY1 / PGY2 / PGY3 average score, leader in gold.
+ * Averages, not sums — see teamStandings.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {Array<{count:number, total:number, avg:number}>} teams
+ * @param {number} x @param {number} y @param {number} w
+ */
+function drawTeamStrip(cx, teams, x, y, w) {
+  const best = Math.max(...teams.map((t) => (t.count ? t.avg : -1)));
+  const colW = w / teams.length;
+  cx.textAlign = 'center';
+  teams.forEach((t, i) => {
+    const cxp = x + colW * (i + 0.5);
+    const leading = t.count > 0 && t.avg === best;
+    cx.font = `800 22px ${FONT.display}`;
+    cx.fillStyle = leading ? UI.gold : UI.dim;
+    cx.fillText(`${leading ? '★ ' : ''}${COHORTS[i].label}`, cxp, y);
+    cx.font = `700 26px ${FONT.mono}`;
+    cx.fillStyle = t.count ? (leading ? UI.gold : UI.faint) : UI.dim;
+    cx.fillText(t.count ? String(t.avg) : '—', cxp, y + 34);
+    cx.font = `500 15px ${FONT.ui}`;
+    cx.fillStyle = UI.dim;
+    cx.fillText(t.count ? `avg of ${t.count}` : 'nobody yet', cxp, y + 58);
+  });
+  cx.textAlign = 'left';
+}
+
+/**
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/round.js').Game} g
- * @param {Map<number, {name:string, color:string}>} roster
+ * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  */
 function drawScoreboard(cx, g, roster) {
   const rows = g.results.filter((r) => r.correct).slice(0, 10);
+  const teams = teamsFor(g, roster);
   const w = 760;
   const rowH = 46;
-  const h = 116 + Math.max(1, rows.length) * rowH;
+  const teamH = teams ? 104 : 0;
+  const h = 116 + Math.max(1, rows.length) * rowH + teamH;
   const x = (WORLD_W - w) / 2;
   // Sits high: the correct platform and whoever survived on it are the payoff,
   // and burying them under a panel wastes the best moment of the round.
   const y = 190;
 
   panel(cx, x, y, w, h);
+  if (teams) {
+    cx.strokeStyle = UI.panelEdge;
+    cx.lineWidth = 1;
+    cx.beginPath();
+    cx.moveTo(x + 28, y + h - teamH + 4);
+    cx.lineTo(x + w - 28, y + h - teamH + 4);
+    cx.stroke();
+    drawTeamStrip(cx, teams, x, y + h - teamH + 36, w);
+  }
 
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
@@ -255,13 +309,15 @@ function drawScoreboard(cx, g, roster) {
 /**
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/round.js').Game} g
- * @param {Map<number, {name:string, color:string}>} roster
+ * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  */
 function drawFinal(cx, g, roster) {
   const top = standings(g).slice(0, 10);
+  const teams = teamsFor(g, roster);
   const w = 800;
   const rowH = 50;
-  const h = 150 + Math.max(1, top.length) * rowH;
+  const teamH = teams ? 96 : 0;
+  const h = 150 + Math.max(1, top.length) * rowH + teamH;
   const x = (WORLD_W - w) / 2;
   const y = (WORLD_H - h) / 2;
 
@@ -276,7 +332,11 @@ function drawFinal(cx, g, roster) {
   cx.fillStyle = UI.faint;
   cx.fillText('press R to play again', WORLD_W / 2, y + 114);
 
-  let ry = y + 178;
+  // The year rivalry gets the top slot on the final board — it's the thing
+  // the whole room shares, where individual rank belongs to one person.
+  if (teams) drawTeamStrip(cx, teams, x, y + 156, w);
+
+  let ry = y + 178 + teamH;
   top.forEach((s, i) => {
     const look = roster.get(s.id) ?? { name: `#${s.id}`, color: UI.dim };
     cx.textAlign = 'left';

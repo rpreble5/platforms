@@ -40,6 +40,7 @@ import {
   standings,
   startGame,
   stepRound,
+  teamStandings,
 } from './round.js';
 
 /** @type {import('./round.js').Question[]} */
@@ -788,6 +789,27 @@ test('a mixed deck rebuilds the arena for each question type', () => {
   assert.ok(world.platforms.some((p) => p.id === answerId(0)), 'signboards are back');
   assert.ok(!world.platforms.some((p) => p.id === RANGE_ID), 'the band is gone');
   assert.ok(world.platforms.some((p) => p.id === 'floor'), 'and the floor is whole again');
+});
+
+// ---------------------------------------------------------------- teams
+
+test('team standings average per resident and skip the unassigned', () => {
+  const scores = new Map([
+    [1, 1000], [2, 2000],        // PGY1: avg 1500
+    [3, 900],                    // PGY2: avg 900
+    [0, 5000],                   // keyboard player: no cohort, excluded
+  ]);
+  /** @type {Record<number, number>} */
+  const cohort = { 1: 0, 2: 0, 3: 1, 0: -1 };
+  const teams = teamStandings(scores, (/** @type {number} */ id) => cohort[id]);
+
+  assert.equal(teams[0].count, 2);
+  assert.equal(teams[0].avg, 1500);
+  assert.equal(teams[1].avg, 900);
+  assert.equal(teams[2].count, 0, 'empty year stays empty');
+  assert.equal(teams[2].avg, 0);
+  const summed = teams.reduce((s, t) => s + t.total, 0);
+  assert.equal(summed, 3900, 'the excluded score is in no team');
 });
 
 // ---------------------------------------------------------------- debris

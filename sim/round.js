@@ -444,6 +444,32 @@ export function speedBonus(arrivalMs, windowMs) {
 }
 
 /**
+ * Team totals by training year.
+ *
+ * The number that matters is the AVERAGE, not the sum: the years are never
+ * exactly the same size, and a team score that a cohort wins by simply having
+ * more residents in the room isn't a rivalry, it's a headcount. `cohortOf`
+ * returns a team index, or -1 to exclude (keyboard player, anyone who never
+ * picked a year).
+ *
+ * @param {Map<number, number>} scores
+ * @param {(id: number) => number} cohortOf
+ * @param {number} [teamCount]
+ * @returns {Array<{count:number, total:number, avg:number}>}
+ */
+export function teamStandings(scores, cohortOf, teamCount = 3) {
+  const teams = Array.from({ length: teamCount }, () => ({ count: 0, total: 0, avg: 0 }));
+  for (const [id, s] of scores) {
+    const c = cohortOf(id);
+    if (c < 0 || c >= teamCount) continue;
+    teams[c].count++;
+    teams[c].total += s;
+  }
+  for (const t of teams) t.avg = t.count ? Math.round(t.total / t.count) : 0;
+  return teams;
+}
+
+/**
  * @param {Game} g
  * @returns {Array<{id:number, score:number}>} highest first
  */
