@@ -5,6 +5,10 @@
  * a Node test, and so adding an accessory is a table edit rather than writing
  * drawing code.
  *
+ * How this gets from here onto an avatar — the two representations of an
+ * accessory, pools, collision resolution, draw order, caching — is written up
+ * in docs/ACCESSORIES.md. What follows is only how to author one.
+ *
  * ## The artboard
  *
  * Draw on a **100 x 100 board** that maps onto the avatar's body box:

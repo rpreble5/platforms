@@ -166,6 +166,11 @@ flagged and measured. Worth using rather than trusting a vector tool, because
 the artboard *stretches*: the body is taller than it is wide, so a circle drawn
 square lands as an ellipse — by 1.05× on a PGY1 and 1.96× on a PGY3.
 
+How the whole thing hangs together in code — the two representations of an
+accessory, how pools partition by index range, where the accessory sits in
+collision resolution, the draw order, and the two caches — is
+**[docs/ACCESSORIES.md](docs/ACCESSORIES.md)**.
+
 Four axes carry identity:
 
 | axis | who chooses | what it's for |
