@@ -209,6 +209,29 @@ export function loadQuestions(root) {
   const problems = [];
   const questions = (pack.questions ?? []).filter((/** @type {any} */ q, /** @type {number} */ i) => {
     const where = `Q${i + 1}`;
+
+    if (q?.type === 'range') {
+      if (typeof q.text !== 'string') {
+        problems.push(`${where}: missing text — skipped`);
+        return false;
+      }
+      if (!Number.isFinite(q.min) || !Number.isFinite(q.max) || q.min >= q.max) {
+        problems.push(`${where}: range needs numeric min < max — skipped`);
+        return false;
+      }
+      const [lo, hi] = Array.isArray(q.answer) ? q.answer : [];
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo > hi) {
+        problems.push(`${where}: "answer" must be [low, high] with low <= high — skipped`);
+        return false;
+      }
+      if (lo < q.min || hi > q.max) {
+        problems.push(`${where}: answer [${lo}, ${hi}] falls outside the ${q.min}-${q.max} line — skipped`);
+        return false;
+      }
+      if (q.text.length > 90) problems.push(`${where}: question is ${q.text.length} chars (>90 is hard to read across a room)`);
+      return true;
+    }
+
     if (typeof q?.text !== 'string' || !Array.isArray(q?.answers)) {
       problems.push(`${where}: missing text or answers — skipped`);
       return false;

@@ -28,6 +28,22 @@
       "correct": 1
     },
     {
+      "type": "range",
+      "text": "What is a normal resting heart rate for an adult?",
+      "min": 0,
+      "max": 160,
+      "answer": [60, 100],
+      "unit": "bpm"
+    },
+    {
+      "type": "range",
+      "text": "Normal adult body temperature is about how many °C?",
+      "min": 34,
+      "max": 41,
+      "answer": [36.5, 37.5],
+      "unit": "°C"
+    },
+    {
       "text": "Which animal has the longest lifespan?",
       "answers": ["Giant tortoise", "Greenland shark", "Bowhead whale"],
       "correct": 1

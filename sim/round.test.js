@@ -13,7 +13,19 @@ import { BTN_JUMP, BTN_RIGHT } from '../shared/protocol.js';
 import { COHORTS } from '../shared/palette.js';
 import { PHYS, STEP_MS } from '../shared/tuning.js';
 import { addPlayer, createWorld, step } from './world.js';
-import { ANSWER_Y, FLOOR_Y, GRID, buildArena, answerId, snapToGrid, spawnFor } from './levels.js';
+import {
+  ANSWER_Y,
+  FLOOR_Y,
+  GRID,
+  RANGE_ID,
+  RANGE_MIN_W,
+  buildArena,
+  buildRangeArena,
+  answerId,
+  rangeX,
+  snapToGrid,
+  spawnFor,
+} from './levels.js';
 import {
   BASE_POINTS,
   DEBRIS_LIFE_MS,
@@ -32,6 +44,9 @@ const DECK = [
   { text: 'Q one', answers: ['a', 'b', 'c', 'd'], correct: 1 },
   { text: 'Q two', answers: ['x', 'y'], correct: 0 },
 ];
+
+/** @type {import('./round.js').Question & import('./levels.js').RangeQuestion} */
+const RANGE_Q = { type: 'range', text: 'Dose of X?', min: 0, max: 20, answer: [8, 10], unit: 'mg' };
 
 /**
  * The result row for a player. Throws rather than returning undefined so a
@@ -527,6 +542,131 @@ test('a held button during the freeze does not fire when it lifts', () => {
   const p = /** @type {any} */ (world.players.get(1));
   assert.equal(p.jumpBuffer, 0, 'no jump is sitting buffered');
   assert.equal(p.input.pressEdge, 0, 'no edge is sitting latched');
+});
+
+// ---------------------------------------------------------------- range rounds
+
+/**
+ * Put a player on the floor at the x that maps to `value` on the number line.
+ * @param {import('./world.js').World} world
+ * @param {number} id @param {number} value
+ */
+function standAt(world, id, value) {
+  const p = /** @type {any} */ (world.players.get(id));
+  p.x = rangeX(RANGE_Q, value) - p.w / 2;
+  p.y = FLOOR_Y - p.h;
+  p.vx = 0;
+  p.vy = 0;
+}
+
+test('a range arena tiles the whole floor with no gaps or overlaps', () => {
+  const plats = buildRangeArena(/** @type {any} */ (RANGE_Q)).filter((p) => p.id !== 'pit');
+  const sorted = [...plats].sort((a, b) => a.x - b.x);
+  assert.equal(sorted.length, 3);
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    assert.equal(prev.x + prev.w, sorted[i].x, `${prev.id} meets ${sorted[i].id} exactly`);
+  }
+  for (const p of sorted) assert.equal(p.y, FLOOR_Y, `${p.id} is at floor height`);
+
+  const band = sorted.find((p) => p.id === RANGE_ID);
+  assert.ok(band, 'the band exists');
+  assert.equal(band.x, rangeX(RANGE_Q, 8), 'band starts at the low bound');
+  assert.equal(band.x + band.w, rangeX(RANGE_Q, 10), 'band ends at the high bound');
+});
+
+test('a sliver of a range is widened into a standable band', () => {
+  const q = /** @type {any} */ ({ ...RANGE_Q, answer: [9, 9.05] });
+  const band = buildRangeArena(q).find((p) => p.id === RANGE_ID);
+  assert.ok(band, 'the band exists');
+  assert.ok(band.w >= RANGE_MIN_W, `band is ${band.w}px, wants >= ${RANGE_MIN_W}`);
+  const c = (rangeX(q, 9) + rangeX(q, 9.05)) / 2;
+  assert.ok(Math.abs(band.x + band.w / 2 - c) < 1, 'widening keeps the band centred on the answer');
+});
+
+test('standing inside the range scores, outside does not', () => {
+  const { world, game } = rig([RANGE_Q]);
+  addPlayer(world, 1);
+  addPlayer(world, 2);
+  startGame(game, world);
+  run(world, game, 3100);
+
+  standAt(world, 1, 9); // middle of 8-10
+  standAt(world, 2, 15); // confidently wrong
+  run(world, game, 12900);
+
+  assert.equal(game.phase, PHASE.REVEAL);
+  assert.equal(resultFor(game, 1).correct, true);
+  assert.ok(resultFor(game, 1).points >= BASE_POINTS);
+  assert.equal(resultFor(game, 2).points, 0);
+});
+
+test('committing to the band earlier scores more', () => {
+  const { world, game } = rig([RANGE_Q]);
+  addPlayer(world, 1);
+  addPlayer(world, 2);
+  startGame(game, world);
+  run(world, game, 3100);
+
+  standAt(world, 1, 8.5);
+  run(world, game, 2000);
+  standAt(world, 2, 9.5);
+  run(world, game, 10900);
+
+  const early = resultFor(game, 1);
+  const late = resultFor(game, 2);
+  assert.ok(early.correct && late.correct);
+  assert.ok(early.points > late.points, `${early.points} should beat ${late.points}`);
+});
+
+test('at the reveal the floor outside the range falls away and the band survives', () => {
+  const { world, game } = rig([RANGE_Q]);
+  addPlayer(world, 1);
+  startGame(game, world);
+  run(world, game, 3100);
+  standAt(world, 1, 9);
+
+  assert.equal(world.platforms.filter((p) => String(p.id).startsWith('floor')).length, 2);
+  run(world, game, 12900);
+
+  assert.equal(game.phase, PHASE.REVEAL);
+  assert.ok(world.platforms.some((p) => p.id === RANGE_ID), 'the band is still solid');
+  assert.equal(world.platforms.filter((p) => String(p.id).startsWith('floor')).length, 0);
+  assert.equal(game.debris.length, 2, 'both outer slabs are falling');
+});
+
+test('a wrong guesser falls off screen once and stays there — no respawn loop', () => {
+  const { world, game } = rig([RANGE_Q]);
+  addPlayer(world, 1);
+  startGame(game, world);
+  run(world, game, 3100);
+  standAt(world, 1, 15);
+
+  run(world, game, 12900); // into REVEAL: the ground under them is gone
+  run(world, game, 2000);
+
+  const p = /** @type {any} */ (world.players.get(1));
+  assert.ok(p.y > 1080, `fell below the visible world (y=${p.y.toFixed(0)})`);
+  assert.equal(p.respawns, 0, 'caught by the pit, not the KILL_Y respawn');
+  assert.ok(p.standingOn?.id === 'pit', 'resting on the pit ledge');
+});
+
+test('a mixed deck rebuilds the arena for each question type', () => {
+  const { world, game } = rig([RANGE_Q, DECK[0]]);
+  addPlayer(world, 1);
+  startGame(game, world);
+
+  assert.ok(world.platforms.some((p) => p.id === RANGE_ID), 'range arena first');
+  assert.ok(!world.platforms.some((p) => p.id === answerId(0)), 'no signboards yet');
+
+  run(world, game, 3100);
+  standAt(world, 1, 9);
+  run(world, game, 12900 + 2300 + 4100); // through to question two
+
+  assert.equal(game.qIndex, 1);
+  assert.ok(world.platforms.some((p) => p.id === answerId(0)), 'signboards are back');
+  assert.ok(!world.platforms.some((p) => p.id === RANGE_ID), 'the band is gone');
+  assert.ok(world.platforms.some((p) => p.id === 'floor'), 'and the floor is whole again');
 });
 
 // ---------------------------------------------------------------- debris

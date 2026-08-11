@@ -18,7 +18,7 @@
  * just doesn't drive the maths.
  */
 
-import { buildArena, answerId, spawnFor } from './levels.js';
+import { RANGE_ID, buildArena, buildRangeArena, answerId, spawnFor } from './levels.js';
 import { step } from './world.js';
 
 export const PHASE = /** @type {const} */ ({
@@ -59,10 +59,25 @@ export const SCORE_MS = 4000;
 export const DEBRIS_LIFE_MS = 1600;
 
 /**
+ * Two kinds of question share one deck.
+ *
+ * Multiple choice (`type` absent): `answers` + `correct`, answered by standing
+ * on a signboard platform.
+ *
+ * Range (`type: 'range'`): `min`/`max` describe a number line drawn along the
+ * floor, `answer` is the inclusive correct interval, and players answer by
+ * standing inside it. The floor is built in three segments with the correct
+ * band carrying the answer id, so everything below `targetId` is shared.
+ *
  * @typedef {object} Question
  * @property {string} text
- * @property {string[]} answers
- * @property {number} correct
+ * @property {'range'} [type]
+ * @property {string[]} [answers]
+ * @property {number} [correct]
+ * @property {number} [min]
+ * @property {number} [max]
+ * @property {[number, number]} [answer]
+ * @property {string} [unit]
  * @property {number} [answerMs]
  */
 
@@ -123,6 +138,18 @@ export function currentQuestion(g) {
 /** @param {Game} g @returns {number} ms allowed for the current question */
 export function answerWindow(g) {
   return currentQuestion(g)?.answerMs ?? g.answerMs;
+}
+
+/**
+ * The platform that counts as the correct answer — a signboard for multiple
+ * choice, the floor band for a range. Everything that scores goes through
+ * this, so neither the arrivals recorder nor the buzzer snapshot knows which
+ * kind of round it is in.
+ * @param {Question} q
+ * @returns {string}
+ */
+export function targetId(q) {
+  return q.type === 'range' ? RANGE_ID : answerId(q.correct ?? 0);
 }
 
 /**
@@ -228,10 +255,18 @@ function enter(g, world, phase) {
     // debris for a beat so the fall reads as consequence. Anyone standing on
     // one drops with it — inputs are already frozen, so there's no scrambling
     // off, which is what makes the moment legible.
+    //
+    // In a range round the "wrong platforms" are the floor itself: everything
+    // outside the correct band falls away, and whoever guessed wrong falls
+    // with the ground they chose to stand on.
     const q = currentQuestion(g);
     if (q) {
-      const keep = answerId(q.correct);
-      const doomed = world.platforms.filter((p) => p.id?.startsWith('ans') && p.id !== keep);
+      const keep = targetId(q);
+      const doomed = world.platforms.filter((p) =>
+        q.type === 'range'
+          ? p.id === 'floorL' || p.id === 'floorR'
+          : p.id?.startsWith('ans') && p.id !== keep
+      );
       world.platforms = world.platforms.filter((p) => !doomed.includes(p));
       g.debris = doomed;
       g.debrisT = 0;
@@ -262,7 +297,10 @@ export function nextQuestion(g, world) {
   g.results = [];
   g.debris = [];
   g.debrisT = 0;
-  world.platforms = buildArena(q.answers.length);
+  world.platforms =
+    q.type === 'range'
+      ? buildRangeArena(/** @type {import('./levels.js').RangeQuestion} */ (q))
+      : buildArena(q.answers?.length ?? 2);
   respawnAll(world);
   enter(g, world, PHASE.INTRO);
 }
@@ -335,7 +373,7 @@ export function respawnAll(world) {
 function recordArrivals(g, world, offset = 0) {
   const q = currentQuestion(g);
   if (!q) return;
-  const target = answerId(q.correct);
+  const target = targetId(q);
   for (const p of world.players.values()) {
     if (g.arrivals.has(p.id)) continue;
     if (p.standingOn?.id === target) g.arrivals.set(p.id, offset + g.phaseT);
@@ -349,7 +387,7 @@ function recordArrivals(g, world, offset = 0) {
 function score(g, world) {
   const q = currentQuestion(g);
   if (!q) return;
-  const target = answerId(q.correct);
+  const target = targetId(q);
   const window = answerWindow(g);
 
   /** @type {Result[]} */

@@ -7,6 +7,7 @@
 
 import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
+import { RANGE_ID } from '../../sim/levels.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
 import { drawFloor, drawSky } from './stage.js';
@@ -70,7 +71,11 @@ export function render(cx, world, roster, game, opts) {
   // crowd standing on a platform never covers the answer it represents.
   drawDebris(cx, game);
   for (const p of world.platforms) {
-    if (p.id === 'floor') drawFloor(cx, p);
+    // A range round's floor comes in three pieces (plus the off-screen pit,
+    // which is never drawn); each piece is rendered exactly like the floor.
+    if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) {
+      drawFloor(cx, p);
+    }
   }
   drawSigns(cx, world, game);
 

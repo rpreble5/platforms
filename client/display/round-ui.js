@@ -10,12 +10,14 @@
  */
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
+import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, standings } from '../../sim/round.js';
-import { drawSign, drawSignText, fitFont } from './stage.js';
+import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { FONT, UI } from './theme.js';
 
 /**
- * Answer signboards for the live platforms.
+ * The answer furniture for the current round: signboards for multiple choice,
+ * the number line (and, after the buzzer, the glowing band) for a range.
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/world.js').World} world
  * @param {import('../../sim/round.js').Game} g
@@ -24,12 +26,25 @@ export function drawSigns(cx, world, g) {
   const q = currentQuestion(g);
   const revealing = g.phase === PHASE.REVEAL || g.phase === PHASE.SCORE;
 
+  if (q?.type === 'range') {
+    const rq = /** @type {import('../../sim/levels.js').RangeQuestion} */ (q);
+    if (revealing) {
+      // The outer floor is gone — a full number line over the void would read
+      // as a glitch. The band and its interval are the whole story now.
+      const band = world.platforms.find((p) => p.id === RANGE_ID);
+      if (band) drawRangeReveal(cx, band, rq);
+    } else {
+      drawNumberLine(cx, rq);
+    }
+    return;
+  }
+
   for (const p of world.platforms) {
     if (!p.id?.startsWith('ans')) continue;
     const i = Number(p.id.slice(3));
     const state = revealing && q && i === q.correct ? 'correct' : 'idle';
     drawSign(cx, p, { state });
-    if (q) drawSignText(cx, p, q.answers[i] ?? '', { state });
+    if (q) drawSignText(cx, p, q.answers?.[i] ?? '', { state });
   }
 }
 
@@ -49,14 +64,21 @@ export function drawDebris(cx, g) {
   const tilt = Math.min(0.22, g.debrisT / 5000);
 
   for (const p of g.debris) {
-    const i = Number(String(p.id).slice(3));
+    const isFloor = String(p.id).startsWith('floor');
     cx.save();
     cx.globalAlpha = Math.max(0, 1 - fall / 900);
     cx.translate(p.x + p.w / 2, p.y + fall);
-    cx.rotate((p.x > WORLD_W / 2 ? 1 : -1) * tilt);
+    // Floor slabs are several times wider than a signboard, so the same tilt
+    // would swing their far edge up through the surviving band. Damp it.
+    cx.rotate((p.x + p.w / 2 > WORLD_W / 2 ? 1 : -1) * tilt * (isFloor ? 0.35 : 1));
     cx.translate(-(p.x + p.w / 2), -p.y);
-    drawSign(cx, p, { state: 'wrong' });
-    if (q) drawSignText(cx, p, q.answers[i] ?? '', { state: 'wrong' });
+    if (isFloor) {
+      drawFloor(cx, p);
+    } else {
+      const i = Number(String(p.id).slice(3));
+      drawSign(cx, p, { state: 'wrong' });
+      if (q) drawSignText(cx, p, q.answers?.[i] ?? '', { state: 'wrong' });
+    }
     cx.restore();
   }
 }

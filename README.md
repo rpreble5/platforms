@@ -54,7 +54,19 @@ with no phone at all.
 | `F` | arm the flash-test target |
 
 Questions live in `questions/default.json` and are re-read on every display
-reload, so editing them and hitting refresh is the whole edit loop.
+reload, so editing them and hitting refresh is the whole edit loop. Two kinds
+of question share the deck:
+
+```jsonc
+// Multiple choice: stand on the platform with the right answer.
+{ "text": "Capital of Australia?", "answers": ["Sydney", "Canberra"], "correct": 1 }
+
+// Range: a number line is drawn along the floor; stand inside the correct
+// interval before time runs out. At the reveal, the floor outside the range
+// falls away — along with everyone standing on it.
+{ "type": "range", "text": "Appropriate dose of drug X?",
+  "min": 0, "max": 20, "answer": [8, 10], "unit": "mg" }
+```
 
 ---
 

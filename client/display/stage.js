@@ -14,7 +14,7 @@
  */
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
-import { ANSWER_H, ANSWER_SIGN_H, FLOOR_Y } from '../../sim/levels.js';
+import { ANSWER_H, ANSWER_SIGN_H, FLOOR_Y, rangeX } from '../../sim/levels.js';
 import { SPRITES, art, drawTileBox, drawTiled, has } from './art.js';
 import { FONT, INK, SKY, STAGE, UI } from './theme.js';
 
@@ -159,6 +159,113 @@ export function drawSignText(cx, p, text, opts = {}) {
   cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
   cx.fillText(text, p.x + p.w / 2 + (state !== 'idle' ? 24 : 0), midY);
   cx.restore();
+}
+
+/**
+ * The number line for a range round, drawn on the floor's face — BELOW the
+ * surface the players stand on. Feet sit at FLOOR_Y and sprites grow upward,
+ * so nothing down here is ever covered by the crowd, no matter how full the
+ * room is. That's the same reasoning as the signboard skirt.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {import('../../sim/levels.js').RangeQuestion} q
+ */
+export function drawNumberLine(cx, q) {
+  const x0 = rangeX(q, q.min);
+  const x1 = rangeX(q, q.max);
+  const railY = FLOOR_Y + 26;
+
+  cx.save();
+  cx.fillStyle = 'rgba(255,255,255,0.4)';
+  cx.fillRect(x0, railY, x1 - x0, 4);
+
+  cx.textAlign = 'center';
+  cx.textBaseline = 'alphabetic';
+  cx.font = `800 34px ${FONT.display}`;
+
+  const step = tickStep(q.max - q.min);
+  /** @type {number[]} */
+  const ticks = [q.min];
+  for (let v = Math.ceil((q.min + 1e-9) / step) * step; v < q.max - 1e-9; v += step) {
+    // Skip a multiple that would sit on top of an endpoint label.
+    if (v - q.min > step * 0.35 && q.max - v > step * 0.35) ticks.push(v);
+  }
+  ticks.push(q.max);
+
+  for (const v of ticks) {
+    const x = rangeX(q, v);
+    cx.fillStyle = 'rgba(255,255,255,0.4)';
+    cx.fillRect(x - 2, railY, 4, 20);
+    cx.fillStyle = UI.paper;
+    const label = v === q.max && q.unit ? `${fmtValue(v)} ${q.unit}` : fmtValue(v);
+    // Endpoint labels (especially "160 bpm") can overhang the world edge —
+    // shift them inward rather than letting the projector crop them.
+    const half = cx.measureText(label).width / 2;
+    cx.fillText(label, Math.max(half + 10, Math.min(WORLD_W - half - 10, x)), railY + 62);
+  }
+  cx.restore();
+}
+
+/**
+ * The reveal for a range round: the surviving band glows, and the correct
+ * interval is spelled out above the heads of whoever is still standing on it.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {import('../../sim/collide.js').Platform} band
+ * @param {import('../../sim/levels.js').RangeQuestion} q
+ */
+export function drawRangeReveal(cx, band, q) {
+  cx.save();
+  cx.fillStyle = 'rgba(61,220,154,0.25)';
+  cx.fillRect(band.x, FLOOR_Y, band.w, WORLD_H - FLOOR_Y);
+  cx.fillStyle = 'rgba(61,220,154,0.8)';
+  cx.fillRect(band.x, FLOOR_Y, band.w, 14);
+
+  const [lo, hi] = q.answer;
+  const text = `${fmtValue(lo)}–${fmtValue(hi)}${q.unit ? ` ${q.unit}` : ''}`;
+  // Clamp so a band at the edge of the line doesn't push the text off screen.
+  const cxp = Math.max(180, Math.min(WORLD_W - 180, band.x + band.w / 2));
+  const y = FLOOR_Y - 170;
+
+  cx.textAlign = 'center';
+  cx.textBaseline = 'alphabetic';
+  cx.font = `800 54px ${FONT.display}`;
+  cx.fillStyle = INK;
+  cx.fillText(text, cxp + 3, y + 3);
+  cx.fillStyle = UI.correct;
+  cx.fillText(text, cxp, y);
+
+  // Arrow from the text down toward the band, over the survivors' heads.
+  cx.fillStyle = UI.correct;
+  cx.beginPath();
+  cx.moveTo(cxp, y + 52);
+  cx.lineTo(cxp - 16, y + 24);
+  cx.lineTo(cxp + 16, y + 24);
+  cx.closePath();
+  cx.fill();
+  cx.restore();
+}
+
+/**
+ * A tick spacing that yields a readable number of labels (roughly 6-10) for
+ * any span, sticking to the steps people count in: 1, 2, 2.5, 5 x 10^k.
+ * @param {number} span
+ * @returns {number}
+ */
+export function tickStep(span) {
+  const raw = span / 8;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  for (const m of [1, 2, 2.5, 5, 10]) {
+    if (m * pow >= raw - 1e-9) return m * pow;
+  }
+  return 10 * pow;
+}
+
+/**
+ * Trim float noise: 7.5 stays "7.5", 8.000000001 becomes "8".
+ * @param {number} v
+ * @returns {string}
+ */
+export function fmtValue(v) {
+  return String(+v.toFixed(2));
 }
 
 /**

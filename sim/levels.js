@@ -51,6 +51,74 @@ const EDGE_MARGIN = 70;
 const MIN_GAP = 60;
 
 /**
+ * The platform id of the correct band in a range round. Starts with 'ans' so
+ * everything keyed on "the answer platform" — arrivals, atBuzzer, scoring —
+ * treats it exactly like a signboard platform.
+ */
+export const RANGE_ID = 'ansband';
+/**
+ * Never build a band narrower than this. A range like [9, 9.05] on a 0-100
+ * scale would map to a strip thinner than a player; standing "in" it would be
+ * luck. Two tiles is comfortably wider than one avatar.
+ */
+export const RANGE_MIN_W = GRID * 2;
+
+/**
+ * @typedef {object} RangeQuestion
+ * @property {'range'} type
+ * @property {string} text
+ * @property {number} min left end of the number line
+ * @property {number} max right end of the number line
+ * @property {[number, number]} answer inclusive correct interval
+ * @property {string} [unit] shown on the line's last label and the reveal
+ */
+
+/**
+ * Where a value sits on screen. The line spans the same usable width the
+ * answer boards do, so the mapping is shared by the arena builder and the
+ * number-line renderer — one function, or the zone and its labels drift apart.
+ * @param {{min: number, max: number}} q
+ * @param {number} v
+ * @returns {number} x in world pixels
+ */
+export function rangeX(q, v) {
+  const usable = WORLD_W - EDGE_MARGIN * 2;
+  return EDGE_MARGIN + ((v - q.min) / (q.max - q.min)) * usable;
+}
+
+/**
+ * Arena for a range question: the floor itself is the answer, split into three
+ * adjacent segments at the exact pixels where the correct interval starts and
+ * ends. The middle segment carries the answer id, so the entire scoring
+ * machine — first-touch arrivals, the buzzer snapshot, the settle — works on
+ * it unchanged. At the reveal the two outer segments crumble like wrong
+ * signboards do, and everyone standing on them goes down with the floor.
+ *
+ * The `pit` is an invisible ledge just below the visible world. Without it,
+ * fallers cross KILL_Y, respawn at centre screen, fall again, and loop for the
+ * whole scoreboard. With it they land once, out of sight, and stay there until
+ * the next question respawns everyone.
+ * @param {RangeQuestion} q
+ * @returns {Platform[]}
+ */
+export function buildRangeArena(q) {
+  let xa = rangeX(q, q.answer[0]);
+  let xb = rangeX(q, q.answer[1]);
+  if (xb - xa < RANGE_MIN_W) {
+    const c = (xa + xb) / 2;
+    xa = c - RANGE_MIN_W / 2;
+    xb = c + RANGE_MIN_W / 2;
+  }
+
+  return [
+    { id: 'floorL', x: -400, y: FLOOR_Y, w: xa + 400, h: 260 },
+    { id: RANGE_ID, x: xa, y: FLOOR_Y, w: xb - xa, h: 260 },
+    { id: 'floorR', x: xb, y: FLOOR_Y, w: WORLD_W + 400 - xb, h: 260 },
+    { id: 'pit', x: -400, y: WORLD_H + 150, w: WORLD_W + 800, h: 60 },
+  ];
+}
+
+/**
  * @param {number} n number of answers, 2-4
  * @returns {Platform[]}
  */
