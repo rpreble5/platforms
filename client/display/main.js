@@ -26,6 +26,7 @@ import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
 import { PHASE, answerWindow, createGame, currentQuestion, skip, startGame, stepRound } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
+import { drawConfetti } from './fx.js';
 import { drawRoundOverlay } from './round-ui.js';
 import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
@@ -233,6 +234,7 @@ function frame(now) {
   }
 
   render(cx, world, roster, game, { qr: game.phase === PHASE.LOBBY ? qr : null, joinUrl });
+  drawConfetti(cx, game, world);
   flash.draw(cx);
   drawRoundOverlay(cx, game, roster, world.players.size);
   drawHud(cx, {

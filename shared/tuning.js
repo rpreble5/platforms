@@ -111,6 +111,14 @@ export const FINDME_HOLD_MS = 400;
 export const FINDME_SHOW_MS = 2000;
 
 /**
+ * Kill switches for reveal effects. Rendering-only flourishes, one flag per
+ * effect so a party can veto any of them without touching code below it.
+ */
+export const FX = {
+  confetti: true,
+};
+
+/**
  * Visual-only fan-out between overlapping avatars, as a fraction of their
  * combined width. **0 disables it, which is the default.**
  *
