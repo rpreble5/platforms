@@ -321,6 +321,27 @@ function endShowdown() {
   game.phaseT = 0;
 }
 
+/**
+ * The current question's answer key, for the host's phone only. Rides the
+ * CHECKPOINT as a `quiz` block that the relay strips from the public copy —
+ * the host emcees from the back of the room and needs to know the answer
+ * before the reveal; the room must not.
+ * @returns {object | null}
+ */
+function quizForHost() {
+  if (showdown) {
+    const s = currentStatement(showdown);
+    return s ? { kind: 'tf', answer: s.answer } : null;
+  }
+  if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) return null;
+  const q = currentQuestion(game);
+  if (!q) return null;
+  if (q.type === 'range' && q.answer) {
+    return { kind: 'range', lo: q.answer[0], hi: q.answer[1], unit: q.unit ?? '' };
+  }
+  return { kind: 'choice', answers: q.answers, correct: q.correct };
+}
+
 // ------------------------------------------------------------------ the loop
 
 let last = performance.now();
@@ -409,6 +430,7 @@ function frame(now) {
             paused: showdown.paused,
             alive: showdown.alive.size,
             canShowdown: false,
+            quiz: quizForHost(),
             answerLeftMs:
               showdown.phase === SD_PHASE.ANSWER
                 ? Math.max(0, showdown.answerMs - showdown.phaseT)
@@ -436,6 +458,7 @@ function frame(now) {
             answerLeftMs:
               game.phase === PHASE.ANSWER ? Math.max(0, answerWindow(game) - game.phaseT) : null,
             scores: Object.fromEntries(game.scores),
+            quiz: quizForHost(),
           },
     });
   }

@@ -79,6 +79,13 @@ export class Relay {
     this.hostKey = opts.hostKey ?? null;
     /** @type {unknown} */
     this.checkpoint = null;
+    /**
+     * The unstripped checkpoint, quiz block (answer key) included. Only ever
+     * sent to sockets that passed the HOST_HELLO key check — `checkpoint`
+     * above is the public copy served by /api/checkpoint and the disk mirror.
+     * @type {unknown}
+     */
+    this.hostCheckpoint = null;
     this.checkpointAt = 0;
     this.#looksDirty = false;
 
@@ -105,7 +112,10 @@ export class Relay {
     /** @type {Conn} */
     const conn = {
       ws,
-      role: requestedRole === 'display' ? 'display' : requestedRole === 'host' ? 'host' : 'pending',
+      // 'host' is deliberately NOT grantable from the URL: that role now
+      // carries the answer key and the game controls, and it is only ever
+      // assigned by HOST_HELLO after the key check.
+      role: requestedRole === 'display' ? 'display' : 'pending',
       player: null,
       lastInputAt: Date.now(),
       lastMask: 0,
@@ -260,12 +270,23 @@ export class Relay {
 
       case 'CHECKPOINT': {
         if (conn.role !== 'display') return;
-        this.checkpoint = msg.state;
-        this.checkpointAt = Date.now();
         // The checkpoint doubles as the host page's status feed — same data,
-        // same 500ms cadence, no second reporting path to keep honest.
+        // same 500ms cadence, no second reporting path to keep honest. One
+        // exception: the `quiz` block is the answer key, and the public copy
+        // (/api/checkpoint, the disk mirror) is reachable from any phone on
+        // the room's network — so it is stripped here, at the one choke
+        // point, rather than trusting every future consumer to know.
+        this.hostCheckpoint = msg.state ?? null;
+        if (msg.state && typeof msg.state === 'object') {
+          const { quiz, ...pub } = /** @type {Record<string, unknown>} */ (msg.state);
+          void quiz;
+          this.checkpoint = pub;
+        } else {
+          this.checkpoint = msg.state ?? null;
+        }
+        this.checkpointAt = Date.now();
         if (this.hosts.size) {
-          const frame = encodeJson({ type: 'HOST_STATE', state: msg.state });
+          const frame = encodeJson({ type: 'HOST_STATE', state: this.hostCheckpoint });
           for (const h of this.hosts) this.#send(h, frame);
         }
         break;
@@ -279,7 +300,7 @@ export class Relay {
         }
         conn.role = 'host';
         this.hosts.add(conn);
-        this.#send(conn, encodeJson({ type: 'HOST_STATE', state: this.checkpoint }));
+        this.#send(conn, encodeJson({ type: 'HOST_STATE', state: this.hostCheckpoint }));
         break;
       }
 

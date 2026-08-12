@@ -31,10 +31,13 @@ import {
 } from '../shared/protocol.js';
 import { STALE_MS } from '../shared/tuning.js';
 
-/** Spin up a relay on an ephemeral port. */
-async function boot() {
+/**
+ * Spin up a relay on an ephemeral port.
+ * @param {{hostKey?: string}} [opts]
+ */
+async function boot(opts) {
   const server = http.createServer((_req, res) => res.writeHead(404).end());
-  const relay = new Relay(server);
+  const relay = new Relay(server, opts);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const { port } = /** @type {import('node:net').AddressInfo} */ (server.address());
@@ -245,6 +248,70 @@ test('the display can push feedback to a specific phone', { timeout: 15000 }, as
 
   display.json({ type: 'FEEDBACK_REQ', playerId: id, code: 3 });
   assert.ok(await phone.until((f) => f.some((x) => x[0] === 0x04 && x[1] === 3)), 'phone got the cue');
+});
+
+test('the answer key reaches the host and only the host', { timeout: 15000 }, async (t) => {
+  const rig = await boot({ hostKey: 'sesame' });
+  t.after(() => rig.close());
+
+  const display = await rig.open('display');
+  const host = await rig.open();
+  host.json({ type: 'HOST_HELLO', key: 'sesame' });
+  assert.ok(await host.until((f) => jsonMsgs(f).some((m) => m.type === 'HOST_STATE')));
+
+  display.json({
+    type: 'CHECKPOINT',
+    state: {
+      phase: 'ANSWER',
+      text: 'Q?',
+      quiz: { kind: 'choice', answers: ['a', 'b'], correct: 1 },
+    },
+  });
+  assert.ok(
+    await host.until((f) => jsonMsgs(f).some((m) => m.type === 'HOST_STATE' && m.state?.quiz?.correct === 1)),
+    'the host sees the quiz block'
+  );
+
+  // The public copy — what /api/checkpoint serves to any phone in the room —
+  // must carry everything EXCEPT the answer key.
+  const pub = /** @type {any} */ (rig.relay.checkpoint);
+  assert.equal(pub.phase, 'ANSWER', 'public checkpoint still has the status feed');
+  assert.equal(pub.quiz, undefined, 'public checkpoint has no answer key');
+
+  // A late-joining host gets the FULL state immediately, not the stripped copy.
+  const host2 = await rig.open();
+  host2.json({ type: 'HOST_HELLO', key: 'sesame' });
+  assert.ok(
+    await host2.until((f) => jsonMsgs(f).some((m) => m.type === 'HOST_STATE' && m.state?.quiz?.correct === 1)),
+    'a reconnecting host is not blind until the next checkpoint'
+  );
+});
+
+test('the host role cannot be claimed from the URL, only via the key', { timeout: 15000 }, async (t) => {
+  const rig = await boot({ hostKey: 'sesame' });
+  t.after(() => rig.close());
+
+  const display = await rig.open('display');
+  // ?role=host used to grant the role outright — with the answer key riding
+  // HOST_STATE and HOST_CMD gated on the role, that would be both a cheat
+  // channel and a free remote control.
+  const impostor = await rig.open('host');
+  impostor.json({ type: 'HOST_CMD', cmd: 'next' });
+  display.json({ type: 'CHECKPOINT', state: { phase: 'ANSWER', quiz: { kind: 'tf', answer: true } } });
+
+  assert.ok(
+    await display.until((f) => jsonMsgs(f).some((m) => m.type === 'ROSTER')),
+    'display is up'
+  );
+  await new Promise((r) => setTimeout(r, 150));
+  assert.ok(
+    !jsonMsgs(display.frames).some((m) => m.type === 'HOST_CMD'),
+    'the command was dropped'
+  );
+  assert.ok(
+    !jsonMsgs(impostor.frames).some((m) => m.type === 'HOST_STATE'),
+    'no state ever reaches the impostor'
+  );
 });
 
 test('a full roster reclaims the longest-gone disconnected slot', { timeout: 20000 }, async (t) => {

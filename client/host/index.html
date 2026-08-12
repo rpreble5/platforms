@@ -36,6 +36,11 @@
   #qnum { font: 600 13px ui-monospace, Menlo, monospace; color: #7a6fa3; margin-left: 8px; }
   #timer { float: right; font: 800 24px ui-monospace, Menlo, monospace; color: #ffd93d; }
   #qtext { margin: 10px 0 0; font-size: 19px; font-weight: 700; min-height: 3em; }
+  #alist { margin: 10px 0 0; padding-left: 24px; font-size: 15px; color: #9a90bd; }
+  #alist li { margin: 4px 0; }
+  #alist li.correct { color: #3ddc9a; font-weight: 800; }
+  #alist li.correct::after { content: ' ✓'; }
+  #akey { margin: 10px 0 0; font-weight: 800; color: #3ddc9a; }
 
   button {
     width: 100%; border: 0; border-radius: 16px; color: inherit;
@@ -73,6 +78,8 @@
 <div id="card">
   <span id="phase">CONNECTING</span><span id="qnum"></span><span id="timer"></span>
   <p id="qtext">Waiting for the display…</p>
+  <ol id="alist" hidden></ol>
+  <p id="akey" hidden></p>
 </div>
 
 <button id="next">Start game</button>
@@ -101,7 +108,8 @@ const dot = $('dot'), phaseEl = $('phase'), qnum = $('qnum'), timer = $('timer')
       qtext = $('qtext'), players = $('players'), gate = $('gate'),
       nextBtn = $('next'), pauseBtn = $('pause'), restartBtn = $('restart'),
       showdownBtn = $('showdown'), menuRow = $('menurow'),
-      packBtn = $('pack'), timeBtn = $('atime');
+      packBtn = $('pack'), timeBtn = $('atime'),
+      alist = $('alist'), akey = $('akey');
 
 if (!key) {
   gate.classList.remove('hidden');
@@ -174,6 +182,29 @@ function render() {
       : (state.text ?? '…');
   const n = Math.max(0, (state.players ?? 1) - 1);
   players.textContent = sd && state.alive != null ? `${state.alive} alive / ${n}` : `${n} players`;
+
+  // The answer key, so the host can emcee without waiting for the reveal.
+  // Only this page ever receives it — the relay strips it from everything
+  // that isn't an authenticated host socket.
+  const qz = state.quiz;
+  alist.hidden = akey.hidden = true;
+  if (qz && !inLobby && !over) {
+    if (qz.kind === 'choice' && Array.isArray(qz.answers)) {
+      alist.replaceChildren(...qz.answers.map((a, i) => {
+        const li = document.createElement('li');
+        li.textContent = a;
+        if (i === qz.correct) li.className = 'correct';
+        return li;
+      }));
+      alist.hidden = false;
+    } else if (qz.kind === 'range') {
+      akey.textContent = `Answer: ${qz.lo}–${qz.hi}${qz.unit ? ' ' + qz.unit : ''}`;
+      akey.hidden = false;
+    } else if (qz.kind === 'tf') {
+      akey.textContent = `Answer: ${qz.answer ? 'TRUE ✓' : 'FALSE ✕'}`;
+      akey.hidden = false;
+    }
+  }
 
   nextBtn.textContent = sd
     ? 'Skip statement ▸'
