@@ -278,6 +278,71 @@ export class Roster {
     return this.byId.get(id);
   }
 
+  /**
+   * Snapshot for the disk mirror, tokens included — the token IS the identity
+   * the whole reconnect story hangs on, so the file must stay server-local
+   * (state/ is gitignored). Written periodically and on shutdown; read back
+   * once at boot by `hydrate`.
+   */
+  serialize() {
+    return {
+      nextId: this.nextId,
+      joinCount: this.joinCount,
+      players: [...this.byId.values()],
+    };
+  }
+
+  /**
+   * Restore a snapshot at boot, so a Node restart mid-party is invisible:
+   * phones reconnect with their stored tokens and resolve to the same ids the
+   * display is still keeping score under.
+   *
+   * Every restored player starts disconnected — whoever is really still out
+   * there will HELLO within a heartbeat and take their record back; the rest
+   * sit as reclaimable ghosts, exactly like any other dropped phone. Live
+   * connection state is the one thing a snapshot can never speak for.
+   *
+   * Defensive on purpose: a truncated or hand-edited file must degrade to a
+   * fresh roster, never crash the boot. Records missing their identity core
+   * are skipped; counters are re-derived so a stale header can't hand out a
+   * duplicate id.
+   * @param {unknown} data
+   * @returns {number} how many players were restored
+   */
+  hydrate(data) {
+    if (!data || typeof data !== 'object') return 0;
+    const d = /** @type {{nextId?: unknown, joinCount?: unknown, players?: unknown}} */ (data);
+    if (!Array.isArray(d.players)) return 0;
+
+    this.byToken.clear();
+    this.byId.clear();
+    for (const raw of d.players) {
+      if (!raw || typeof raw !== 'object') continue;
+      const p = /** @type {PlayerRecord} */ (raw);
+      if (!Number.isInteger(p.id) || typeof p.token !== 'string' || !p.token) continue;
+      if (this.byId.has(p.id) || this.byToken.has(p.token)) continue;
+      if (this.byId.size >= MAX_PLAYERS) break;
+      /** @type {PlayerRecord} */
+      const record = {
+        ...p,
+        name: sanitizeName(String(p.name ?? '')),
+        connected: false,
+        lastSeen: Number.isFinite(p.lastSeen) ? p.lastSeen : Date.now(),
+        net: { rttP50: 0, rttP95: 0, loss: 0 },
+      };
+      this.byToken.set(record.token, record);
+      this.byId.set(record.id, record);
+    }
+
+    const maxId = Math.max(0, ...this.byId.keys());
+    this.nextId = Math.max(Number.isInteger(d.nextId) ? /** @type {number} */ (d.nextId) : 1, maxId + 1);
+    this.joinCount = Math.max(
+      Number.isInteger(d.joinCount) ? /** @type {number} */ (d.joinCount) : 0,
+      this.byId.size
+    );
+    return this.byId.size;
+  }
+
   /** Everything except the secret token. @returns {Array<Omit<PlayerRecord, 'token'>>} */
   publicList() {
     return [...this.byId.values()].map((r) => {

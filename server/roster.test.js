@@ -224,6 +224,60 @@ test('names are trimmed, capped, and stripped of control characters', () => {
   assert.equal(sanitizeName('x'.repeat(40)).length, 12);
 });
 
+test('a serialize/hydrate round trip survives a server restart', () => {
+  // The reconnect story across a Node restart: the phone still has its token,
+  // the display still has scores under the old player ids, and the rebooted
+  // roster has to reconnect the two.
+  const r = new Roster();
+  const [a, b] = joinMany(r, 2);
+  r.setLook(a.id, { name: 'Ada', cohortIndex: 2, colorIndex: 8, hatIndex: poolFor(2)[1] });
+
+  const fresh = new Roster();
+  assert.equal(fresh.hydrate(JSON.parse(JSON.stringify(r.serialize()))), 2);
+
+  for (const rec of fresh.byId.values()) {
+    assert.equal(rec.connected, false, 'a snapshot cannot vouch for a live connection');
+  }
+
+  const back = fresh.resolve(a.token, undefined);
+  assert.ok(back.ok);
+  const rec = /** @type {any} */ (back).record;
+  assert.equal(rec.id, a.id, 'same id, so the display-side score still belongs to them');
+  assert.equal(rec.name, 'Ada');
+  assert.equal(rec.colorIndex, 8);
+  assert.equal(rec.cohortIndex, 2);
+  assert.equal(rec.cohortSet, true, 'not made to pick their year again');
+  assert.equal(rec.connected, true);
+  assert.equal(/** @type {any} */ (back).isNew, false, 'a rejoin, not a new player');
+  assert.ok(fresh.byId.has(b.id), 'the player who has not rejoined yet keeps their slot');
+});
+
+test('a hydrated roster never re-issues a restored id or look', () => {
+  const r = new Roster();
+  const players = joinMany(r, 3);
+
+  const fresh = new Roster();
+  fresh.hydrate(JSON.parse(JSON.stringify(r.serialize())));
+
+  const nova = fresh.resolve(undefined, undefined);
+  assert.ok(nova.ok);
+  const rec = /** @type {any} */ (nova).record;
+  assert.ok(
+    players.every((p) => p.id !== rec.id),
+    'a brand-new join must not collide with a restored id'
+  );
+  assert.equal(new Set(looks(fresh)).size, 4, 'restored looks stay claimed');
+});
+
+test('hydrate degrades to an empty roster on garbage, never a crash', () => {
+  for (const junk of [null, 42, 'nope', {}, { players: 'x' }, { players: [null, { id: 'a' }, { id: 1 }] }]) {
+    const r = new Roster();
+    assert.equal(r.hydrate(junk), 0, `restored nothing from ${JSON.stringify(junk)}`);
+    const res = r.resolve(undefined, undefined);
+    assert.ok(res.ok, 'and the roster still works');
+  }
+});
+
 test('publicList exposes the look but never the token', () => {
   const r = new Roster();
   const [a] = joinMany(r, 1);

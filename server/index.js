@@ -8,7 +8,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 
 import { qrToTerminal } from '../shared/qr.js';
@@ -46,20 +46,46 @@ const server = http.createServer(
 );
 relay = new Relay(server, { hostKey });
 
-// Mirror the display's checkpoint to disk so a Node restart doesn't lose it.
+// Mirror the display's checkpoint AND the roster to disk so a Node restart
+// doesn't lose them. The roster is the one that matters: it holds the
+// token -> player mapping every phone's reconnect depends on. Restarting Node
+// mid-party without it would mint every returning phone a brand-new player
+// and orphan the scores the display is still holding.
 const stateDir = path.join(root, 'state');
-setInterval(() => {
-  if (!relay.checkpoint) return;
+const rosterFile = path.join(stateDir, 'roster.json');
+// A snapshot older than this is last session's crowd, not a mid-party
+// restart — resurrecting it would fill the lobby with 30 ghost avatars.
+const ROSTER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+try {
+  if (existsSync(rosterFile)) {
+    const saved = JSON.parse(readFileSync(rosterFile, 'utf8'));
+    if (Date.now() - (saved.at ?? 0) <= ROSTER_MAX_AGE_MS) {
+      const n = relay.roster.hydrate(saved.roster);
+      if (n) console.log(`  restored ${n} player identit${n === 1 ? 'y' : 'ies'} from state/roster.json`);
+    }
+  }
+} catch {
+  /* a corrupt snapshot means a fresh roster, never a failed boot */
+}
+
+function saveState() {
   try {
     if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
-    writeFileSync(
-      path.join(stateDir, 'checkpoint.json'),
-      JSON.stringify({ at: relay.checkpointAt, state: relay.checkpoint })
-    );
+    if (relay.checkpoint) {
+      writeFileSync(
+        path.join(stateDir, 'checkpoint.json'),
+        JSON.stringify({ at: relay.checkpointAt, state: relay.checkpoint })
+      );
+    }
+    if (relay.roster.byId.size) {
+      writeFileSync(rosterFile, JSON.stringify({ at: Date.now(), roster: relay.roster.serialize() }));
+    }
   } catch {
-    /* a failed checkpoint write must never take the game down */
+    /* a failed state write must never take the game down */
   }
-}, 5000).unref();
+}
+setInterval(saveState, 5000).unref();
 
 server.listen(PORT, HOST, () => {
   const addr = lanAddr;
@@ -108,6 +134,9 @@ function warn(s) {
 
 for (const sig of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
   process.on(sig, () => {
+    // Ctrl-C is exactly the restart the roster mirror exists for — flush it
+    // now rather than losing whoever joined since the last 5s tick.
+    saveState();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 500).unref();
   });
