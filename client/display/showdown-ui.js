@@ -59,24 +59,26 @@ function drawHalves(cx, world, s) {
   const st = currentStatement(s);
   const correctId = st?.answer ? TRUE_ID : FALSE_ID;
 
-  for (const [id, label, color, midX] of /** @type {const} */ ([
-    [TRUE_ID, 'TRUE', '#3ddc9a', SPLIT_X / 2],
-    [FALSE_ID, 'FALSE', '#ff6b6b', SPLIT_X + SPLIT_X / 2],
+  for (const [id, label, midX] of /** @type {const} */ ([
+    [TRUE_ID, 'TRUE', SPLIT_X / 2],
+    [FALSE_ID, 'FALSE', SPLIT_X + SPLIT_X / 2],
   ])) {
     const plat = world.platforms.find((p) => p.id === id);
     if (!plat) continue; // mid-collapse: the fallen half is debris now
 
+    // Hue-free: the surviving half BRIGHTENS; the ✓/✕ glyphs are the only
+    // thing telling the sides apart, and they work for everyone.
     if (revealing && st && id === correctId && !s.freePass) {
-      cx.fillStyle = 'rgba(61,220,154,0.25)';
+      cx.fillStyle = 'rgba(255,255,255,0.22)';
       cx.fillRect(plat.x, FLOOR_Y, plat.w, WORLD_H - FLOOR_Y);
-      cx.fillStyle = 'rgba(61,220,154,0.8)';
+      cx.fillStyle = 'rgba(255,255,255,0.75)';
       cx.fillRect(plat.x, FLOOR_Y, plat.w, 14);
     }
 
     cx.textAlign = 'center';
     cx.textBaseline = 'alphabetic';
     cx.font = `800 64px ${FONT.display}`;
-    cx.fillStyle = color;
+    cx.fillStyle = 'rgba(244,241,232,0.92)';
     cx.fillText(`${id === TRUE_ID ? '✓ ' : '✕ '}${label}`, midX, FLOOR_Y + 78);
   }
 
@@ -115,7 +117,7 @@ export function drawShowdown(cx, s, world, roster) {
 
   cx.textAlign = 'right';
   cx.font = `800 30px ${FONT.display}`;
-  cx.fillStyle = s.alive.size <= 3 ? UI.wrong : UI.correct;
+  cx.fillStyle = s.alive.size <= 3 ? UI.warn : UI.paper;
   cx.fillText(`${s.alive.size} alive`, WORLD_W - 40, 60);
   cx.textAlign = 'center';
 

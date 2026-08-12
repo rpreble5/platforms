@@ -563,8 +563,10 @@
 
   // ------------------------------------------------------------------ feedback
   function feedback(code) {
-    var color = code === FB_LANDED_CORRECT ? '#2fc98d'
-      : code === FB_LANDED_WRONG ? '#ff5a3c'
+    // Brightness, not hue: correct is a bright flash, wrong is a dark dip.
+    // The vibration pattern below already tells them apart by feel.
+    var color = code === FB_LANDED_CORRECT ? '#ffffff'
+      : code === FB_LANDED_WRONG ? '#15181f'
       : code === FB_ELIMINATED ? '#000'
       : code === FB_SCORED ? '#ffd93d' : '#4aa8ff';
     elTint.style.background = color;

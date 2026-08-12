@@ -29,13 +29,12 @@ export function drawSigns(cx, world, g) {
 
   if (q?.type === 'range') {
     const rq = /** @type {import('../../sim/levels.js').RangeQuestion} */ (q);
+    // The rail floats above the crowd, so it survives the floor collapse and
+    // stays up through the reveal — the answer tag hangs off the same rail.
+    drawNumberLine(cx, rq);
     if (revealing) {
-      // The outer floor is gone — a full number line over the void would read
-      // as a glitch. The band and its interval are the whole story now.
       const band = world.platforms.find((p) => p.id === RANGE_ID);
       if (band) drawRangeReveal(cx, band, rq);
-    } else {
-      drawNumberLine(cx, rq);
     }
     return;
   }
@@ -369,7 +368,7 @@ function drawScoreboard(cx, g, roster) {
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
   cx.font = `800 42px ${FONT.display}`;
-  cx.fillStyle = rows.length ? UI.correct : UI.dim;
+  cx.fillStyle = rows.length ? UI.gold : UI.dim;
   cx.fillText(rows.length ? 'Correct!' : 'Nobody got it', WORLD_W / 2, y + 62);
 
   if (!rows.length) {

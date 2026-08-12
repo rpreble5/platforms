@@ -150,19 +150,20 @@ export function drawSign(cx, p, opts = {}) {
   }
 
   if (state !== 'idle') {
-    // A green WASH would vanish on the green colourway, so terrazzo marks the
-    // winner by brightening plus a thick green outline; the ✓/✕ icons in the
-    // sign text carry the rest. Wrong stays a darkening wash everywhere.
+    // Right/wrong is deliberately NOT a hue: the winner BRIGHTENS and gets a
+    // bold outline, the losers fade dark and fall. Brightness plus the ✓/✕
+    // icons read for everyone, including the ~8% of men who can't trust
+    // red-vs-green, and they survive a projector eating saturation.
     cx.save();
     cx.globalCompositeOperation = 'source-atop';
     cx.fillStyle =
       state === 'correct'
-        ? terrazzo ? 'rgba(255,255,255,0.30)' : 'rgba(61,220,154,0.42)'
+        ? 'rgba(255,255,255,0.32)'
         : terrazzo ? 'rgba(20,14,26,0.38)' : 'rgba(20,14,26,0.55)';
     cx.fillRect(p.x - 4, y - 4, p.w + 8, ANSWER_SIGN_H + 8);
     cx.restore();
-    if (terrazzo && state === 'correct') {
-      cx.strokeStyle = UI.correct;
+    if (state === 'correct') {
+      cx.strokeStyle = terrazzo ? 'rgba(23,20,42,0.85)' : 'rgba(244,241,232,0.9)';
       cx.lineWidth = 6;
       cx.beginPath();
       cx.roundRect(p.x - 3, y - 3, p.w + 6, ANSWER_SIGN_H + 6, r + 3);
@@ -193,10 +194,17 @@ export function drawSignText(cx, p, text, opts = {}) {
   cx.textBaseline = 'middle';
 
   if (state !== 'idle') {
-    // Icon as well as colour: colourblind viewers, and projectors that eat hue.
+    // The icon IS the signal — no hue attached. Correct in full ink, wrong
+    // dimmed like the rest of its fading board.
     cx.font = `800 40px ${FONT.display}`;
-    cx.fillStyle = state === 'correct' ? UI.correct : UI.wrong;
+    if (themeName() === 'terrazzo') {
+      cx.fillStyle = activeWay().text;
+      cx.globalAlpha = state === 'correct' ? 1 : 0.55;
+    } else {
+      cx.fillStyle = state === 'correct' ? STAGE.platText : STAGE.platTextDim;
+    }
     cx.fillText(state === 'correct' ? '✓' : '✕', p.x + 42, midY);
+    cx.globalAlpha = 1;
   }
 
   cx.font = fitFont(cx, text, boxW, 46, 22);
@@ -249,26 +257,30 @@ export function drawPerch(cx, p) {
   cx.fill();
 }
 
+/** Where the range rail floats: above the tallest avatar and its name label. */
+const RAIL_Y = FLOOR_Y - 210;
+
 /**
- * The number line for a range round, drawn on the floor's face — BELOW the
- * surface the players stand on. Feet sit at FLOOR_Y and sprites grow upward,
- * so nothing down here is ever covered by the crowd, no matter how full the
- * room is. That's the same reasoning as the signboard skirt.
+ * The number line for a range round: a rail floating ABOVE the crowd, so it
+ * stays readable however packed the floor gets. Each tick is a bead on the
+ * rail with a little tag hanging under it carrying the number, and a faint
+ * guide line drops to the floor so lining your feet up with a value never
+ * means squinting across empty space.
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/levels.js').RangeQuestion} q
  */
 export function drawNumberLine(cx, q) {
   const x0 = rangeX(q, q.min);
   const x1 = rangeX(q, q.max);
-  const railY = FLOOR_Y + 26;
+  const terrazzo = themeName() === 'terrazzo';
+  const way = activeWay();
+  const railColor = terrazzo ? way.top : 'rgba(244,241,232,0.45)';
+  const guideColor = terrazzo ? 'rgba(23,20,42,0.10)' : 'rgba(244,241,232,0.10)';
+  const tagFace = terrazzo ? way.face : 'rgba(12,10,22,0.85)';
+  const tagEdge = terrazzo ? way.edge : UI.panelEdge;
+  const tagText = terrazzo ? way.text : UI.paper;
 
   cx.save();
-  cx.fillStyle = 'rgba(255,255,255,0.4)';
-  cx.fillRect(x0, railY, x1 - x0, 4);
-
-  cx.textAlign = 'center';
-  cx.textBaseline = 'alphabetic';
-  cx.font = `800 34px ${FONT.display}`;
 
   const step = tickStep(q.max - q.min);
   /** @type {number[]} */
@@ -279,54 +291,99 @@ export function drawNumberLine(cx, q) {
   }
   ticks.push(q.max);
 
+  // Guide lines first, so everything else draws over them.
   for (const v of ticks) {
     const x = rangeX(q, v);
-    cx.fillStyle = 'rgba(255,255,255,0.4)';
-    cx.fillRect(x - 2, railY, 4, 20);
-    cx.fillStyle = UI.paper;
+    cx.fillStyle = guideColor;
+    cx.fillRect(x - 1.5, RAIL_Y, 3, FLOOR_Y - RAIL_Y);
+  }
+
+  // The rail: a rounded bar with rounded end caps.
+  cx.fillStyle = railColor;
+  cx.beginPath();
+  cx.roundRect(x0 - 6, RAIL_Y - 4, x1 - x0 + 12, 8, 4);
+  cx.fill();
+
+  cx.textAlign = 'center';
+  cx.textBaseline = 'middle';
+  cx.font = `800 27px ${FONT.display}`;
+
+  for (const v of ticks) {
+    const x = rangeX(q, v);
     const label = v === q.max && q.unit ? `${fmtValue(v)} ${q.unit}` : fmtValue(v);
-    // Endpoint labels (especially "160 bpm") can overhang the world edge —
-    // shift them inward rather than letting the projector crop them.
-    const half = cx.measureText(label).width / 2;
-    cx.fillText(label, Math.max(half + 10, Math.min(WORLD_W - half - 10, x)), railY + 62);
+    const tw = cx.measureText(label).width;
+    const w = tw + 26;
+    const h = 42;
+    // Tags hang inside the world even at the endpoints.
+    const tx = Math.max(w / 2 + 8, Math.min(WORLD_W - w / 2 - 8, x));
+
+    // stem, then the tag
+    cx.fillStyle = railColor;
+    cx.fillRect(x - 2, RAIL_Y, 4, 14);
+    cx.fillStyle = tagFace;
+    cx.beginPath();
+    cx.roundRect(tx - w / 2, RAIL_Y + 14, w, h, 12);
+    cx.fill();
+    cx.strokeStyle = tagEdge;
+    cx.lineWidth = 3;
+    cx.stroke();
+    cx.fillStyle = tagText;
+    cx.fillText(label, tx, RAIL_Y + 14 + h / 2 + 1);
+
+    // the bead on the rail, drawn last so it caps the stem
+    cx.fillStyle = railColor;
+    cx.beginPath();
+    cx.arc(x, RAIL_Y, 9, 0, Math.PI * 2);
+    cx.fill();
   }
   cx.restore();
 }
 
 /**
- * The reveal for a range round: the surviving band glows, and the correct
- * interval is spelled out above the heads of whoever is still standing on it.
+ * The reveal for a range round — hue-free: the surviving band BRIGHTENS, and
+ * the correct interval hangs off the rail as one big tag with an arrow down
+ * to the floor. Brightness and position carry the answer, not a colour.
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/collide.js').Platform} band
  * @param {import('../../sim/levels.js').RangeQuestion} q
  */
 export function drawRangeReveal(cx, band, q) {
+  const terrazzo = themeName() === 'terrazzo';
+  const way = activeWay();
   cx.save();
-  cx.fillStyle = 'rgba(61,220,154,0.25)';
+  cx.fillStyle = 'rgba(255,255,255,0.20)';
   cx.fillRect(band.x, FLOOR_Y, band.w, WORLD_H - FLOOR_Y);
-  cx.fillStyle = 'rgba(61,220,154,0.8)';
+  cx.fillStyle = 'rgba(255,255,255,0.75)';
   cx.fillRect(band.x, FLOOR_Y, band.w, 14);
 
   const [lo, hi] = q.answer;
   const text = `${fmtValue(lo)}–${fmtValue(hi)}${q.unit ? ` ${q.unit}` : ''}`;
-  // Clamp so a band at the edge of the line doesn't push the text off screen.
-  const cxp = Math.max(180, Math.min(WORLD_W - 180, band.x + band.w / 2));
-  const y = FLOOR_Y - 170;
+  const cxp = Math.max(200, Math.min(WORLD_W - 200, band.x + band.w / 2));
+  const y = RAIL_Y - 74;
 
   cx.textAlign = 'center';
-  cx.textBaseline = 'alphabetic';
-  cx.font = `800 54px ${FONT.display}`;
-  cx.fillStyle = INK;
-  cx.fillText(text, cxp + 3, y + 3);
-  cx.fillStyle = UI.correct;
-  cx.fillText(text, cxp, y);
+  cx.textBaseline = 'middle';
+  cx.font = `800 44px ${FONT.display}`;
+  const tw = cx.measureText(text).width;
+  const w = tw + 44;
+  const h = 66;
 
-  // Arrow from the text down toward the band, over the survivors' heads.
-  cx.fillStyle = UI.correct;
+  cx.fillStyle = terrazzo ? way.face : 'rgba(12,10,22,0.92)';
   cx.beginPath();
-  cx.moveTo(cxp, y + 52);
-  cx.lineTo(cxp - 16, y + 24);
-  cx.lineTo(cxp + 16, y + 24);
+  cx.roundRect(cxp - w / 2, y - h / 2, w, h, 16);
+  cx.fill();
+  cx.strokeStyle = terrazzo ? INK : 'rgba(244,241,232,0.9)';
+  cx.lineWidth = 4;
+  cx.stroke();
+  cx.fillStyle = terrazzo ? way.text : UI.paper;
+  cx.fillText(text, cxp, y + 1);
+
+  // Arrow from the tag toward the surviving band.
+  cx.fillStyle = terrazzo ? INK : 'rgba(244,241,232,0.9)';
+  cx.beginPath();
+  cx.moveTo(cxp, y + h / 2 + 30);
+  cx.lineTo(cxp - 15, y + h / 2 + 6);
+  cx.lineTo(cxp + 15, y + h / 2 + 6);
   cx.closePath();
   cx.fill();
   cx.restore();
