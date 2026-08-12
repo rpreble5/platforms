@@ -158,6 +158,22 @@ export const PERCH_W = GRID * 9;
  * monsters half a screen wide.
  */
 const ISLAND_MAX_W = GRID * 20;
+/**
+ * Ladder rung sizing. The ladder tapers upward: a broad base you can barely
+ * miss from the floor, then rungs that narrow as they rise — by the top you
+ * are jumping straight up through one-way platforms, where width matters far
+ * less than it does on the first committed jump.
+ *
+ * The base is allowed to run underneath the boards: a surface TWO tiers below
+ * a board keeps its name labels ~106px clear of the answer text, so only the
+ * tier directly below (one hop down) has to stay out of the boards' shadow.
+ */
+const RUNG_MIN_W = GRID * 6;
+/** How much wider the base rung is than the rungs above it. */
+const RUNG_BASE_EXTRA = GRID * 8;
+/** Flank-ladder rung width, and the minimum air between a rung and a board. */
+const FLANK_RUNG_W = GRID * 4;
+const DAYLIGHT = 8;
 
 /** One hop of height. Every tier in every layout is a multiple of this. */
 export const TIER = FLOOR_Y - PERCH_Y;
@@ -221,21 +237,23 @@ export function buildRowArena(n) {
 }
 
 /**
- * Answers as high islands, ladder columns to reach them.
+ * Answers as high islands, tapered ladders to reach them.
  *
  * Answers sit centred in `n` equal slots, three tiers up, on tall signboards
- * (`signH`) with room for two big lines of text. Each ladder column is a
- * vertical stack of one-way rungs at tiers 1-2-3 sharing one x — jump straight
- * up through each rung and land on it, three proven 160px hops — and its top
- * rung is level with the boards, so the last move is a flat hop onto an
- * answer.
+ * (`signH`) with room for two big lines of text. Each ladder is a stack of
+ * one-way rungs at tiers 1-2-3 — jump straight up through each rung and land
+ * on it, three proven 160px hops — wide at the base and narrowing upward,
+ * with the top rung level with the boards so the last move is a flat hop
+ * onto an answer.
  *
- * Column placement is the whole design: at 2-3 answers the boards leave real
- * gaps, so columns stand in the gap centres; at 4-5 the boards nearly touch
- * and the columns move to the outer flanks, with the small inter-board gaps
+ * Ladder placement is the whole design: at 2-3 answers the boards leave real
+ * gaps, so ladders stand in the gap centres; at 4-5 the boards nearly touch
+ * and the ladders move to the outer flanks, with the small inter-board gaps
  * crossed by flat board-to-board hops. Either way NO standing surface ever
- * sits in the two tiers directly below a board's footprint — a player parked
- * there would have their name label drawn across the answer text.
+ * sits in the tier directly below a board's footprint — a player parked there
+ * would have their name label drawn across the answer text. The base rung,
+ * two tiers down, is exempt (labels there clear the text by ~106px), which is
+ * what lets it spread under the boards and catch sloppy first jumps.
  * @param {number} n
  * @returns {Platform[]}
  */
@@ -249,7 +267,18 @@ export function buildIslandArena(n) {
 
   const usable = WORLD_W - EDGE_MARGIN * 2;
   const spacing = usable / count;
-  const width = Math.min(snapToGrid(spacing - MIN_GAP), ISLAND_MAX_W);
+  // Boards take what the ladders don't need. Gap ladders (2-3 answers) claim
+  // enough air between boards for a decent rung plus daylight on both sides;
+  // flank ladders (4-5) claim the strip between the screen edge and the
+  // outermost board. A slightly narrower board is a fair price for rungs
+  // people actually land on.
+  const width = Math.min(
+    snapToGrid(spacing - MIN_GAP),
+    ISLAND_MAX_W,
+    count <= 3
+      ? snapToGrid(spacing - RUNG_MIN_W - DAYLIGHT * 2)
+      : snapToGrid(2 * (EDGE_MARGIN + spacing / 2 - (DAYLIGHT + FLANK_RUNG_W + DAYLIGHT)))
+  );
 
   /** @type {Platform[]} */
   const boards = [];
@@ -268,33 +297,36 @@ export function buildIslandArena(n) {
   platforms.push(...boards);
 
   let perch = 0;
-  /** @param {number} x left edge @param {number} w */
-  const ladder = (x, w) => {
-    for (const t of [1, 2, 3]) {
-      platforms.push({
-        id: `perch${perch++}`,
-        x,
-        y: tierY(t),
-        w,
-        h: ANSWER_H,
-        oneWay: true,
-      });
-    }
+  /** @param {number} x left edge @param {number} y @param {number} w */
+  const rung = (x, y, w) => {
+    platforms.push({ id: `perch${perch++}`, x, y, w, h: ANSWER_H, oneWay: true });
   };
 
   if (count <= 3) {
-    // Gap-centre columns: wide and lonely for 2 answers, a slim pair for 3.
-    const w = count === 2 ? PERCH_W : GRID * 4;
+    // Gap-centre ladders. The mid and top rungs fill the gap up to daylight;
+    // the base spreads wider still, running under the boards on both sides.
+    const midW = Math.floor((spacing - width - DAYLIGHT * 2) / GRID) * GRID;
+    const baseW = midW + RUNG_BASE_EXTRA;
     for (let j = 0; j < count - 1; j++) {
-      ladder(EDGE_MARGIN + (j + 1) * spacing - w / 2, w);
+      const c = EDGE_MARGIN + (j + 1) * spacing;
+      rung(c - baseW / 2, tierY(1), baseW);
+      rung(c - midW / 2, tierY(2), midW);
+      rung(c - midW / 2, tierY(3), midW);
     }
   } else {
-    // Flank columns just outside the outer boards; inner boards are reached
-    // by hopping across the outer ones.
-    const w = GRID * 3;
+    // Flank ladders just outside the outer boards; inner boards are reached
+    // by hopping across the outer ones. The base extends inward, under the
+    // board, so the first jump from the floor has a big target.
+    const baseW = FLANK_RUNG_W + RUNG_BASE_EXTRA / 2;
     const last = boards[count - 1];
-    ladder(boards[0].x - 12 - w, w);
-    ladder(last.x + last.w + 12, w);
+    const xl = boards[0].x - DAYLIGHT - FLANK_RUNG_W;
+    rung(xl, tierY(1), baseW);
+    rung(xl, tierY(2), FLANK_RUNG_W);
+    rung(xl, tierY(3), FLANK_RUNG_W);
+    const xr = last.x + last.w + DAYLIGHT;
+    rung(xr + FLANK_RUNG_W - baseW, tierY(1), baseW);
+    rung(xr, tierY(2), FLANK_RUNG_W);
+    rung(xr, tierY(3), FLANK_RUNG_W);
   }
 
   return platforms;

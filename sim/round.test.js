@@ -369,16 +369,23 @@ test('island boards sit high, and no rung ever stands under a board', () => {
       assert.equal(b.signH, TALL_SIGN_H, `${n} answers: boards carry the tall skirt`);
     }
 
-    // Ladder columns are stacks of rungs at tiers 1, 2, 3 — three proven
-    // vertical hops, with the top rung level with the boards.
+    // Ladders are stacks of rungs at tiers 1, 2, 3 — three proven vertical
+    // hops, with the top rung level with the boards — and they taper: the
+    // base rung is the widest, because the first jump from the floor is the
+    // one people flub.
     const tiers = [...new Set(rungs.map((q) => q.y))].sort((a, b) => b - a);
     assert.deepEqual(tiers, [tierY(1), tierY(2), tierY(3)], `${n} answers: full ladders`);
+    const widest = (/** @type {number} */ t) =>
+      Math.max(...rungs.filter((q) => q.y === tierY(t)).map((q) => q.w));
+    assert.ok(widest(1) > widest(2), `${n} answers: the base rung is the widest`);
+    assert.ok(widest(2) >= widest(3), `${n} answers: rungs never widen going up`);
 
     // THE LABEL RULE. A name label sits ~118px above a standing surface, so a
-    // surface one or two tiers below a board would put labels across its
-    // answer text. Climbing must happen beside the boards, never under them.
+    // surface ONE tier below a board would put labels across its answer text
+    // — that tier must stay out from under the boards. The base rung, two
+    // tiers down, clears the text by ~106px and may spread underneath.
     for (const r of rungs) {
-      if (r.y !== tierY(1) && r.y !== tierY(2)) continue;
+      if (r.y !== tierY(2)) continue;
       for (const b of boards) {
         const overlap = Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x);
         assert.ok(overlap <= 0, `${n} answers: ${r.id} (y=${r.y}) stands under ${b.id}`);
@@ -387,41 +394,48 @@ test('island boards sit high, and no rung ever stands under a board', () => {
   }
 });
 
-test('the widest flat hop onto an island board works in the real sim', () => {
-  // The 2-answer arena has the widest ladder-to-board gap of any island
-  // layout (~97px). A dumb steer-toward-the-target bot making that hop means
-  // every narrower hop — flank-to-board, board-to-board — is safe too.
-  const world = createWorld(buildArena(2));
+test('the widest flat hop in the island arenas works in the real sim', () => {
+  // The 5-answer arena's board-to-board hop (~92px) is the widest same-tier
+  // gap anywhere in the islands. A dumb steer-toward-the-target bot making
+  // that hop — starting from the ladder top, crossing onto the first board,
+  // then onto the second — means every narrower hop is safe too.
+  const world = createWorld(buildArena(5));
   const top = /** @type {any} */ (
-    world.platforms.find((q) => String(q.id).startsWith('perch') && q.y === ISLAND_Y)
+    world.platforms
+      .filter((q) => String(q.id).startsWith('perch') && q.y === ISLAND_Y)
+      .sort((a, b) => a.x - b.x)[0]
   );
   assert.ok(top, 'the ladder has a top rung level with the boards');
 
+  const p = /** @type {any} */ (addPlayer(world, 10));
+  p.x = top.x + top.w / 2 - p.w / 2;
+  p.y = top.y - p.h;
+  p.vx = 0;
+  p.vy = 0;
+  step(world, STEP_MS);
+  assert.equal(p.standingOn?.id, top.id, 'starts on the ladder top');
+
   for (const i of [0, 1]) {
     const ans = /** @type {any} */ (world.platforms.find((q) => q.id === answerId(i)));
-    const p = /** @type {any} */ (addPlayer(world, 10 + i));
-    // Aim for the near edge of the board, the way a person would.
-    const target = ans.x + ans.w / 2 < top.x ? ans.x + ans.w - 40 : ans.x + 40;
-
-    p.x = Math.max(top.x, Math.min(top.x + top.w - p.w, target - p.w / 2));
-    p.y = top.y - p.h;
-    p.vx = 0;
-    p.vy = 0;
-    step(world, STEP_MS);
-    assert.equal(p.standingOn?.id, top.id, 'starts on the ladder top');
-
-    p.input.pressEdge |= BTN_JUMP;
+    const target = ans.x + 40; // the near edge, the way a person aims
     let landed = false;
-    for (let k = 0; k < 300; k++) {
+    for (let k = 0; k < 600; k++) {
       const dx = target - (p.x + p.w / 2);
       p.input.held = Math.abs(dx) > 24 ? (dx > 0 ? BTN_RIGHT : BTN_LEFT) : 0;
+      // Jump like a person: run along the surface, hop at the edge.
+      const on = /** @type {any} */ (p.standingOn);
+      if (p.onGround && on && on.id !== ans.id) {
+        const atEdge = dx > 0 ? p.x + p.w > on.x + on.w - 12 : p.x < on.x + 12;
+        if (atEdge) p.input.pressEdge |= BTN_JUMP;
+      }
       step(world, STEP_MS);
       if (p.standingOn?.id === ans.id) {
         landed = true;
         break;
       }
     }
-    assert.ok(landed, `board ${i} is reachable from the ladder top`);
+    assert.ok(landed, `board ${i} is reachable`);
+    p.input.held = 0;
   }
 });
 
