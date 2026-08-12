@@ -331,8 +331,14 @@ export function loadQuestions(root, packFile = 'default.json') {
     }
   }
 
+  let theme = 'terrazzo';
+  if (pack.theme !== undefined) {
+    if (['terrazzo', 'dusk'].includes(pack.theme)) theme = pack.theme;
+    else problems.push(`theme "${pack.theme}" is unknown — using terrazzo`);
+  }
+
   if (problems.length) {
-    console.log('\n  \x1b[33m!\x1b[0m  questions/default.json:');
+    console.log(`\n  \x1b[33m!\x1b[0m  questions/${path.basename(packFile)}:`);
     for (const m of problems) console.log(`       ${m}`);
     console.log('');
   }
@@ -341,6 +347,7 @@ export function loadQuestions(root, packFile = 'default.json') {
     pack: pack.pack ?? 'default',
     file: path.basename(packFile),
     answerMs: pack.answerMs ?? 12000,
+    theme,
     questions,
     showdown,
   };

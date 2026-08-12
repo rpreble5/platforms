@@ -17,6 +17,7 @@ import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { ANSWER_H, ANSWER_SIGN_H, FLOOR_Y, rangeX } from '../../sim/levels.js';
 import { SPRITES, art, drawTileBox, drawTiled, has } from './art.js';
 import { FONT, INK, SKY, STAGE, UI } from './theme.js';
+import { activeWay, drawTerrazzoSky, themeName } from './themes.js';
 
 /** @typedef {import('../../sim/collide.js').Platform} Platform */
 
@@ -27,6 +28,10 @@ import { FONT, INK, SKY, STAGE, UI } from './theme.js';
 export function drawSky(cx, t) {
   if (has('bg')) {
     cx.drawImage(art.bg, 0, 0, WORLD_W, WORLD_H);
+    return;
+  }
+  if (themeName() === 'terrazzo') {
+    drawTerrazzoSky(cx, WORLD_W, WORLD_H);
     return;
   }
   const g = cx.createLinearGradient(0, 0, 0, WORLD_H);
@@ -79,11 +84,16 @@ export function drawFloor(cx, p) {
     drawTiled(cx, art.floor, p.x, p.y, p.w, visibleH, SPRITES.floor.w);
     return;
   }
-  cx.fillStyle = STAGE.floorBody;
+  // Terrazzo grounds the level in a very dark cut of the round's colourway —
+  // it anchors the light field and makes the player colours pop hardest.
+  const c = themeName() === 'terrazzo'
+    ? { body: activeWay().fBody, top: activeWay().fTop, edge: activeWay().fEdge }
+    : { body: STAGE.floorBody, top: STAGE.floorTop, edge: STAGE.floorEdge };
+  cx.fillStyle = c.body;
   cx.fillRect(p.x, p.y, p.w, visibleH);
-  cx.fillStyle = STAGE.floorTop;
+  cx.fillStyle = c.top;
   cx.fillRect(p.x, p.y, p.w, 14);
-  cx.fillStyle = STAGE.floorEdge;
+  cx.fillStyle = c.edge;
   cx.fillRect(p.x, p.y + 14, p.w, 4);
 }
 
@@ -97,11 +107,32 @@ export function drawSign(cx, p, opts = {}) {
   const dy = opts.dy ?? 0;
   const state = opts.state ?? 'idle';
   const y = p.y + dy;
+  const terrazzo = themeName() === 'terrazzo';
+  const r = 10;
 
   if (has('platform')) {
     drawTileBox(cx, art.platform, p.x, y, p.w, ANSWER_SIGN_H);
+  } else if (terrazzo) {
+    const way = activeWay();
+    cx.fillStyle = 'rgba(40,40,50,0.10)';
+    cx.beginPath();
+    cx.roundRect(p.x + 4, y + 6, p.w, ANSWER_SIGN_H, r);
+    cx.fill();
+    cx.fillStyle = way.edge;
+    cx.beginPath();
+    cx.roundRect(p.x, y, p.w, ANSWER_SIGN_H, r);
+    cx.fill();
+    cx.fillStyle = way.face;
+    cx.beginPath();
+    cx.roundRect(p.x + 5, y + 5, p.w - 10, ANSWER_SIGN_H - 12, r - 3);
+    cx.fill();
+    // The landing surface is the DARK band here — darker than the face, so it
+    // reads as structure rather than shine. Radii are [tl, tr, br, bl].
+    cx.fillStyle = way.top;
+    cx.beginPath();
+    cx.roundRect(p.x, y, p.w, ANSWER_H, [r, r, 4, 4]);
+    cx.fill();
   } else {
-    const r = 10;
     cx.fillStyle = STAGE.platEdge;
     cx.beginPath();
     cx.roundRect(p.x, y, p.w, ANSWER_SIGN_H, r);
@@ -119,11 +150,24 @@ export function drawSign(cx, p, opts = {}) {
   }
 
   if (state !== 'idle') {
+    // A green WASH would vanish on the green colourway, so terrazzo marks the
+    // winner by brightening plus a thick green outline; the ✓/✕ icons in the
+    // sign text carry the rest. Wrong stays a darkening wash everywhere.
     cx.save();
     cx.globalCompositeOperation = 'source-atop';
-    cx.fillStyle = state === 'correct' ? 'rgba(61,220,154,0.42)' : 'rgba(20,14,26,0.55)';
+    cx.fillStyle =
+      state === 'correct'
+        ? terrazzo ? 'rgba(255,255,255,0.30)' : 'rgba(61,220,154,0.42)'
+        : terrazzo ? 'rgba(20,14,26,0.38)' : 'rgba(20,14,26,0.55)';
     cx.fillRect(p.x - 4, y - 4, p.w + 8, ANSWER_SIGN_H + 8);
     cx.restore();
+    if (terrazzo && state === 'correct') {
+      cx.strokeStyle = UI.correct;
+      cx.lineWidth = 6;
+      cx.beginPath();
+      cx.roundRect(p.x - 3, y - 3, p.w + 6, ANSWER_SIGN_H + 6, r + 3);
+      cx.stroke();
+    }
   }
 }
 
@@ -156,7 +200,12 @@ export function drawSignText(cx, p, text, opts = {}) {
   }
 
   cx.font = fitFont(cx, text, boxW, 46, 22);
-  cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
+  if (themeName() === 'terrazzo') {
+    cx.fillStyle = activeWay().text;
+    if (state === 'wrong') cx.globalAlpha = 0.55;
+  } else {
+    cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
+  }
   cx.fillText(text, p.x + p.w / 2 + (state !== 'idle' ? 24 : 0), midY);
   cx.restore();
 }
@@ -172,6 +221,22 @@ export function drawPerch(cx, p) {
   const h = ANSWER_H + 12;
   if (has('platform')) {
     drawTileBox(cx, art.platform, p.x, p.y, p.w, h);
+    return;
+  }
+  if (themeName() === 'terrazzo') {
+    const way = activeWay();
+    cx.fillStyle = 'rgba(40,40,50,0.10)';
+    cx.beginPath();
+    cx.roundRect(p.x + 3, p.y + 5, p.w, h, 8);
+    cx.fill();
+    cx.fillStyle = way.edge;
+    cx.beginPath();
+    cx.roundRect(p.x, p.y, p.w, h, 8);
+    cx.fill();
+    cx.fillStyle = way.top;
+    cx.beginPath();
+    cx.roundRect(p.x + 3, p.y + 3, p.w - 6, ANSWER_H - 10, 6);
+    cx.fill();
     return;
   }
   cx.fillStyle = STAGE.platEdge;

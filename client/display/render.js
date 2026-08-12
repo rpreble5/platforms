@@ -8,6 +8,7 @@
 import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
+import { themeName } from './themes.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
 import { drawFloor, drawPerch, drawSky } from './stage.js';
@@ -217,7 +218,9 @@ function drawJoin(cx, qr, url, count) {
   } while (size > 13 && cx.measureText(url).width > maxW);
 
   const cxp = Math.min(x + px / 2, WORLD_W - maxW / 2 - 8);
-  cx.fillStyle = UI.paper;
+  // Ink on the light theme, paper on the dark one — the URL is the fallback
+  // for anyone whose camera won't scan, so it must never blend away.
+  cx.fillStyle = themeName() === 'terrazzo' ? '#333a4a' : UI.paper;
   cx.fillText(url, cxp, y + px + 38);
   cx.font = '500 20px ui-sans-serif, system-ui, sans-serif';
   cx.fillStyle = UI.dim;

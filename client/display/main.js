@@ -27,6 +27,7 @@ import { FLOOR_Y, buildArena } from '../../sim/levels.js';
 import { PHASE, answerWindow, createGame, currentQuestion, respawnAll, skip, startGame, stepRound } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
+import { setRound, setTheme } from './themes.js';
 import { drawConfetti } from './fx.js';
 import { drawRoundOverlay } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
@@ -254,6 +255,7 @@ async function selectPack(index) {
     if (pack?.questions?.length) {
       game = createGame(pack.questions, pack.answerMs);
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
+      setTheme(pack.theme);
       hud.note = '';
     } else {
       hud.note = `${file}: no valid questions`;
@@ -363,6 +365,10 @@ function frame(now) {
     }
     lastPhase = game.phase;
   }
+
+  // The round's board colourway: rotates per question, rests on teal in the
+  // lobby and the showdown. Set once per frame so every draw call agrees.
+  setRound(showdown ? -1 : game.qIndex);
 
   render(cx, world, roster, game, {
     qr: game.phase === PHASE.LOBBY && !showdown ? qr : null,
@@ -606,6 +612,7 @@ async function init() {
     if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
     else hud.note = 'no questions loaded — check questions/default.json';
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
+    setTheme(pack?.theme);
     const packs = await fetch('/api/packs').then((r) => r.json());
     if (Array.isArray(packs) && packs.length) {
       menu.packs = packs;
