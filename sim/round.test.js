@@ -18,9 +18,9 @@ import {
   FLOOR_Y,
   GRID,
   ISLAND_Y,
-  PERCH_Y,
   RANGE_ID,
   RANGE_MIN_W,
+  TALL_SIGN_H,
   TIER,
   buildArena,
   buildRangeArena,
@@ -28,6 +28,7 @@ import {
   rangeX,
   snapToGrid,
   spawnFor,
+  tierY,
 } from './levels.js';
 import {
   BASE_POINTS,
@@ -357,65 +358,84 @@ test('a player can actually reach every row-layout answer with a plain jump', ()
   }
 });
 
-test('every island answer is reachable: floor to perch to answer', () => {
-  // The same guard for the layered layout. The final hop is simulated with a
-  // dumb steer-toward-the-target bot — if that bot can make the jump, a person
-  // with eyes can.
+test('island boards sit high, and no rung ever stands under a board', () => {
   for (const n of [2, 3, 4, 5]) {
-    const world = createWorld(buildArena(n));
-    const p = /** @type {any} */ (addPlayer(world, 1));
-    const perches = world.platforms.filter((q) => String(q.id).startsWith('perch'));
-    assert.ok(perches.length >= 1, `${n} answers: perches exist`);
-    assert.ok(!perches.some((q) => q.y !== PERCH_Y), 'all perches on one tier');
+    const plats = buildArena(n);
+    const boards = plats.filter((q) => String(q.id).startsWith('ans'));
+    const rungs = plats.filter((q) => String(q.id).startsWith('perch'));
 
-    // Floor -> perch is the row layout's proven 160px jump; assert the tier
-    // and sim only the novel hop.
-    assert.equal(FLOOR_Y - PERCH_Y, FLOOR_Y - ANSWER_Y, 'perch rise = the proven answer rise');
+    for (const b of boards) {
+      assert.equal(b.y, ISLAND_Y, `${n} answers: boards share the high tier`);
+      assert.equal(b.signH, TALL_SIGN_H, `${n} answers: boards carry the tall skirt`);
+    }
 
-    for (let i = 0; i < n; i++) {
-      const ans = /** @type {any} */ (world.platforms.find((q) => q.id === answerId(i)));
-      assert.equal(ans.y, ISLAND_Y, 'answers share one tier');
-      const target = ans.x + ans.w / 2;
-      const perch = /** @type {any} */ (
-        [...perches].sort(
-          (a, b) => Math.abs(a.x + a.w / 2 - target) - Math.abs(b.x + b.w / 2 - target)
-        )[0]
-      );
+    // Ladder columns are stacks of rungs at tiers 1, 2, 3 — three proven
+    // vertical hops, with the top rung level with the boards.
+    const tiers = [...new Set(rungs.map((q) => q.y))].sort((a, b) => b - a);
+    assert.deepEqual(tiers, [tierY(1), tierY(2), tierY(3)], `${n} answers: full ladders`);
 
-      // Stand on the nearest perch, as close to the answer as the perch allows.
-      p.x = Math.max(perch.x, Math.min(perch.x + perch.w - p.w, target - p.w / 2));
-      p.y = perch.y - p.h;
-      p.vx = 0;
-      p.vy = 0;
-      step(world, STEP_MS);
-      assert.equal(p.standingOn?.id, perch.id, 'starts on the perch');
-
-      p.input.pressEdge |= BTN_JUMP;
-      let landed = false;
-      for (let k = 0; k < 300; k++) {
-        const dx = target - (p.x + p.w / 2);
-        p.input.held = Math.abs(dx) > 24 ? (dx > 0 ? BTN_RIGHT : BTN_LEFT) : 0;
-        step(world, STEP_MS);
-        if (p.standingOn?.id === ans.id) {
-          landed = true;
-          break;
-        }
+    // THE LABEL RULE. A name label sits ~118px above a standing surface, so a
+    // surface one or two tiers below a board would put labels across its
+    // answer text. Climbing must happen beside the boards, never under them.
+    for (const r of rungs) {
+      if (r.y !== tierY(1) && r.y !== tierY(2)) continue;
+      for (const b of boards) {
+        const overlap = Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x);
+        assert.ok(overlap <= 0, `${n} answers: ${r.id} (y=${r.y}) stands under ${b.id}`);
       }
-      assert.ok(landed, `${n} answers: answer ${i} is reachable from perch ${perch.id}`);
     }
   }
 });
 
-test('every board in the stacked layouts is climbable from the floor', () => {
-  // Reachability as a graph: a hop works if it rises exactly one TIER and the
-  // horizontal gap is comfortably inside the jump's drift (120px; the arc
-  // covers ~200px while rising a tier). BFS from the floor must reach every
-  // platform — answers AND perches, because an unreachable perch is a trap
-  // that looks like a route.
+test('the widest flat hop onto an island board works in the real sim', () => {
+  // The 2-answer arena has the widest ladder-to-board gap of any island
+  // layout (~97px). A dumb steer-toward-the-target bot making that hop means
+  // every narrower hop — flank-to-board, board-to-board — is safe too.
+  const world = createWorld(buildArena(2));
+  const top = /** @type {any} */ (
+    world.platforms.find((q) => String(q.id).startsWith('perch') && q.y === ISLAND_Y)
+  );
+  assert.ok(top, 'the ladder has a top rung level with the boards');
+
+  for (const i of [0, 1]) {
+    const ans = /** @type {any} */ (world.platforms.find((q) => q.id === answerId(i)));
+    const p = /** @type {any} */ (addPlayer(world, 10 + i));
+    // Aim for the near edge of the board, the way a person would.
+    const target = ans.x + ans.w / 2 < top.x ? ans.x + ans.w - 40 : ans.x + 40;
+
+    p.x = Math.max(top.x, Math.min(top.x + top.w - p.w, target - p.w / 2));
+    p.y = top.y - p.h;
+    p.vx = 0;
+    p.vy = 0;
+    step(world, STEP_MS);
+    assert.equal(p.standingOn?.id, top.id, 'starts on the ladder top');
+
+    p.input.pressEdge |= BTN_JUMP;
+    let landed = false;
+    for (let k = 0; k < 300; k++) {
+      const dx = target - (p.x + p.w / 2);
+      p.input.held = Math.abs(dx) > 24 ? (dx > 0 ? BTN_RIGHT : BTN_LEFT) : 0;
+      step(world, STEP_MS);
+      if (p.standingOn?.id === ans.id) {
+        landed = true;
+        break;
+      }
+    }
+    assert.ok(landed, `board ${i} is reachable from the ladder top`);
+  }
+});
+
+test('every board in the elevated layouts is climbable from the floor', () => {
+  // Reachability as a graph. Two kinds of hop: a CLIMB rises exactly one TIER
+  // with the horizontal gap comfortably inside the jump's drift (120px; the
+  // arc covers ~200px while rising a tier), and a FLAT hop crosses a same-tier
+  // gap well inside the jump's ~350px horizontal reach. BFS from the floor
+  // must reach every platform — answers AND perches, because an unreachable
+  // perch is a trap that looks like a route.
   /** @param {any} a @param {any} b @returns {number} */
   const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0);
 
-  for (const layout of /** @type {const} */ (['pyramid', 'reverse-pyramid'])) {
+  for (const layout of /** @type {const} */ (['islands', 'pyramid', 'reverse-pyramid'])) {
     for (const n of [2, 3, 4, 5]) {
       const plats = buildArena(n, layout);
       const reached = new Set(['floor']);
@@ -425,7 +445,9 @@ test('every board in the stacked layouts is climbable from the floor', () => {
           if (!reached.has(String(from.id))) continue;
           for (const to of plats) {
             if (reached.has(String(to.id))) continue;
-            if (from.y - to.y === TIER && gap(from, to) <= 120) {
+            const climb = from.y - to.y === TIER && gap(from, to) <= 120;
+            const flat = from.y === to.y && gap(from, to) <= 150;
+            if (climb || flat) {
               reached.add(String(to.id));
               grew = true;
             }
@@ -437,7 +459,9 @@ test('every board in the stacked layouts is climbable from the floor', () => {
         assert.ok(p.y >= 340, `${layout}/${n}: ${p.id} stays below the question banner`);
       }
 
-      // Boards sharing a tier must not touch, or they read as one platform.
+      // Surfaces sharing a tier must not touch. Two answer boards need a real
+      // gap or they read as one platform; a ladder rung beside a board only
+      // needs daylight — the rung isn't a target, it's the route.
       const byTier = new Map();
       for (const p of plats.filter((q) => q.id !== 'floor')) {
         const row = byTier.get(p.y) ?? [];
@@ -447,8 +471,12 @@ test('every board in the stacked layouts is climbable from the floor', () => {
       for (const row of byTier.values()) {
         row.sort((/** @type {any} */ a, /** @type {any} */ b) => a.x - b.x);
         for (let i = 1; i < row.length; i++) {
-          const g = row[i].x - (row[i - 1].x + row[i - 1].w);
-          assert.ok(g >= 40, `${layout}/${n}: ${row[i - 1].id}/${row[i].id} gap ${g}px`);
+          const a = row[i - 1];
+          const b = row[i];
+          const g = b.x - (a.x + a.w);
+          const bothAns = String(a.id).startsWith('ans') && String(b.id).startsWith('ans');
+          const min = bothAns ? 40 : 8;
+          assert.ok(g >= min, `${layout}/${n}: ${a.id}/${b.id} gap ${g}px (need ${min})`);
         }
       }
     }

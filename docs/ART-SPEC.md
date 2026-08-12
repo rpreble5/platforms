@@ -115,9 +115,12 @@ Set in `sim/levels.js`:
 
 - `GRID = 24` — the tile size in display pixels. Every board width is a
   multiple of it.
-- `ANSWER_SIGN_H = GRID * 3` — boards are three tiles tall, 72px.
+- `ANSWER_SIGN_H = GRID * 3` — the default board is three tiles tall, 72px.
+  The elevated layouts override per platform with `signH = GRID * 4` (96px)
+  for two big lines of answer text.
 - `ANSWER_H = GRID` — the top tile row is the part players actually stand on.
 
-Current widths are 384 (4 answers), 552 (3) and 840 (2), but nothing in the
-renderer depends on those — any multiple of `GRID` draws correctly, which is
-what makes varying board sizes a level-design change rather than an art change.
+Widths vary by layout and answer count (any multiple of `GRID`), and nothing
+in the renderer depends on a specific width — boards draw correctly at any
+size, which is what makes varying board sizes a level-design change rather
+than an art change.

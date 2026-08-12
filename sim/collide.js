@@ -16,6 +16,7 @@ import { PHYS } from '../shared/tuning.js';
  * @property {number} h
  * @property {boolean} [oneWay] pass through from below and from the sides
  * @property {string} [id]
+ * @property {number} [signH] drawn signboard height, for answer boards
  */
 
 /**

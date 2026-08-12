@@ -64,9 +64,11 @@ deck:
 
 ```jsonc
 // Multiple choice (2-5 answers): get onto the platform with the right answer.
-// Answers sit two jumps up, reached via non-answer perch platforms. Optional
-// "layout": "row" (flat single-jump), "pyramid" or "reverse-pyramid" (answers
-// stacked at different heights — deliberately uneven, pick your spice).
+// Answers sit three jumps up on tall signboards with big text, climbed via
+// ladder columns of non-answer rungs beside the boards — the final move is a
+// flat hop, so name labels never sit over the answers. Optional "layout":
+// "row" (flat single-jump, for short answers), "pyramid" or "reverse-pyramid"
+// (answers stacked at different heights — deliberately uneven, pick your spice).
 { "text": "Capital of Australia?", "answers": ["Sydney", "Canberra"], "correct": 1 }
 
 // Range: a number line is drawn along the floor; stand inside the correct

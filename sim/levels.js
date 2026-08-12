@@ -8,10 +8,17 @@
  * rather than to their knowledge. They'd be right to complain.
  *
  *  - `row` — the original: answers one jump above the floor. Run, jump, done.
- *  - `islands` (default) — answers two jumps up, out of direct reach from the
- *    floor, with a tier of non-answer perches between. Every answer is one
- *    diagonal hop from an adjacent perch, and every perch one jump from the
- *    floor: exactly two committed jumps per answer, whichever answer it is.
+ *  - `islands` (default) — answers three jumps up on tall signboards, reached
+ *    by ladder columns of non-answer rungs that climb through the gaps (or up
+ *    the flanks when the boards leave no room between them). The final move
+ *    onto an answer is always a flat same-tier hop, which is the load-bearing
+ *    detail: a player standing one tier below a board would have their name
+ *    label drawn straight across its text, and with 30 people playing the
+ *    answers would disappear behind names. Climbing happens beside the boards,
+ *    never under them. At 4-5 answers the inner boards cost one or two extra
+ *    flat hops (you cross the outer boards to reach them) — a smaller fairness
+ *    trade than pyramid makes, and horizontal hops are the cheapest move in
+ *    the game.
  *  - `pyramid` / `reverse-pyramid` — answers at DIFFERENT heights, stacked
  *    into a peak (or a valley). These deliberately trade the equal-effort
  *    rule for shape and drama, which is why they are opt-in per question
@@ -45,20 +52,23 @@ export const ANSWER_Y = FLOOR_Y - 160;
  */
 export const ANSWER_H = GRID;
 /**
- * How tall the answer platform is *drawn*, versus the one tile row it actually
+ * Default drawn signboard height versus the one tile row a board actually
  * collides with. The extra hangs below the surface and carries the answer
  * text, so the platform IS the signboard rather than having a label bolted
  * under it.
  *
- * Four tile rows, sized for two lines of readable answer text. In the
- * elevated layouts (boards at 660 and above) the air below is empty, so the
- * deeper skirt costs nothing. In the flat row layout the skirt bottom now
- * reaches y=916, inside the tallest floor-stander's head zone (~902+) — but
- * avatars draw OVER boards, the overlap is a few px at the board's edge, and
- * it only occurs at full avatar scale in a near-empty room. Bigger answer
- * text every round beats a cosmetic brush in the rare case.
+ * Three tile rows here — the flat `row` layout's size, where the floor crowd
+ * stands one jump below the boards and a deeper skirt would collide with
+ * their name labels. The elevated layouts override per platform with a
+ * four-row skirt (`signH`), because their geometry keeps standing surfaces
+ * away from the space under the boards. THE LAYOUT RULE that makes big
+ * skirts safe: name labels are ~190px wide and sit ~118px above a standing
+ * surface, so no surface within 160px below a board may come near its
+ * footprint — put ladders in the gaps and flanks, never under the text.
  */
-export const ANSWER_SIGN_H = GRID * 4;
+export const ANSWER_SIGN_H = GRID * 3;
+/** The elevated layouts' four-row signboard: room for two big text lines. */
+export const TALL_SIGN_H = GRID * 4;
 
 const EDGE_MARGIN = 70;
 const MIN_GAP = 60;
@@ -133,11 +143,13 @@ export function buildRangeArena(q) {
 
 /**
  * Perch tier: same rise as the row layout's answers, so it's the same proven
- * jump. Island tier doubles it — 320px is beyond the ~220px apex, which is
- * what makes the perches mandatory rather than decorative.
+ * jump. Island boards sit three tiers up — well beyond the ~220px jump apex,
+ * which is what makes the ladder columns mandatory rather than decorative,
+ * and high enough that the floor crowd's name labels can never reach the
+ * signboard text.
  */
 export const PERCH_Y = FLOOR_Y - 160;
-export const ISLAND_Y = FLOOR_Y - 320;
+export const ISLAND_Y = FLOOR_Y - 480;
 /** Perches are stepping stones, not destinations — big enough to land on with slack. */
 export const PERCH_W = GRID * 9;
 /**
@@ -209,18 +221,21 @@ export function buildRowArena(n) {
 }
 
 /**
- * Answers as high islands, perches between them.
+ * Answers as high islands, ladder columns to reach them.
  *
- * Answers sit centred in `n` equal slots; perches sit at the slot boundaries,
- * one tier down. Placing perches at the boundaries guarantees each answer
- * horizontally overlaps (or nearly touches) an adjacent perch, so the final
- * hop is a near-vertical jump — reachable with the same slack as everything
- * else in this game. The 2-answer arena adds a perch at each outer edge so
- * both flanks have a route and the middle perch isn't a single choke point.
+ * Answers sit centred in `n` equal slots, three tiers up, on tall signboards
+ * (`signH`) with room for two big lines of text. Each ladder column is a
+ * vertical stack of one-way rungs at tiers 1-2-3 sharing one x — jump straight
+ * up through each rung and land on it, three proven 160px hops — and its top
+ * rung is level with the boards, so the last move is a flat hop onto an
+ * answer.
  *
- * The perch count changing with the answer count (3, 2, 3, 4 for n=2..5) is
- * what makes each arena feel like a different level without any layout being
- * harder than another.
+ * Column placement is the whole design: at 2-3 answers the boards leave real
+ * gaps, so columns stand in the gap centres; at 4-5 the boards nearly touch
+ * and the columns move to the outer flanks, with the small inter-board gaps
+ * crossed by flat board-to-board hops. Either way NO standing surface ever
+ * sits in the two tiers directly below a board's footprint — a player parked
+ * there would have their name label drawn across the answer text.
  * @param {number} n
  * @returns {Platform[]}
  */
@@ -236,40 +251,50 @@ export function buildIslandArena(n) {
   const spacing = usable / count;
   const width = Math.min(snapToGrid(spacing - MIN_GAP), ISLAND_MAX_W);
 
+  /** @type {Platform[]} */
+  const boards = [];
   for (let i = 0; i < count; i++) {
     const center = EDGE_MARGIN + (i + 0.5) * spacing;
-    platforms.push({
+    boards.push({
       id: answerId(i),
       x: center - width / 2,
       y: ISLAND_Y,
       w: width,
       h: ANSWER_H,
       oneWay: true,
+      signH: TALL_SIGN_H,
     });
   }
+  platforms.push(...boards);
 
   let perch = 0;
-  for (let j = 0; j < count - 1; j++) {
-    platforms.push({
-      id: `perch${perch++}`,
-      x: EDGE_MARGIN + (j + 1) * spacing - PERCH_W / 2,
-      y: PERCH_Y,
-      w: PERCH_W,
-      h: ANSWER_H,
-      oneWay: true,
-    });
-  }
-  if (count === 2) {
-    for (const x of [EDGE_MARGIN, WORLD_W - EDGE_MARGIN - PERCH_W]) {
+  /** @param {number} x left edge @param {number} w */
+  const ladder = (x, w) => {
+    for (const t of [1, 2, 3]) {
       platforms.push({
         id: `perch${perch++}`,
         x,
-        y: PERCH_Y,
-        w: PERCH_W,
+        y: tierY(t),
+        w,
         h: ANSWER_H,
         oneWay: true,
       });
     }
+  };
+
+  if (count <= 3) {
+    // Gap-centre columns: wide and lonely for 2 answers, a slim pair for 3.
+    const w = count === 2 ? PERCH_W : GRID * 4;
+    for (let j = 0; j < count - 1; j++) {
+      ladder(EDGE_MARGIN + (j + 1) * spacing - w / 2, w);
+    }
+  } else {
+    // Flank columns just outside the outer boards; inner boards are reached
+    // by hopping across the outer ones.
+    const w = GRID * 3;
+    const last = boards[count - 1];
+    ladder(boards[0].x - 12 - w, w);
+    ladder(last.x + last.w + 12, w);
   }
 
   return platforms;
@@ -342,6 +367,7 @@ export function buildTieredArena(n, layout) {
       w: TIER_BOARD_W,
       h: ANSWER_H,
       oneWay: true,
+      signH: TALL_SIGN_H,
     });
   });
   spec.perch.forEach(([center, tier], j) => {

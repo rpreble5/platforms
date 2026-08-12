@@ -109,22 +109,25 @@ export function drawSign(cx, p, opts = {}) {
   const y = p.y + dy;
   const terrazzo = themeName() === 'terrazzo';
   const r = 10;
+  // Boards declare their own drawn height (the elevated layouts use a taller
+  // skirt for bigger text); the module constant is just the row-layout default.
+  const signH = p.signH ?? ANSWER_SIGN_H;
 
   if (has('platform')) {
-    drawTileBox(cx, art.platform, p.x, y, p.w, ANSWER_SIGN_H);
+    drawTileBox(cx, art.platform, p.x, y, p.w, signH);
   } else if (terrazzo) {
     const way = activeWay();
     cx.fillStyle = 'rgba(40,40,50,0.10)';
     cx.beginPath();
-    cx.roundRect(p.x + 4, y + 6, p.w, ANSWER_SIGN_H, r);
+    cx.roundRect(p.x + 4, y + 6, p.w, signH, r);
     cx.fill();
     cx.fillStyle = way.edge;
     cx.beginPath();
-    cx.roundRect(p.x, y, p.w, ANSWER_SIGN_H, r);
+    cx.roundRect(p.x, y, p.w, signH, r);
     cx.fill();
     cx.fillStyle = way.face;
     cx.beginPath();
-    cx.roundRect(p.x + 5, y + 5, p.w - 10, ANSWER_SIGN_H - 12, r - 3);
+    cx.roundRect(p.x + 5, y + 5, p.w - 10, signH - 12, r - 3);
     cx.fill();
     // The landing surface is the DARK band here — darker than the face, so it
     // reads as structure rather than shine. Radii are [tl, tr, br, bl].
@@ -135,11 +138,11 @@ export function drawSign(cx, p, opts = {}) {
   } else {
     cx.fillStyle = STAGE.platEdge;
     cx.beginPath();
-    cx.roundRect(p.x, y, p.w, ANSWER_SIGN_H, r);
+    cx.roundRect(p.x, y, p.w, signH, r);
     cx.fill();
     cx.fillStyle = STAGE.platFace;
     cx.beginPath();
-    cx.roundRect(p.x + 5, y + 5, p.w - 10, ANSWER_SIGN_H - 12, r - 3);
+    cx.roundRect(p.x + 5, y + 5, p.w - 10, signH - 12, r - 3);
     cx.fill();
     // The landing surface is the brightest band on the whole stage, because
     // it's the thing players are aiming at. Radii are [tl, tr, br, bl].
@@ -160,13 +163,13 @@ export function drawSign(cx, p, opts = {}) {
       state === 'correct'
         ? 'rgba(255,255,255,0.32)'
         : terrazzo ? 'rgba(20,14,26,0.38)' : 'rgba(20,14,26,0.55)';
-    cx.fillRect(p.x - 4, y - 4, p.w + 8, ANSWER_SIGN_H + 8);
+    cx.fillRect(p.x - 4, y - 4, p.w + 8, signH + 8);
     cx.restore();
     if (state === 'correct') {
       cx.strokeStyle = terrazzo ? 'rgba(23,20,42,0.85)' : 'rgba(244,241,232,0.9)';
       cx.lineWidth = 6;
       cx.beginPath();
-      cx.roundRect(p.x - 3, y - 3, p.w + 6, ANSWER_SIGN_H + 6, r + 3);
+      cx.roundRect(p.x - 3, y - 3, p.w + 6, signH + 6, r + 3);
       cx.stroke();
     }
   }
@@ -183,7 +186,7 @@ export function drawSignText(cx, p, text, opts = {}) {
   const dy = opts.dy ?? 0;
   const state = opts.state ?? 'idle';
   const skirtTop = p.y + ANSWER_H + dy;
-  const skirtH = ANSWER_SIGN_H - ANSWER_H;
+  const skirtH = (p.signH ?? ANSWER_SIGN_H) - ANSWER_H;
   const midY = skirtTop + skirtH / 2;
 
   // No ✓/✕ icons: they shoved the answer text sideways at the exact moment

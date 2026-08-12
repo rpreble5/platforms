@@ -7,7 +7,7 @@
 
 import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
-import { RANGE_ID } from '../../sim/levels.js';
+import { ANSWER_H, ANSWER_SIGN_H, RANGE_ID } from '../../sim/levels.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
@@ -100,6 +100,23 @@ export function render(cx, world, roster, game, opts) {
 
   const anyFindMe = items.some((it) => it.p.findMeUntil > world.t);
 
+  // Answer text always beats a name label. The layouts keep standing surfaces
+  // away from the space under the boards, but a player mid-jump (or crowding a
+  // ladder right beside a board) can still put their label across a skirt —
+  // when that happens the label simply skips a frame rather than covering the
+  // answer 30 people are trying to read.
+  /** @type {Array<{x:number, y:number, w:number, h:number}>} */
+  const skirts = [];
+  for (const p of world.platforms) {
+    if (!p.id?.startsWith('ans') || p.id === RANGE_ID) continue;
+    skirts.push({
+      x: p.x,
+      y: p.y + ANSWER_H,
+      w: p.w,
+      h: (p.signH ?? ANSWER_SIGN_H) - ANSWER_H,
+    });
+  }
+
   for (const it of items) {
     const p = it.p;
     const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', hat: 'none', connected: true };
@@ -139,7 +156,12 @@ export function render(cx, world, roster, game, opts) {
     // thirty names back on. Raise this number if the room reads fine with them.
     if (count <= 24 || findMe) {
       const label = getLabel(look.name, findMe ? '#ffffff' : shade(look.color, 0.55));
-      cx.drawImage(label, Math.round(it.x + w / 2 - label.width / 2), Math.round(top - 40));
+      const lx = Math.round(it.x + w / 2 - label.width / 2);
+      const ly = Math.round(top - 40);
+      const onSkirt = skirts.some(
+        (s) => lx < s.x + s.w && lx + label.width > s.x && ly < s.y + s.h && ly + label.height > s.y
+      );
+      if (!onSkirt) cx.drawImage(label, lx, ly);
     }
   }
   cx.globalAlpha = 1;
