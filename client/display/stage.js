@@ -249,11 +249,11 @@ export function drawPerch(cx, p) {
 const RAIL_Y = FLOOR_Y - 210;
 
 /**
- * The number line for a range round: a rail floating ABOVE the crowd, so it
- * stays readable however packed the floor gets. Each tick is a bead on the
- * rail with a little tag hanging under it carrying the number, and a faint
- * guide line drops to the floor so lining your feet up with a value never
- * means squinting across empty space.
+ * The number line for a range round: a subtle light line floating ABOVE the
+ * crowd, numbers sitting above it, and a small single-colour triangle under
+ * the line marking each exact value. Faint guide lines still drop to the
+ * floor so lining your feet up with a value never means squinting across
+ * empty space.
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/levels.js').RangeQuestion} q
  */
@@ -262,11 +262,10 @@ export function drawNumberLine(cx, q) {
   const x1 = rangeX(q, q.max);
   const terrazzo = themeName() === 'terrazzo';
   const way = activeWay();
-  const railColor = terrazzo ? way.top : 'rgba(244,241,232,0.45)';
-  const guideColor = terrazzo ? 'rgba(23,20,42,0.10)' : 'rgba(244,241,232,0.10)';
-  const tagFace = terrazzo ? way.face : 'rgba(12,10,22,0.85)';
-  const tagEdge = terrazzo ? way.edge : UI.panelEdge;
-  const tagText = terrazzo ? way.text : UI.paper;
+  const lineColor = terrazzo ? 'rgba(23,20,42,0.18)' : 'rgba(244,241,232,0.30)';
+  const guideColor = terrazzo ? 'rgba(23,20,42,0.08)' : 'rgba(244,241,232,0.08)';
+  const numColor = terrazzo ? 'rgba(23,20,42,0.78)' : 'rgba(244,241,232,0.85)';
+  const markColor = terrazzo ? way.top : UI.paper;
 
   cx.save();
 
@@ -283,45 +282,32 @@ export function drawNumberLine(cx, q) {
   for (const v of ticks) {
     const x = rangeX(q, v);
     cx.fillStyle = guideColor;
-    cx.fillRect(x - 1.5, RAIL_Y, 3, FLOOR_Y - RAIL_Y);
+    cx.fillRect(x - 1, RAIL_Y + 14, 2, FLOOR_Y - RAIL_Y - 14);
   }
 
-  // The rail: a rounded bar with rounded end caps.
-  cx.fillStyle = railColor;
-  cx.beginPath();
-  cx.roundRect(x0 - 6, RAIL_Y - 4, x1 - x0 + 12, 8, 4);
-  cx.fill();
+  // The line itself: thin and quiet.
+  cx.fillStyle = lineColor;
+  cx.fillRect(x0 - 4, RAIL_Y - 1.5, x1 - x0 + 8, 3);
 
   cx.textAlign = 'center';
-  cx.textBaseline = 'middle';
-  cx.font = `800 27px ${FONT.display}`;
+  cx.textBaseline = 'alphabetic';
+  cx.font = `700 30px ${FONT.display}`;
 
   for (const v of ticks) {
     const x = rangeX(q, v);
     const label = v === q.max && q.unit ? `${fmtValue(v)} ${q.unit}` : fmtValue(v);
-    const tw = cx.measureText(label).width;
-    const w = tw + 26;
-    const h = 42;
-    // Tags hang inside the world even at the endpoints.
-    const tx = Math.max(w / 2 + 8, Math.min(WORLD_W - w / 2 - 8, x));
+    // Numbers above the line, endpoints nudged inward so nothing crops.
+    const half = cx.measureText(label).width / 2;
+    cx.fillStyle = numColor;
+    cx.fillText(label, Math.max(half + 10, Math.min(WORLD_W - half - 10, x)), RAIL_Y - 16);
 
-    // stem, then the tag
-    cx.fillStyle = railColor;
-    cx.fillRect(x - 2, RAIL_Y, 4, 14);
-    cx.fillStyle = tagFace;
+    // The exact mark: one small triangle just below the line, one colour.
+    cx.fillStyle = markColor;
     cx.beginPath();
-    cx.roundRect(tx - w / 2, RAIL_Y + 14, w, h, 12);
-    cx.fill();
-    cx.strokeStyle = tagEdge;
-    cx.lineWidth = 3;
-    cx.stroke();
-    cx.fillStyle = tagText;
-    cx.fillText(label, tx, RAIL_Y + 14 + h / 2 + 1);
-
-    // the bead on the rail, drawn last so it caps the stem
-    cx.fillStyle = railColor;
-    cx.beginPath();
-    cx.arc(x, RAIL_Y, 9, 0, Math.PI * 2);
+    cx.moveTo(x - 7, RAIL_Y + 3);
+    cx.lineTo(x + 7, RAIL_Y + 3);
+    cx.lineTo(x, RAIL_Y + 14);
+    cx.closePath();
     cx.fill();
   }
   cx.restore();
