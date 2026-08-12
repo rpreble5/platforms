@@ -186,26 +186,14 @@ export function drawSignText(cx, p, text, opts = {}) {
   const skirtH = ANSWER_SIGN_H - ANSWER_H;
   const midY = skirtTop + skirtH / 2;
 
-  let boxW = p.w - 40;
-  if (state !== 'idle') boxW -= 54;
+  // No ✓/✕ icons: they shoved the answer text sideways at the exact moment
+  // everyone is reading it. The brighten/outline on the board and the fade on
+  // the losers carry the verdict; the text never moves.
+  const boxW = p.w - 40;
 
   cx.save();
   cx.textAlign = 'center';
   cx.textBaseline = 'middle';
-
-  if (state !== 'idle') {
-    // The icon IS the signal — no hue attached. Correct in full ink, wrong
-    // dimmed like the rest of its fading board.
-    cx.font = `800 40px ${FONT.display}`;
-    if (themeName() === 'terrazzo') {
-      cx.fillStyle = activeWay().text;
-      cx.globalAlpha = state === 'correct' ? 1 : 0.55;
-    } else {
-      cx.fillStyle = state === 'correct' ? STAGE.platText : STAGE.platTextDim;
-    }
-    cx.fillText(state === 'correct' ? '✓' : '✕', p.x + 42, midY);
-    cx.globalAlpha = 1;
-  }
 
   cx.font = fitFont(cx, text, boxW, 46, 22);
   if (themeName() === 'terrazzo') {
@@ -214,7 +202,7 @@ export function drawSignText(cx, p, text, opts = {}) {
   } else {
     cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
   }
-  cx.fillText(text, p.x + p.w / 2 + (state !== 'idle' ? 24 : 0), midY);
+  cx.fillText(text, p.x + p.w / 2, midY);
   cx.restore();
 }
 
