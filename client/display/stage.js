@@ -205,17 +205,18 @@ export function drawSignText(cx, p, text, opts = {}) {
   // Long answers WRAP instead of spilling off the board. One line while it
   // stays big enough to read across a room; below that, two balanced lines;
   // and the size always scales down far enough that nothing ever overflows —
-  // a cropped drug name is a wrong answer waiting to happen.
-  cx.font = `800 46px ${FONT.display}`;
-  const w46 = cx.measureText(text).width;
-  const oneSize = Math.min(46, Math.floor((46 * boxW) / Math.max(1, w46)));
+  // a cropped drug name is a wrong answer waiting to happen. Caps sized for
+  // the four-row signboard skirt.
+  cx.font = `800 54px ${FONT.display}`;
+  const wRef = cx.measureText(text).width;
+  const oneSize = Math.min(54, Math.floor((54 * boxW) / Math.max(1, wRef)));
 
-  if (oneSize >= 26 || !text.includes(' ')) {
+  if (oneSize >= 30 || !text.includes(' ')) {
     cx.font = `800 ${Math.max(14, oneSize)}px ${FONT.display}`;
     cx.fillText(text, p.x + p.w / 2, midY);
   } else {
     const words = text.split(' ');
-    cx.font = `800 24px ${FONT.display}`;
+    cx.font = `800 32px ${FONT.display}`;
     let best = { a: text, b: '', w: cx.measureText(text).width };
     for (let i = 1; i < words.length; i++) {
       const a = words.slice(0, i).join(' ');
@@ -225,7 +226,7 @@ export function drawSignText(cx, p, text, opts = {}) {
     }
     const size = Math.max(
       12,
-      Math.min(24, Math.floor((24 * boxW) / Math.max(1, best.w)), Math.floor((skirtH - 8) / 2.1))
+      Math.min(32, Math.floor((32 * boxW) / Math.max(1, best.w)), Math.floor((skirtH - 10) / 2.15))
     );
     cx.font = `800 ${size}px ${FONT.display}`;
     const gap = size * 0.62;

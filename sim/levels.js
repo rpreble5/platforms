@@ -50,11 +50,15 @@ export const ANSWER_H = GRID;
  * text, so the platform IS the signboard rather than having a label bolted
  * under it.
  *
- * Three tile rows. The ceiling on this number is the crowd: an avatar standing
- * on the floor at full size reaches y=924, and the platform surface is at 820,
- * so anything past ~100px would be covered by people's heads.
+ * Four tile rows, sized for two lines of readable answer text. In the
+ * elevated layouts (boards at 660 and above) the air below is empty, so the
+ * deeper skirt costs nothing. In the flat row layout the skirt bottom now
+ * reaches y=916, inside the tallest floor-stander's head zone (~902+) — but
+ * avatars draw OVER boards, the overlap is a few px at the board's edge, and
+ * it only occurs at full avatar scale in a near-empty room. Bigger answer
+ * text every round beats a cosmetic brush in the rare case.
  */
-export const ANSWER_SIGN_H = GRID * 3;
+export const ANSWER_SIGN_H = GRID * 4;
 
 const EDGE_MARGIN = 70;
 const MIN_GAP = 60;
