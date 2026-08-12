@@ -1,0 +1,62 @@
+{
+  "pack": "Hypertension — hard mode",
+  "answerMs": 15000,
+  "showdown": {
+    "answerMs": 7000,
+    "statements": [
+      { "text": "ACE inhibitor cough is dose-dependent", "answer": false },
+      { "text": "Beta-blockers are first-line for uncomplicated hypertension", "answer": false },
+      { "text": "Chlorthalidone has a longer half-life than hydrochlorothiazide", "answer": true },
+      { "text": "Amlodipine ankle edema typically responds to loop diuretics", "answer": false },
+      { "text": "Masked hypertension carries higher CV risk than white-coat hypertension", "answer": true },
+      { "text": "An ARB is safe in a patient with prior ACE inhibitor angioedema", "answer": false }
+    ]
+  },
+  "questions": [
+    {
+      "text": "Resistant HTN on lisinopril, amlodipine and chlorthalidone — best fourth agent?",
+      "answers": ["Spironolactone", "Hydralazine", "Clonidine", "Doxazosin"],
+      "correct": 0
+    },
+    {
+      "text": "Which thiazide has the stronger cardiovascular outcome evidence?",
+      "answers": ["Chlorthalidone", "Hydrochlorothiazide"],
+      "correct": 0,
+      "layout": "row"
+    },
+    {
+      "text": "Most common ENDOCRINE cause of secondary hypertension in adults?",
+      "answers": ["Primary aldosteronism", "Pheochromocytoma", "Cushing syndrome", "Hyperthyroidism", "Acromegaly"],
+      "correct": 0,
+      "layout": "pyramid"
+    },
+    {
+      "text": "Amlodipine works well but causes ankle edema. Best next step?",
+      "answers": [
+        "Add furosemide for the edema",
+        "Add an ACE inhibitor or ARB",
+        "Switch to hydralazine instead",
+        "Compression stockings, continue as is"
+      ],
+      "correct": 1,
+      "layout": "reverse-pyramid"
+    },
+    {
+      "type": "range",
+      "text": "Usual chlorthalidone dose range for hypertension (mg daily)?",
+      "min": 0,
+      "max": 100,
+      "answer": [12.5, 25],
+      "unit": "mg"
+    },
+    {
+      "text": "ACE inhibitor PLUS ARB combination therapy — which is true?",
+      "answers": [
+        "Improves outcomes in diabetic nephropathy",
+        "More hyperkalemia and AKI, no outcome benefit",
+        "Guideline-recommended for resistant hypertension"
+      ],
+      "correct": 1
+    }
+  ]
+}

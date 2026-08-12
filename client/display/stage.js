@@ -195,14 +195,43 @@ export function drawSignText(cx, p, text, opts = {}) {
   cx.textAlign = 'center';
   cx.textBaseline = 'middle';
 
-  cx.font = fitFont(cx, text, boxW, 46, 22);
   if (themeName() === 'terrazzo') {
     cx.fillStyle = activeWay().text;
     if (state === 'wrong') cx.globalAlpha = 0.55;
   } else {
     cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
   }
-  cx.fillText(text, p.x + p.w / 2, midY);
+
+  // Long answers WRAP instead of spilling off the board. One line while it
+  // stays big enough to read across a room; below that, two balanced lines;
+  // and the size always scales down far enough that nothing ever overflows —
+  // a cropped drug name is a wrong answer waiting to happen.
+  cx.font = `800 46px ${FONT.display}`;
+  const w46 = cx.measureText(text).width;
+  const oneSize = Math.min(46, Math.floor((46 * boxW) / Math.max(1, w46)));
+
+  if (oneSize >= 26 || !text.includes(' ')) {
+    cx.font = `800 ${Math.max(14, oneSize)}px ${FONT.display}`;
+    cx.fillText(text, p.x + p.w / 2, midY);
+  } else {
+    const words = text.split(' ');
+    cx.font = `800 24px ${FONT.display}`;
+    let best = { a: text, b: '', w: cx.measureText(text).width };
+    for (let i = 1; i < words.length; i++) {
+      const a = words.slice(0, i).join(' ');
+      const b = words.slice(i).join(' ');
+      const w = Math.max(cx.measureText(a).width, cx.measureText(b).width);
+      if (w < best.w) best = { a, b, w };
+    }
+    const size = Math.max(
+      12,
+      Math.min(24, Math.floor((24 * boxW) / Math.max(1, best.w)), Math.floor((skirtH - 8) / 2.1))
+    );
+    cx.font = `800 ${size}px ${FONT.display}`;
+    const gap = size * 0.62;
+    cx.fillText(best.a, p.x + p.w / 2, midY - gap);
+    cx.fillText(best.b, p.x + p.w / 2, midY + gap);
+  }
   cx.restore();
 }
 
