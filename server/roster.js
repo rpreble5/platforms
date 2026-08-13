@@ -161,10 +161,9 @@ export class Roster {
   }
 
   /**
-   * Free looks per colour, within one year. The phone greys out anything at
-   * zero, which is what stops a player picking a colour about to be refused.
-   * Two finishes per colour per year; only same-year players contend, because
-   * across years the body shape already separates identical colour+finish.
+   * Free colours, within one year: 1 while unclaimed, 0 once somebody in
+   * that cohort holds it. The phone greys out anything at zero, which is
+   * what stops a player picking a colour about to be refused.
    * @param {number} cohortIndex
    * @returns {number[]}
    */
@@ -172,61 +171,58 @@ export class Roster {
     const cohort = clampCohort(cohortIndex);
     const free = COLORS.map(() => SLOTS_PER_COLOR);
     for (const r of this.byId.values()) {
-      if (r.cohortIndex === cohort) free[r.colorIndex]--;
+      if (r.cohortSet && r.cohortIndex === cohort) free[r.colorIndex]--;
     }
     return free.map((n) => Math.max(0, n));
   }
 
   /**
-   * Resolve a look request to a free (colour, finish) pair within the
-   * record's cohort.
+   * Resolve a look request: the COLOUR is the claim, unique within the
+   * record's cohort — one jade PGY1, full stop. A contested request slides
+   * to the nearest free hue. Across years the body shape separates identical
+   * colours, so no contention there.
    *
-   * The nesting *is* the policy: a collision gives up the finish first and
-   * moves the colour only as a last resort — a 30x42 block of hue is the
-   * strongest signal on the avatar, so it is the last thing taken away. An
-   * uncontested request comes back exactly as asked.
+   * The finish is a pure preference and is NEVER taken away: since colour
+   * alone carries uniqueness, granting the exact finish asked for can't
+   * collide with anyone.
    *
-   * 24 looks per cohort against a 40-player cap means a room where 25+ people
-   * all pick the SAME year can exhaust the space. When that happens the
-   * request is granted as a duplicate rather than refusing the join — name
-   * labels and find-me carry identity past that point.
+   * Twelve colours per year covers a residency class with room to spare; if
+   * a thirteenth same-year player ever appears, the request is granted as a
+   * duplicate rather than refusing the join — name labels and find-me carry
+   * identity past that point.
    *
    * @param {PlayerRecord} record
    * @param {number} wantColor
    * @param {number} wantFinish
    */
   #assign(record, wantColor, wantFinish) {
-    /** @type {Set<string>} */
+    // Only COMMITTED players hold claims. A whole room joins before anyone
+    // picks a year, and every one of those placeholders sits in the default
+    // cohort wearing an auto colour — letting them block real claims would
+    // exhaust the year before a single person had actually chosen it.
+    /** @type {Set<number>} */
     const taken = new Set();
     for (const r of this.byId.values()) {
-      if (r !== record && r.cohortIndex === record.cohortIndex) {
-        taken.add(`${r.colorIndex}:${r.finishIndex}`);
+      if (r !== record && r.cohortSet && r.cohortIndex === record.cohortIndex) {
+        taken.add(r.colorIndex);
       }
     }
 
-    const wf = clampFinish(wantFinish);
-    const finishes = [wf, ...FINISHES.map((_, i) => i).filter((f) => f !== wf)];
     const start = ((wantColor % COLORS.length) + COLORS.length) % COLORS.length;
-
-    /** @param {number} c @param {number} f */
-    const claim = (c, f) => {
-      record.colorIndex = c;
-      record.finishIndex = f;
-      record.color = COLORS[c].hex;
-      record.finish = FINISHES[f].key;
-      if (!record.named) record.name = lookName(c, record.cohortIndex);
-    };
-
+    let color = start;
     for (let step = 0; step < COLORS.length; step++) {
       const c = (start + step) % COLORS.length;
-      for (const f of finishes) {
-        if (taken.has(`${c}:${f}`)) continue;
-        claim(c, f);
-        return;
+      if (!taken.has(c)) {
+        color = c;
+        break;
       }
     }
-    // The cohort's whole look space is spent: grant the request as-is.
-    claim(start, wf);
+
+    record.colorIndex = color;
+    record.finishIndex = clampFinish(wantFinish);
+    record.color = COLORS[color].hex;
+    record.finish = FINISHES[record.finishIndex].key;
+    if (!record.named) record.name = lookName(color, record.cohortIndex);
   }
 
   /**

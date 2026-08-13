@@ -25,14 +25,19 @@ function looks(r) {
   return [...r.byId.values()].map((p) => `${p.cohortIndex}:${p.colorIndex}:${p.finishIndex}`);
 }
 
-test('auto-assigned looks are all distinct while the cohort has capacity', () => {
-  // 12 colours x 2 finishes = 24 looks per cohort. Every player up to that
-  // point must be unique; past it, joins still succeed as duplicates rather
-  // than turning anyone away — 25+ players of one single year is beyond any
-  // realistic room, and name labels + find-me carry identity from there.
+test('auto-assigned colours are all distinct while the cohort has capacity', () => {
+  // One claim per colour per year, twelve per cohort. Every player up to
+  // that point gets a unique colour; past it, joins still succeed as
+  // duplicates rather than turning anyone away — a 13th player of one single
+  // year is beyond the real room, and name labels + find-me carry identity
+  // from there.
   const r = new Roster();
-  joinMany(r, LOOK_COUNT);
-  assert.equal(new Set(looks(r)).size, LOOK_COUNT, 'every look distinct at capacity');
+  const players = joinMany(r, LOOK_COUNT);
+  assert.equal(
+    new Set(players.map((p) => p.colorIndex)).size,
+    LOOK_COUNT,
+    'every colour distinct at capacity'
+  );
 
   joinMany(r, 40 - LOOK_COUNT);
   assert.equal(r.byId.size, 40, 'nobody is refused past capacity');
@@ -44,11 +49,18 @@ test('the first twelve players get twelve different colours', () => {
   assert.equal(new Set(players.map((p) => p.colorIndex)).size, COLORS.length);
 });
 
-test('looks stay unique with all three years in the room', () => {
+test('colours stay unique within every year with all three in the room', () => {
   const r = new Roster();
   const players = joinMany(r, 36);
   players.forEach((p, i) => r.setLook(p.id, { cohortIndex: i % COHORTS.length }));
-  assert.equal(new Set(looks(r)).size, 36);
+  for (let c = 0; c < COHORTS.length; c++) {
+    const inYear = players.filter((p) => p.cohortIndex === c);
+    assert.equal(
+      new Set(inYear.map((p) => p.colorIndex)).size,
+      inYear.length,
+      `every ${COHORTS[c].label} colour distinct`
+    );
+  }
 });
 
 test('an uncontested request comes back exactly as asked', () => {
@@ -60,7 +72,7 @@ test('an uncontested request comes back exactly as asked', () => {
   assert.equal(a.finish, 'pastel');
 });
 
-test('a collision gives up the finish first, keeping the colour', () => {
+test('a contested colour slides to a free hue; the finish is never touched', () => {
   const r = new Roster();
   const [a, b] = joinMany(r, 2);
   const want = { cohortIndex: 0, colorIndex: 5, finishIndex: 1 };
@@ -68,20 +80,22 @@ test('a collision gives up the finish first, keeping the colour', () => {
   r.setLook(a.id, { name: 'Ada', ...want });
   r.setLook(b.id, { name: 'Ben', ...want });
 
-  assert.equal(b.colorIndex, 5, 'colour survives — the strongest signal');
-  assert.notEqual(b.finishIndex, a.finishIndex, 'the finish is what moved');
+  assert.notEqual(b.colorIndex, 5, 'one jade PGY1, full stop — the colour moved');
+  assert.equal(b.finishIndex, 1, 'the style they picked is theirs regardless');
+  assert.equal(new Set(looks(r)).size, 2);
 });
 
-test('the colour moves only when both its finishes are gone', () => {
+test('a player who has not picked a year cannot block a colour', () => {
+  // A whole room joins before anyone commits to a year; those placeholders
+  // wear auto colours in the default cohort but hold no claim on them.
   const r = new Roster();
-  const players = joinMany(r, FINISHES.length + 1);
-  const want = { cohortIndex: 0, colorIndex: 5 };
-  for (const p of players) r.setLook(p.id, want);
+  const [a, b] = joinMany(r, 2);
+  r.setLook(b.id, { colorIndex: 5 }); // b picks a colour but never a year
+  assert.equal(b.cohortSet, false);
 
-  const inColour = players.filter((p) => p.colorIndex === 5);
-  assert.equal(inColour.length, FINISHES.length, 'both finishes fit in the colour');
-  assert.notEqual(players[FINISHES.length].colorIndex, 5, 'the one that did not fit moved');
-  assert.equal(new Set(looks(r)).size, players.length);
+  r.setLook(a.id, { cohortIndex: 1, colorIndex: 5 });
+  assert.equal(a.colorIndex, 5, 'the committed player takes the colour');
+  assert.equal(r.freeByColor(1)[5], 0, 'and only now is it counted as claimed');
 });
 
 test('the same colour and finish is free to players in different years', () => {

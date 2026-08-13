@@ -179,23 +179,23 @@ Three axes carry identity:
 
 | axis | who chooses | what it's for |
 |---|---|---|
-| colour (12) | player | which one is me |
-| finish (flat / pastel) | player | disambiguates people sharing a colour |
+| colour (12) | player | which one is me — unique within your year |
+| finish (flat / pastel) | player | pure preference, never taken away |
 | body (egg / pill / loaf, 0.75 / 1.0 / 1.4 tall) | training year | which cohort, at a glance |
 
 The finish is the same hue rendered two ways: **flat** is the saturated colour
 with a bold ink outline, **pastel** is washed toward white with a deep
-same-hue outline and a blush. Both belong to the terrazzo stage; players just
-pick which they like. That's 24 looks per year for a room that splits roughly
-ten a year — and if more than 24 players of a single year ever join, the
-server starts allowing duplicates rather than turning anyone away (name labels
-and find-me carry it from there).
+same-hue outline and a blush. Both belong to the terrazzo stage.
 
-**The resolution order is the design.** When two players in one year want the
-same look, the server gives up the weakest signal first: the finish yields,
-and the colour moves only when both its finishes are gone. Across years the
-body shape already separates identical pairs, so a PGY1 and a PGY3 can both be
-jade pastel.
+**The colour is the claim.** One jade PGY1, full stop: taken colours grey out
+on the phone for your year, and a contested request slides to the nearest
+free hue. Since colour alone carries uniqueness, the finish is never touched
+by collision resolution — what you pick is what you keep. Across years the
+body shape separates identical colours, so a PGY1 and a PGY3 can both be
+jade. Twelve colours per year covers a residency class; players who haven't
+committed to a year yet hold no claim, so a lobby full of people mid-setup
+can't exhaust a cohort, and in the unreal case of a 13th same-year player the
+server grants a duplicate rather than refusing the join.
 
 **Accessories are dormant, not deleted.** The hat art and its authoring
 pipeline (`client/display/accessory-art.js`, **[docs/ACCESSORIES.md](docs/ACCESSORIES.md)**)

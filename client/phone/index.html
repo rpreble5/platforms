@@ -679,10 +679,10 @@
   // and vibration — all three need a real user interaction, and hanging them off
   // a tap the player was going to make anyway beats asking for one.
   //
-  // Colour is a request. The server owns the answer, because 12 colours cannot
-  // cover 30 players: it pairs your colour with a free finish, and moves you
-  // to a neighbouring colour if both of yours are gone. Whatever comes back is
-  // what the picker then shows.
+  // Colour is a request. The server owns the answer: a colour is claimed
+  // whole within your year, so a taken one greys out and a contested request
+  // slides to a neighbouring hue. Your style is a pure preference — the
+  // server never swaps it. Whatever comes back is what the picker shows.
 
   function buildPickers() {
     for (var y = 0; y < COHORTS.length; y++) {
@@ -784,8 +784,8 @@
       var out = free <= 0 && i !== pickedColor;
       el.classList.toggle('out', out);
       el.classList.toggle('sel', i === pickedColor);
-      // Two looks per colour per year: only the last one is worth flagging.
-      el.querySelector('.n').textContent = free === 1 ? '1' : '';
+      // A colour is claimed whole, so greyed-out IS the count — no badge.
+      el.querySelector('.n').textContent = '';
       el.querySelector('.g').textContent = i === pickedColor ? '✓' : '';
     }
     paintFinishes(COLORS[pickedColor >= 0 ? pickedColor : 0].hex);

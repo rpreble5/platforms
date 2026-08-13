@@ -10,9 +10,9 @@
  *
  * Who chooses what:
  *   - The player picks cohort, colour and finish.
- *   - The server resolves collisions, giving up the weakest signal first:
- *     finish yields, and the colour moves only as a last resort. A 30x42
- *     block of hue is the strongest thing on the avatar.
+ *   - The COLOUR is the claim, unique within a year: taken colours grey out
+ *     on the phone, and a contested request slides to the nearest free hue.
+ *     The finish is a pure preference and is never taken away.
  *
  * Accessories are RETIRED for now: the hat pools, pool partitioning and the
  * phone's accessory picker are gone from the identity system, though the art
@@ -96,24 +96,24 @@ export const ACCESSORIES = [
  * Finishes: the same hue rendered two ways. `flat` is the saturated colour
  * with a bold ink outline; `pastel` is the colour washed toward white with a
  * deep same-hue outline and a blush. Both belong to the terrazzo stage, and
- * players simply pick which they like — the server only overrides a pick when
- * two players in one cohort would otherwise be identical.
+ * players simply pick which they like — a pure preference, never overridden,
+ * because the colour alone carries uniqueness.
  */
 export const FINISHES = [
   { key: 'flat', label: 'Flat' },
   { key: 'pastel', label: 'Pastel' },
 ];
 
-/** Distinct looks available in one colour, within one year. */
-export const SLOTS_PER_COLOR = FINISHES.length;
+/** Free slots per colour within one year: a colour is claimed whole. */
+export const SLOTS_PER_COLOR = 1;
 
 /**
- * Distinct looks per cohort (a look is colour x finish; the cohort's shape
- * makes the same pair distinct across years). 24 per year covers a realistic
- * room; if more than 24 players of ONE year ever join, the roster starts
- * allowing duplicates rather than turning anyone away.
+ * Distinct claims per cohort — one per colour (the cohort's shape makes the
+ * same colour distinct across years). Twelve per year covers a residency
+ * class; if a thirteenth same-year player ever joins, the roster grants
+ * duplicates rather than turning anyone away.
  */
-export const LOOK_COUNT = COLORS.length * FINISHES.length;
+export const LOOK_COUNT = COLORS.length;
 
 /** @param {number} i @returns {number} */
 export function clampFinish(i) {
