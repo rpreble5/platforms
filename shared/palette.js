@@ -1,28 +1,22 @@
 /**
- * Player identity: three axes — cohort, colour, accessory.
+ * Player identity: three axes — cohort (body shape + height), colour, finish.
  *
  * The budget this is all designed against: at 30 players an avatar is drawn
- * around 30x42 px and viewed from five metres. A feature needs roughly 3px to
- * be noticed at all, which is 10% of the body width. So the rule every shape
- * here obeys is that it must **break the outline**. The eye reads silhouette
- * first, and a blob above the head sits against open sky rather than against a
- * busy body. Anything drawn inside the outline — face detail, a badge, fine
- * pattern — is invisible across a room and is not worth the pixels.
- *
- * Never colour alone, either. Twelve hues are not separable at that size across
- * a room, under projector gamma, or for a colourblind player. The accessory is
- * the disambiguator, and the phone shows both so "look at your phone, then find
- * that on screen" is the actual mechanism.
+ * around 30x42 px and viewed from five metres, and a projector crushes
+ * saturation before anything else. Colour is the strongest signal, the cohort
+ * silhouette (egg / pill / loaf) the second, and the finish — the same hue
+ * rendered saturated-flat or soft-pastel — the tiebreaker between two players
+ * who share both.
  *
  * Who chooses what:
- *   - The player picks cohort, colour, accessory and body pattern.
+ *   - The player picks cohort, colour and finish.
  *   - The server resolves collisions, giving up the weakest signal first:
- *     pattern yields, then accessory, and the colour moves only as a last
- *     resort. A 30x42 block of hue is the strongest thing on the avatar.
- * That order is what lets people choose without breaking the uniqueness the
- * whole identity system depends on — and with the pattern absorbing most
- * collisions, players now usually get the exact colour and accessory they
- * asked for.
+ *     finish yields, and the colour moves only as a last resort. A 30x42
+ *     block of hue is the strongest thing on the avatar.
+ *
+ * Accessories are RETIRED for now: the hat pools, pool partitioning and the
+ * phone's accessory picker are gone from the identity system, though the art
+ * (accessory-art.js) is kept dormant in case they return.
  *
  * Colours avoid adjacent saturated red/blue pairs and anything that muddies
  * when a projector crushes saturation.
@@ -47,55 +41,40 @@ export const COLORS = [
 ];
 
 /**
- * Training years.
+ * Training years — the bean family, growing up.
  *
  * `height` scales how tall the avatar is DRAWN and `shape` picks the body
  * outline. Neither touches the collision box — see render.js and the fairness
  * test in sim/round.test.js. Cohort is a costume, never a gameplay difference.
  *
  * Height is a comparative cue: a clump of PGY1s beside a clump of PGY3s is
- * obvious, one PGY2 alone on a platform is not. That's the right shape for a
- * coarse three-state signal, and it's why the accessory pools carry the load
- * as well.
+ * obvious, one PGY2 alone on a platform is not. The 0.75–1.4 spread is wide
+ * because narrower ones got swamped.
  *
- * The 0.75–1.4 spread is wide because narrower ones got swamped. Accessory
- * silhouettes vary the total height of a sprite by about as much again, so the
- * cohort signal has to clear that noise before it reads at all; a 0.9–1.1 span
- * was invisible and 0.85–1.15 was marginal.
+ * Shape is a second channel pointing the same way — redundant coding, which
+ * survives occlusion and a bad projector better than one channel does. The
+ * three outlines are one species aging: the egg (narrow shoulders, full base)
+ * grows into the upright pill and finally the square-shouldered loaf. Round
+ * top vs domed top vs flat top still separates at true crowd size.
  *
- * Shape is a second, weaker channel pointing the same way — redundant coding,
- * which survives occlusion and a bad projector better than one channel does.
- * Rendered side by side at 30x42 the three outlines are a small difference, and
- * a real one; it is height that does the heavy lifting.
- *
- * The pools pair with the shapes better than they had any right to. PGY1's four
- * accessories all sit near the centre-top, which is exactly where a domed body
- * peaks, and PGY3's crown and horns sit flat on a slab's square shoulders.
- *
- * One consequence of 1.4, accepted deliberately: at fewer than about ten
- * players, where avatars draw at full size, a PGY3's crown overlaps the bottom
- * edge of an answer board when standing directly underneath. At 25-30 players
- * there is 10px of clearance and it never happens.
+ * `noun` feeds the automatic names ("Jade Egg", "Sky Loaf") — the phone shows
+ * your name and colour, and "look at your phone, then find that on screen" is
+ * the mechanism for picking yourself out of 30 avatars.
  */
 export const COHORTS = [
-  { key: 'pgy1', label: 'PGY1', height: 0.75, shape: 'capsule' },
-  { key: 'pgy2', label: 'PGY2', height: 1.0, shape: 'round' },
-  { key: 'pgy3', label: 'PGY3', height: 1.4, shape: 'slab' },
+  { key: 'pgy1', label: 'PGY1', height: 0.75, shape: 'egg', noun: 'Egg' },
+  { key: 'pgy2', label: 'PGY2', height: 1.0, shape: 'pill', noun: 'Pill' },
+  { key: 'pgy3', label: 'PGY3', height: 1.4, shape: 'loaf', noun: 'Loaf' },
 ];
 
-/** Accessories per cohort. Fixed at four so 12 colours x 4 = 48 slots per year. */
+/**
+ * DORMANT — accessories are retired from the identity system for now. The
+ * table and the art in client/display/accessory-art.js are kept so they can
+ * come back without archaeology, but nothing assigns, renders or picks them.
+ */
 export const POOL_SIZE = 4;
 
-/**
- * Twelve accessories in cohort order: indices 0-3 are PGY1, 4-7 PGY2, 8-11
- * PGY3. Because the pools are disjoint index ranges, two cohorts can never
- * contend for the same (colour, accessory) pair — the partition falls out of
- * the numbering rather than needing to be enforced.
- *
- * Every one of these sits above or beside the head. `shades` is the weakest of
- * the twelve and is drawn overhanging the head sides for that reason; it earns
- * its place on the phone more than at five metres.
- */
+/** Dormant, like POOL_SIZE above. */
 export const ACCESSORIES = [
   { key: 'bow', label: 'Bow', glyph: '🎀' },
   { key: 'bonnet', label: 'Bonnet', glyph: '👒' },
@@ -114,42 +93,39 @@ export const ACCESSORIES = [
 ];
 
 /**
- * Body patterns.
- *
- * These are deliberately bold rather than subtle. A pattern a couple of shades
- * off the body colour is invisible at 30x42 from five metres — that difference
- * is exactly what a projector's gamma crushes first — so each of these is a
- * large, high-contrast shape covering a good fraction of the body. Small or
- * low-contrast markings are charm, not identity, and this axis is doing
- * identity work.
- *
- * Four is on purpose. The point of another axis is not more combinations —
- * 12 x 4 was already far more than 30 people need. It is more *separation*:
- * a fourth well-separated state beats a fortieth indistinguishable one.
+ * Finishes: the same hue rendered two ways. `flat` is the saturated colour
+ * with a bold ink outline; `pastel` is the colour washed toward white with a
+ * deep same-hue outline and a blush. Both belong to the terrazzo stage, and
+ * players simply pick which they like — the server only overrides a pick when
+ * two players in one cohort would otherwise be identical.
  */
-export const PATTERNS = [
-  { key: 'solid', label: 'Solid' },
-  { key: 'dots', label: 'Dots' },
-  { key: 'band', label: 'Band' },
-  { key: 'sash', label: 'Sash' },
+export const FINISHES = [
+  { key: 'flat', label: 'Flat' },
+  { key: 'pastel', label: 'Pastel' },
 ];
 
 /** Distinct looks available in one colour, within one year. */
-export const SLOTS_PER_COLOR = POOL_SIZE * PATTERNS.length;
+export const SLOTS_PER_COLOR = FINISHES.length;
 
-/** Total distinct looks. Far above MAX_PLAYERS, so nobody is turned away. */
-export const LOOK_COUNT = COLORS.length * ACCESSORIES.length * PATTERNS.length;
+/**
+ * Distinct looks per cohort (a look is colour x finish; the cohort's shape
+ * makes the same pair distinct across years). 24 per year covers a realistic
+ * room; if more than 24 players of ONE year ever join, the roster starts
+ * allowing duplicates rather than turning anyone away.
+ */
+export const LOOK_COUNT = COLORS.length * FINISHES.length;
 
 /** @param {number} i @returns {number} */
-export function clampPattern(i) {
-  return Number.isInteger(i) && i >= 0 && i < PATTERNS.length ? i : 0;
+export function clampFinish(i) {
+  return Number.isInteger(i) && i >= 0 && i < FINISHES.length ? i : 0;
 }
 
 /** The middle year. What a player holds before they've chosen. */
 export const DEFAULT_COHORT = 1;
 
 /**
- * The accessory indices a cohort may use.
+ * DORMANT — the accessory indices a cohort may use, kept for the dormant
+ * accessory art.
  * @param {number} cohortIndex
  * @returns {number[]}
  */
@@ -158,59 +134,46 @@ export function poolFor(cohortIndex) {
   return Array.from({ length: POOL_SIZE }, (_, i) => c * POOL_SIZE + i);
 }
 
-/** @param {number} hatIndex @returns {number} which cohort an accessory belongs to */
-export function cohortOfAccessory(hatIndex) {
-  return Math.floor(clampHat(hatIndex) / POOL_SIZE);
-}
-
 /** @param {number} i @returns {number} */
 export function clampCohort(i) {
   return Number.isInteger(i) && i >= 0 && i < COHORTS.length ? i : DEFAULT_COHORT;
 }
 
-/** @param {number} i @returns {number} */
-export function clampHat(i) {
-  return Number.isInteger(i) && i >= 0 && i < ACCESSORIES.length ? i : 0;
-}
-
 /**
  * Deterministic starting identity for a player index, so the first twelve
- * joiners all get distinct colours before any accessory repeats.
+ * joiners all get distinct colours before any finish repeats.
  * @param {number} index
- * @param {number} [cohortIndex]
- * @returns {{colorIndex:number, hatIndex:number, color:string, hat:string}}
+ * @returns {{colorIndex:number, finishIndex:number, color:string, finish:string}}
  */
-export function identityFor(index, cohortIndex = DEFAULT_COHORT) {
+export function identityFor(index) {
   const colorIndex = ((index % COLORS.length) + COLORS.length) % COLORS.length;
-  const slot = Math.floor(Math.abs(index) / COLORS.length) % POOL_SIZE;
-  const hatIndex = clampCohort(cohortIndex) * POOL_SIZE + slot;
+  const finishIndex = Math.floor(Math.abs(index) / COLORS.length) % FINISHES.length;
   return {
     colorIndex,
-    hatIndex,
+    finishIndex,
     color: COLORS[colorIndex].hex,
-    hat: ACCESSORIES[hatIndex].key,
+    finish: FINISHES[finishIndex].key,
   };
 }
 
 /**
- * A readable name for a look, e.g. "Jade Crown". Used for anyone who hasn't
+ * A readable name for a look, e.g. "Jade Egg". Used for anyone who hasn't
  * typed their own, and it follows them if they change anything.
  * @param {number} colorIndex
- * @param {number} hatIndex
+ * @param {number} cohortIndex
  * @returns {string}
  */
-export function lookName(colorIndex, hatIndex) {
+export function lookName(colorIndex, cohortIndex) {
   const c = COLORS[((colorIndex % COLORS.length) + COLORS.length) % COLORS.length].name;
-  const a = ACCESSORIES[clampHat(hatIndex)].label;
-  return `${c[0].toUpperCase() + c.slice(1)} ${a}`;
+  return `${c[0].toUpperCase() + c.slice(1)} ${COHORTS[clampCohort(cohortIndex)].noun}`;
 }
 
 /**
  * A readable name for an unnamed player at a join index.
  * @param {number} index
+ * @param {number} [cohortIndex]
  * @returns {string}
  */
-export function defaultName(index) {
-  const { colorIndex, hatIndex } = identityFor(index);
-  return lookName(colorIndex, hatIndex);
+export function defaultName(index, cohortIndex = DEFAULT_COHORT) {
+  return lookName(identityFor(index).colorIndex, cohortIndex);
 }

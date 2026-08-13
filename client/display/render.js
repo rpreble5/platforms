@@ -22,8 +22,7 @@ import { UI } from './theme.js';
  * @typedef {object} Look
  * @property {string} name
  * @property {string} color
- * @property {string} hat
- * @property {string} [pattern]
+ * @property {string} [finish] 'flat' | 'pastel'
  * @property {number} [cohortIndex]
  * @property {boolean} [cohortSet]
  * @property {boolean} connected
@@ -121,7 +120,7 @@ export function render(cx, world, roster, game, opts) {
 
   for (const it of items) {
     const p = it.p;
-    const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', hat: 'none', connected: true };
+    const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', finish: 'flat', connected: true };
     const w = p.w * scale;
     const h = p.h * scale;
     const findMe = p.findMeUntil > world.t;
@@ -142,10 +141,9 @@ export function render(cx, world, roster, game, opts) {
 
     const sprite = getAvatar(
       look.color,
-      look.hat,
+      look.finish ?? 'flat',
       Math.round(w),
       Math.round(drawnH),
-      look.pattern,
       cohort.shape,
       false // eyes are drawn live below, so they can look around
     );

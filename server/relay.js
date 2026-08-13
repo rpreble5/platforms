@@ -234,8 +234,7 @@ export class Relay {
         const record = this.roster.setLook(conn.player.id, {
           name: typeof msg.name === 'string' ? msg.name : undefined,
           colorIndex: Number.isInteger(msg.colorIndex) ? msg.colorIndex : undefined,
-          hatIndex: Number.isInteger(msg.hatIndex) ? msg.hatIndex : undefined,
-          patternIndex: Number.isInteger(msg.patternIndex) ? msg.patternIndex : undefined,
+          finishIndex: Number.isInteger(msg.finishIndex) ? msg.finishIndex : undefined,
           cohortIndex: Number.isInteger(msg.cohortIndex) ? msg.cohortIndex : undefined,
         });
         if (!record) return;
@@ -383,11 +382,9 @@ export class Relay {
       name: r.name,
       named: r.named,
       color: r.color,
-      hat: r.hat,
-      pattern: r.pattern,
+      finish: r.finish,
       colorIndex: r.colorIndex,
-      hatIndex: r.hatIndex,
-      patternIndex: r.patternIndex,
+      finishIndex: r.finishIndex,
       cohortIndex: r.cohortIndex,
       cohortSet: r.cohortSet,
       free: this.roster.freeByColor(r.cohortIndex),

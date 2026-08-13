@@ -119,8 +119,8 @@ origin shares one token and they kick each other in a loop). It is for
 functional and crowding checks only: no radio, no touch digitizer, no TV in the
 path, and those are the terms that dominate.
 
-`/sprites` is the accessory authoring page — every shape on its own year's body
-at the three sizes the game draws, with clipping flagged.
+`/sprites` is the avatar preview page — every colour in both finishes on each
+year's body, at the three sizes the game draws.
 
 ### Two things that look exactly like client isolation but aren't
 
@@ -140,8 +140,8 @@ at the three sizes the game draws, with clipping flagged.
    `localStorage`. No token, or an unknown one, mints a new player.
 3. Node replies with `HELLO_ACK`: the player's id, a token to remember, and the
    look it has provisionally assigned them.
-4. The phone shows the **setup card** — name, training year, colour, accessory,
-   body pattern.
+4. The phone shows the **setup card** — name, training year, colour, style
+   (flat or pastel).
 5. They tap **I'm ready**. The phone sends `SET_LOOK`; Node resolves it and
    echoes back what they actually got; the display's roster updates and their
    avatar appears on the floor in that look.
@@ -155,8 +155,8 @@ setup card in the way.
 **Everything is a request, not a command.** Twelve colours cannot cover thirty
 players, and colour alone isn't separable anyway across a room, under projector
 gamma, or for a colourblind player. So the player asks, and the server resolves
-collisions so the **(colour, accessory, pattern) triple stays unique for
-everybody** — see the resolution order below.
+collisions so the **(colour, finish) pair stays unique within each year** —
+see the resolution order below.
 
 ## Telling thirty people apart
 
@@ -170,65 +170,37 @@ be noticed, which is 10% of the body width. That gives one hard rule:
 > busy body. Detail *inside* the outline — face markings, a badge, fine pattern
 > — is invisible across a room and not worth the pixels.
 
-All twelve accessories obey that. `shades` is the one that wants to live on the
-face; it's drawn overhanging both sides for exactly that reason.
+The bean family obeys that rule with silhouettes rather than add-ons: the egg,
+pill and loaf differ at the outline — round top vs domed top vs flat top — so
+the year still reads when everything inside the body has been crushed by the
+projector.
 
-### Drawing an accessory
-
-They're **path data**, not code — `client/display/accessory-art.js`. Draw on a
-**100 × 100 artboard** mapped onto the body box: x 0–100 spans the width, y 0
-is the top of the head, 36 the eye line, 100 the feet. Negative y is above the
-head, and x may go outside 0–100 freely.
-
-```js
-crown: {
-  reach: { top: 32, left: 0, right: 0 },
-  parts: [{ fill: 'bright', d: 'M6 0 L6 -20 L28 -8 L50 -32 L72 -8 L94 -20 L94 0 Z' }],
-}
-```
-
-`fill` is a **role** — `light`, `bright`, `dark`, `ink`, `glass` — resolved
-against the player's own colour at draw time, which is what keeps an accessory
-recognisably theirs across all twelve palette colours. Never a literal hex.
-
-Then add a matching row to `ACCESSORIES` in `shared/palette.js`, in the index
-range of the year that should have it (pools are index ranges: `cohort*POOL_SIZE`
-onward).
-
-**Iterate at `/sprites`.** Every accessory on its own year's body at the three
-sizes the game actually draws, with anything overflowing the sprite canvas
-flagged and measured. Worth using rather than trusting a vector tool, because
-the artboard *stretches*: the body is taller than it is wide, so a circle drawn
-square lands as an ellipse — by 1.05× on a PGY1 and 1.96× on a PGY3.
-
-How the whole thing hangs together in code — the two representations of an
-accessory, how pools partition by index range, where the accessory sits in
-collision resolution, the draw order, and the two caches — is
-**[docs/ACCESSORIES.md](docs/ACCESSORIES.md)**.
-
-Four axes carry identity:
+Three axes carry identity:
 
 | axis | who chooses | what it's for |
 |---|---|---|
 | colour (12) | player | which one is me |
-| accessory (4 per year) | player | disambiguates people sharing a colour |
-| body pattern (4) | player | disambiguates people sharing both |
-| drawn height (0.75 / 1.0 / 1.4) | training year | which cohort, at a glance |
-| body outline (capsule / round / slab) | training year | reinforces the year |
+| finish (flat / pastel) | player | disambiguates people sharing a colour |
+| body (egg / pill / loaf, 0.75 / 1.0 / 1.4 tall) | training year | which cohort, at a glance |
 
-That's 576 looks for 30 people, which is not the point — 48 was already more
-than enough. The point is *separation*, not combinations. A fourth
-well-separated state beats a fortieth indistinguishable one, which is why the
-patterns are four bold shapes rather than a dozen subtle ones. Anything
-low-contrast is charm, not identity: a projector crushes small differences in
-saturation before it crushes anything else, so a marking that looks tasteful on
-a monitor at arm's length is simply absent from the back of the room.
+The finish is the same hue rendered two ways: **flat** is the saturated colour
+with a bold ink outline, **pastel** is washed toward white with a deep
+same-hue outline and a blush. Both belong to the terrazzo stage; players just
+pick which they like. That's 24 looks per year for a room that splits roughly
+ten a year — and if more than 24 players of a single year ever join, the
+server starts allowing duplicates rather than turning anyone away (name labels
+and find-me carry it from there).
 
-**The resolution order is the design.** When two players want the same look the
-server gives up the weakest signal first: all four patterns are tried before the
-accessory moves, and all four accessories before the colour does. Since pattern
-absorbs most collisions, players now nearly always keep the exact colour and
-accessory they asked for.
+**The resolution order is the design.** When two players in one year want the
+same look, the server gives up the weakest signal first: the finish yields,
+and the colour moves only when both its finishes are gone. Across years the
+body shape already separates identical pairs, so a PGY1 and a PGY3 can both be
+jade pastel.
+
+**Accessories are dormant, not deleted.** The hat art and its authoring
+pipeline (`client/display/accessory-art.js`, **[docs/ACCESSORIES.md](docs/ACCESSORIES.md)**)
+are kept out of the identity system for now; if they return they go back on
+top of the bean family.
 
 **Training year is a costume, never a gameplay difference.** `PLAYER_H` is 56
 for everybody; only the *sprite* changes, growing upward from the feet so the

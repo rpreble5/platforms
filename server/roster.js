@@ -8,15 +8,14 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  ACCESSORIES,
   COLORS,
   DEFAULT_COHORT,
-  PATTERNS,
+  FINISHES,
   SLOTS_PER_COLOR,
   clampCohort,
+  clampFinish,
   identityFor,
   lookName,
-  poolFor,
 } from '../shared/palette.js';
 
 const MAX_PLAYERS = 40;
@@ -32,11 +31,9 @@ const NAME_STRIP = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u
  * @property {string} name
  * @property {boolean} named whether the player typed that name themselves
  * @property {string} color
- * @property {string} hat
  * @property {number} colorIndex
- * @property {number} hatIndex global accessory index; its range implies the cohort
- * @property {string} pattern
- * @property {number} patternIndex
+ * @property {string} finish 'flat' | 'pastel' — how the hue is rendered
+ * @property {number} finishIndex
  * @property {number} cohortIndex
  * @property {boolean} cohortSet whether the player has actually chosen a year
  * @property {number} joinIndex
@@ -89,7 +86,7 @@ export class Roster {
 
     const joinIndex = this.joinCount++;
     const typed = sanitizeName(name ?? '');
-    const seed = identityFor(joinIndex, DEFAULT_COHORT);
+    const seed = identityFor(joinIndex);
     /** @type {PlayerRecord} */
     const record = {
       id: this.nextId++,
@@ -97,11 +94,9 @@ export class Roster {
       name: typed,
       named: Boolean(typed),
       color: COLORS[0].hex,
-      hat: ACCESSORIES[0].key,
-      pattern: PATTERNS[0].key,
+      finish: FINISHES[0].key,
       colorIndex: 0,
-      hatIndex: 0,
-      patternIndex: 0,
+      finishIndex: 0,
       // A placeholder until they pick. `cohortSet` is what tells the phone
       // whether the card still has a question to ask.
       cohortIndex: DEFAULT_COHORT,
@@ -116,19 +111,19 @@ export class Roster {
     // Spread the auto-assignment the way identityFor always has, but route it
     // through the same claim path a player's pick uses, so an auto-assigned look
     // can never collide with one somebody chose.
-    this.#assign(record, seed.colorIndex, seed.hatIndex, 0);
+    this.#assign(record, seed.colorIndex, seed.finishIndex);
     return { ok: true, record, isNew: true };
   }
 
   /**
-   * Apply a player's chosen name, year, colour and accessory.
+   * Apply a player's chosen name, year, colour and finish.
    *
    * All of it is a request, not a command. The server resolves collisions and
    * the record ends up holding what the player actually got — and it is that,
    * never the request, that goes back to the phone.
    *
    * @param {number} id
-   * @param {{name?: string, colorIndex?: number, hatIndex?: number, patternIndex?: number, cohortIndex?: number}} want
+   * @param {{name?: string, colorIndex?: number, finishIndex?: number, cohortIndex?: number}} want
    * @returns {PlayerRecord | null}
    */
   setLook(id, want) {
@@ -141,30 +136,26 @@ export class Roster {
       r.name = clean;
     }
 
-    const movedYear = Number.isInteger(want.cohortIndex) && want.cohortIndex !== r.cohortIndex;
+    // Committing to a year — moving, or picking one for the FIRST time even
+    // if it happens to be the placeholder — re-runs assignment: the cohort is
+    // part of the uniqueness domain, and a pre-commit record in a crowded
+    // default cohort may be sitting on a duplicated look that only becomes
+    // claimable once they land in their real year.
+    const commitYear =
+      Number.isInteger(want.cohortIndex) && (want.cohortIndex !== r.cohortIndex || !r.cohortSet);
     if (Number.isInteger(want.cohortIndex)) {
       r.cohortIndex = clampCohort(/** @type {number} */ (want.cohortIndex));
       r.cohortSet = true;
     }
 
-    // A year change always re-runs assignment, because the accessory they were
-    // wearing does not exist in the new year's pool.
-    if (
-      movedYear ||
-      Number.isInteger(want.colorIndex) ||
-      Number.isInteger(want.hatIndex) ||
-      Number.isInteger(want.patternIndex)
-    ) {
+    if (commitYear || Number.isInteger(want.colorIndex) || Number.isInteger(want.finishIndex)) {
       this.#assign(
         r,
         Number.isInteger(want.colorIndex) ? /** @type {number} */ (want.colorIndex) : r.colorIndex,
-        Number.isInteger(want.hatIndex) ? /** @type {number} */ (want.hatIndex) : r.hatIndex,
-        Number.isInteger(want.patternIndex)
-          ? /** @type {number} */ (want.patternIndex)
-          : r.patternIndex
+        Number.isInteger(want.finishIndex) ? /** @type {number} */ (want.finishIndex) : r.finishIndex
       );
     } else if (!r.named) {
-      r.name = lookName(r.colorIndex, r.hatIndex);
+      r.name = lookName(r.colorIndex, r.cohortIndex);
     }
     return r;
   }
@@ -172,76 +163,70 @@ export class Roster {
   /**
    * Free looks per colour, within one year. The phone greys out anything at
    * zero, which is what stops a player picking a colour about to be refused.
-   *
-   * With patterns in the mix a colour holds sixteen looks per year rather than
-   * four, so in a 30-player room this will realistically never hit zero. It is
-   * kept because the guarantee should hold at any roster size, not because the
-   * warning is expected to fire.
+   * Two finishes per colour per year; only same-year players contend, because
+   * across years the body shape already separates identical colour+finish.
    * @param {number} cohortIndex
    * @returns {number[]}
    */
   freeByColor(cohortIndex) {
-    const pool = new Set(poolFor(cohortIndex));
+    const cohort = clampCohort(cohortIndex);
     const free = COLORS.map(() => SLOTS_PER_COLOR);
     for (const r of this.byId.values()) {
-      if (pool.has(r.hatIndex)) free[r.colorIndex]--;
+      if (r.cohortIndex === cohort) free[r.colorIndex]--;
     }
     return free.map((n) => Math.max(0, n));
   }
 
   /**
-   * Resolve a look request to a free (colour, accessory, pattern) triple.
+   * Resolve a look request to a free (colour, finish) pair within the
+   * record's cohort.
    *
-   * The nesting *is* the policy. Colour is the outermost loop and pattern the
-   * innermost, so the weakest signal is the first thing given up: a collision
-   * exhausts all four patterns before it touches the accessory, and all four
-   * accessories before the colour moves. That ordering follows how well each
-   * one survives thirty metres of room — a block of hue beats a silhouette
-   * beats a marking — and it means a player now usually keeps both the colour
-   * and the accessory they actually asked for.
+   * The nesting *is* the policy: a collision gives up the finish first and
+   * moves the colour only as a last resort — a 30x42 block of hue is the
+   * strongest signal on the avatar, so it is the last thing taken away. An
+   * uncontested request comes back exactly as asked.
+   *
+   * 24 looks per cohort against a 40-player cap means a room where 25+ people
+   * all pick the SAME year can exhaust the space. When that happens the
+   * request is granted as a duplicate rather than refusing the join — name
+   * labels and find-me carry identity past that point.
    *
    * @param {PlayerRecord} record
    * @param {number} wantColor
-   * @param {number} wantHat
-   * @param {number} wantPattern
+   * @param {number} wantFinish
    */
-  #assign(record, wantColor, wantHat, wantPattern) {
+  #assign(record, wantColor, wantFinish) {
     /** @type {Set<string>} */
     const taken = new Set();
     for (const r of this.byId.values()) {
-      if (r !== record) taken.add(`${r.colorIndex}:${r.hatIndex}:${r.patternIndex}`);
-    }
-
-    // Requested first in each axis, then the rest — so an uncontested request
-    // comes back exactly as asked.
-    const pool = poolFor(record.cohortIndex);
-    const hats = pool.includes(wantHat) ? [wantHat, ...pool.filter((h) => h !== wantHat)] : pool;
-    const pats = PATTERNS.map((_, i) => i);
-    const wp = Number.isInteger(wantPattern) && pats.includes(wantPattern) ? wantPattern : 0;
-    const patterns = [wp, ...pats.filter((p) => p !== wp)];
-
-    const start = ((wantColor % COLORS.length) + COLORS.length) % COLORS.length;
-    for (let step = 0; step < COLORS.length; step++) {
-      const c = (start + step) % COLORS.length;
-      for (const hh of hats) {
-        for (const p of patterns) {
-          if (taken.has(`${c}:${hh}:${p}`)) continue;
-          record.colorIndex = c;
-          record.hatIndex = hh;
-          record.patternIndex = p;
-          record.color = COLORS[c].hex;
-          record.hat = ACCESSORIES[hh].key;
-          record.pattern = PATTERNS[p].key;
-          if (!record.named) record.name = lookName(c, hh);
-          return;
-        }
+      if (r !== record && r.cohortIndex === record.cohortIndex) {
+        taken.add(`${r.colorIndex}:${r.finishIndex}`);
       }
     }
-    // 192 slots per year against a 40-player cap, so this is unreachable — but
-    // leaving the record on an accessory from the wrong year would be worse.
-    record.hatIndex = pool[0];
-    record.hat = ACCESSORIES[pool[0]].key;
-    if (!record.named) record.name = lookName(record.colorIndex, record.hatIndex);
+
+    const wf = clampFinish(wantFinish);
+    const finishes = [wf, ...FINISHES.map((_, i) => i).filter((f) => f !== wf)];
+    const start = ((wantColor % COLORS.length) + COLORS.length) % COLORS.length;
+
+    /** @param {number} c @param {number} f */
+    const claim = (c, f) => {
+      record.colorIndex = c;
+      record.finishIndex = f;
+      record.color = COLORS[c].hex;
+      record.finish = FINISHES[f].key;
+      if (!record.named) record.name = lookName(c, record.cohortIndex);
+    };
+
+    for (let step = 0; step < COLORS.length; step++) {
+      const c = (start + step) % COLORS.length;
+      for (const f of finishes) {
+        if (taken.has(`${c}:${f}`)) continue;
+        claim(c, f);
+        return;
+      }
+    }
+    // The cohort's whole look space is spent: grant the request as-is.
+    claim(start, wf);
   }
 
   /**
@@ -326,6 +311,10 @@ export class Roster {
       const record = {
         ...p,
         name: sanitizeName(String(p.name ?? '')),
+        // Snapshots from before the finish axis existed (accessory era) lack
+        // these two — default to flat rather than rendering undefined.
+        finishIndex: clampFinish(p.finishIndex),
+        finish: FINISHES[clampFinish(p.finishIndex)].key,
         connected: false,
         lastSeen: Number.isFinite(p.lastSeen) ? p.lastSeen : Date.now(),
         net: { rttP50: 0, rttP95: 0, loss: 0 },

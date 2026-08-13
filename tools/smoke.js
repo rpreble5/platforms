@@ -231,14 +231,13 @@ assert(!!shown && shown !== 'connecting…', `phone page joined as "${shown}"`);
 
 // ---------------------------------------------------------------- the setup card
 //
-// Name, year, colour and accessory, then "I'm ready". This gate is also where
+// Name, year, colour and finish, then "I'm ready". This gate is also where
 // fullscreen and the wake lock get their user gesture, so nothing downstream
 // works until it's done.
 await phonePage.waitForSelector('#setup.on', { timeout: 5000 });
 const PICK = 4; // jade
 const YEAR = 2; // PGY3
-const GEAR = 9; // phones, which lives in the PGY3 pool
-const PAT = 2; // band
+const FIN = 1; // pastel
 
 await phonePage.fill('#nameIn', 'Bosco');
 
@@ -248,22 +247,14 @@ assert(await phonePage.locator('#go').isDisabled(), 'the button waits for a year
 await phonePage.locator(`.yr[data-i="${YEAR}"]`).click();
 assert(!(await phonePage.locator('#go').isDisabled()), 'picking a year enables the button');
 
-// The accessory row appears with the year, and holds only that year's four.
-const gearIds = /** @type {number[]} */ (
-  await phonePage
-    .locator('#gear .gr')
-    .evaluateAll((/** @type {Element[]} */ els) =>
-      els.map((el) => Number(/** @type {HTMLElement} */ (el).dataset.i))
-    )
-);
+// The finish row offers exactly the two renderings.
 assert(
-  gearIds.length === 4 && gearIds.every((i) => i >= YEAR * 4 && i < YEAR * 4 + 4),
-  `the accessory row shows only this year's pool (${gearIds.join(',')})`
+  (await phonePage.locator('#finishes .fin').count()) === 2,
+  'the finish row offers flat and pastel'
 );
 
 await phonePage.locator(`.sw[data-i="${PICK}"]`).click();
-await phonePage.locator(`.gr[data-i="${GEAR}"]`).click();
-await phonePage.locator(`.pt[data-i="${PAT}"]`).click();
+await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
 assert(
   await phonePage
     .locator(`.sw[data-i="${PICK}"]`)
@@ -298,15 +289,15 @@ const onDisplay = await display.evaluate(() => {
 });
 assert(
   onDisplay.color === '#2fc98d',
-  `the display got the chosen colour (${onDisplay.color}) and accessory (${onDisplay.hat})`
+  `the display got the chosen colour (${onDisplay.color})`
 );
 assert(
-  onDisplay.cohortIndex === YEAR && onDisplay.hat === 'phones',
-  `the display got the chosen year (PGY${onDisplay.cohortIndex + 1}) and its accessory`
+  onDisplay.cohortIndex === YEAR,
+  `the display got the chosen year (PGY${onDisplay.cohortIndex + 1})`
 );
 assert(
-  onDisplay.pattern === 'band',
-  `the display got the chosen body pattern (${onDisplay.pattern})`
+  onDisplay.finish === 'pastel',
+  `the display got the chosen finish (${onDisplay.finish})`
 );
 const box = /** @type {{x:number,y:number,width:number,height:number}} */ (
   await phonePage.locator('#jump').boundingBox()
@@ -337,16 +328,15 @@ if (crowd > 0) {
     b.binaryType = 'arraybuffer';
     await once(b, 'open');
     b.send(encodeJson({ type: 'HELLO' }));
-    // Spread them across the three years, each asking for an accessory from its
-    // own pool. Without this every bot sits at the default year and the crowd
-    // screenshot — the only place the cohort heights can actually be judged —
-    // shows thirty identical heights.
+    // Spread them across the three years and both finishes. Without this every
+    // bot sits at the default year and the crowd screenshot — the only place
+    // the cohort heights can actually be judged — shows thirty identical
+    // heights.
     b.send(
       encodeJson({
         type: 'SET_LOOK',
         cohortIndex: i % 3,
-        hatIndex: (i % 3) * 4 + (i % 4),
-        patternIndex: i % 4,
+        finishIndex: i % 2,
         colorIndex: i % 12,
       })
     );

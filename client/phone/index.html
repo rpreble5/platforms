@@ -120,24 +120,18 @@
   }
   .yr.sel { color:#0b0d12; background:#e8edf5; border-color:#fff; }
 
-  #swatches, #gear { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-  .gr {
-    aspect-ratio:1; border-radius:14px; display:grid; place-items:center;
-    font-size:26px; background:#141822; border:3px solid transparent;
-    position:relative; touch-action:manipulation;
-  }
-  .gr.sel { border-color:#fff; background:#232a38; }
-  .gr.out { opacity:.25; }
+  #swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
 
-  /* Pattern buttons preview the real thing in the player's own colour, rather
-     than using a glyph. It is the same information the display will show, and
-     it costs four gradients. */
-  #pats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-  .pt {
-    aspect-ratio:1; border-radius:14px; border:3px solid transparent;
-    touch-action:manipulation; overflow:hidden;
+  /* Finish buttons preview the real thing in the player's own colour: the
+     saturated flat and the washed pastel, side by side. Same information the
+     display will show. */
+  #finishes { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .fin {
+    aspect-ratio:5/2; border-radius:14px; border:3px solid transparent;
+    touch-action:manipulation; overflow:hidden; display:grid; place-items:center;
+    font:800 15px/1 inherit; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.55);
   }
-  .pt.sel { border-color:#fff; }
+  .fin.sel { border-color:#fff; }
   .sw {
     aspect-ratio:1; border-radius:14px; position:relative;
     border:3px solid transparent; display:grid; place-items:center;
@@ -194,10 +188,8 @@
     <div id="years"></div>
     <div class="lbl">Your colour</div>
     <div id="swatches"></div>
-    <div class="lbl" id="gearLbl">Your accessory</div>
-    <div id="gear"></div>
-    <div class="lbl">Your pattern</div>
-    <div id="pats"></div>
+    <div class="lbl">Your style</div>
+    <div id="finishes"></div>
     <button id="go" disabled>Connecting…</button>
     <p id="setupNote">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
   </div>
@@ -218,7 +210,7 @@
   var elSwatch = $('swatch'), elOverlay = $('overlay'), elOvh = $('ovh'), elOvp = $('ovp');
   var elFlag = $('flagbtn'), elMsg = $('msg');
   var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
-  var elYears = $('years'), elGear = $('gear'), elPats = $('pats');
+  var elYears = $('years'), elFins = $('finishes');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
   // ------------------------------------------------------------------ identity
@@ -249,8 +241,7 @@
   // every reconnect, and only the first one is a join.
   var joined = false;
   var pickedColor = -1;
-  var pickedGear = -1;      // global accessory index; its range implies the year
-  var pickedPattern = 0;
+  var pickedFinish = 0;     // 0 flat, 1 pastel
   var pickedYear = -1;      // deliberately unset: nobody should land in a year by accident
   var freeByColor = null;   // number[12] from the server, or null before first ack
 
@@ -366,7 +357,7 @@
     }
   }
 
-  // The phone IS the identity anchor: whole-screen colour plus hat glyph.
+  // The phone IS the identity anchor: whole-screen colour plus your name.
   // "Look at your phone, then find that on screen" is the whole mechanism for
   // picking yourself out of 30 avatars, so this runs on every identity change.
   function applyLook(msg) {
@@ -374,19 +365,17 @@
     document.body.style.background = msg.color;
     $('bar').style.background = msg.color;
     $('bar').classList.add('lit');
-    elSwatch.textContent = (ACCESSORIES[msg.hatIndex] || {}).glyph || '●';
+    elSwatch.textContent = '✎'; // tap target back into the setup card
     setStatus('you are ' + msg.name + ' · ' + (COHORTS[msg.cohortIndex] || {}).label);
     if (typeof msg.colorIndex === 'number') pickedColor = msg.colorIndex;
-    // Only adopt the server's year and accessory once the player has actually
+    // Only adopt the server's year and finish once the player has actually
     // committed to one. Before that the record holds a placeholder, and echoing
     // it into the picker would silently answer the one question the card exists
     // to ask. After a reload mid-party the flag comes back true with the token,
     // so a returning player is not made to pick again.
     if (msg.cohortSet) {
       if (typeof msg.cohortIndex === 'number') pickedYear = msg.cohortIndex;
-      if (typeof msg.hatIndex === 'number') pickedGear = msg.hatIndex;
-      if (typeof msg.patternIndex === 'number') pickedPattern = msg.patternIndex;
-      buildGear();
+      if (typeof msg.finishIndex === 'number') pickedFinish = msg.finishIndex;
     }
     if (msg.free) freeByColor = msg.free;
     paintSwatches();
@@ -666,8 +655,8 @@
   // a tap the player was going to make anyway beats asking for one.
   //
   // Colour is a request. The server owns the answer, because 12 colours cannot
-  // cover 30 players: it pairs your colour with a free hat, and moves you to a
-  // neighbouring colour if all four of yours are gone. Whatever comes back is
+  // cover 30 players: it pairs your colour with a free finish, and moves you
+  // to a neighbouring colour if both of yours are gone. Whatever comes back is
   // what the picker then shows.
 
   function buildPickers() {
@@ -686,47 +675,36 @@
       s.innerHTML = '<span class="g"></span><span class="n"></span>';
       elSwatches.appendChild(s);
     }
-    // The accessory row is rebuilt whenever the year changes, so it starts empty.
-
-    tapper(elYears, '.yr', function (i) {
-      if (i === pickedYear) return;
-      pickedYear = i;
-      // The accessory they were wearing does not exist in the new year's pool.
-      pickedGear = poolFor(i)[0];
-      buildGear();
-      paintSwatches();
-    });
-    for (var q = 0; q < PATTERNS.length; q++) {
+    for (var q = 0; q < FINISHES.length; q++) {
       var t = document.createElement('div');
-      t.className = 'pt';
+      t.className = 'fin';
       t.dataset.i = String(q);
-      elPats.appendChild(t);
+      t.textContent = FINISHES[q].label;
+      elFins.appendChild(t);
     }
 
+    tapper(elYears, '.yr', function (i) { pickedYear = i; paintSwatches(); });
     tapper(elSwatches, '.sw', function (i) { pickedColor = i; paintSwatches(); });
-    tapper(elGear, '.gr', function (i) { pickedGear = i; paintSwatches(); });
-    tapper(elPats, '.pt', function (i) { pickedPattern = i; paintSwatches(); });
+    tapper(elFins, '.fin', function (i) { pickedFinish = i; paintSwatches(); });
+  }
+
+  /** Wash a hex colour toward white, matching the display's pastel fill. */
+  function pastelOf(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    var m = function (c) { return Math.round(c + (255 - c) * 0.45); };
+    return 'rgb(' + m(n >> 16 & 255) + ',' + m(n >> 8 & 255) + ',' + m(n & 255) + ')';
   }
 
   /**
-   * The pattern previews, tinted to whatever colour is currently selected. Uses
-   * CSS gradients rather than the canvas shapes the display draws — close
-   * enough to choose from, and it keeps the phone free of drawing code.
+   * The finish previews, tinted to whatever colour is currently selected —
+   * the saturated flat and the washed pastel, the same two renderings the
+   * display draws.
    */
-  function paintPatterns(hex) {
-    var mark = 'rgba(0,0,0,.42)';
-    var css = {
-      solid: hex,
-      dots: 'radial-gradient(circle at 30% 62%, ' + mark + ' 15%, transparent 16%),' +
-            'radial-gradient(circle at 72% 62%, ' + mark + ' 15%, transparent 16%),' +
-            'radial-gradient(circle at 50% 86%, ' + mark + ' 15%, transparent 16%),' + hex,
-      band: 'linear-gradient(' + hex + ' 54%, ' + mark + ' 54%, ' + mark + ' 74%, ' + hex + ' 74%)',
-      sash: 'linear-gradient(48deg, ' + hex + ' 34%, ' + mark + ' 34%, ' + mark + ' 60%, ' + hex + ' 60%)',
-    };
-    for (var i = 0; i < elPats.children.length; i++) {
-      var el = elPats.children[i];
-      el.style.background = css[PATTERNS[i].key] || hex;
-      el.classList.toggle('sel', i === pickedPattern);
+  function paintFinishes(hex) {
+    for (var i = 0; i < elFins.children.length; i++) {
+      var el = elFins.children[i];
+      el.style.background = FINISHES[i].key === 'pastel' ? pastelOf(hex) : hex;
+      el.classList.toggle('sel', i === pickedFinish);
     }
   }
 
@@ -741,22 +719,8 @@
     }, opts);
   }
 
-  function buildGear() {
-    elGear.innerHTML = '';
-    if (pickedYear < 0) return;
-    var pool = poolFor(pickedYear);
-    for (var k = 0; k < pool.length; k++) {
-      var g = document.createElement('div');
-      g.className = 'gr';
-      g.dataset.i = String(pool[k]);
-      g.textContent = ACCESSORIES[pool[k]].glyph;
-      elGear.appendChild(g);
-    }
-  }
-
   function paintSwatches() {
     var chosen = pickedYear >= 0;
-    $('gearLbl').style.opacity = chosen ? '1' : '.3';
 
     for (var y = 0; y < elYears.children.length; y++) {
       elYears.children[y].classList.toggle('sel', y === pickedYear);
@@ -769,16 +733,11 @@
       var out = free <= 0 && i !== pickedColor;
       el.classList.toggle('out', out);
       el.classList.toggle('sel', i === pickedColor);
-      // Only worth showing when it is actually running out. With sixteen looks
-      // per colour per year, a running count is noise for the whole evening.
-      el.querySelector('.n').textContent = free > 0 && free <= 3 ? String(free) : '';
+      // Two looks per colour per year: only the last one is worth flagging.
+      el.querySelector('.n').textContent = free === 1 ? '1' : '';
       el.querySelector('.g').textContent = i === pickedColor ? '✓' : '';
     }
-    for (var k = 0; k < elGear.children.length; k++) {
-      var gEl = elGear.children[k];
-      gEl.classList.toggle('sel', Number(gEl.dataset.i) === pickedGear);
-    }
-    paintPatterns(COLORS[pickedColor >= 0 ? pickedColor : 0].hex);
+    paintFinishes(COLORS[pickedColor >= 0 ? pickedColor : 0].hex);
 
     // A year is the one thing with no sensible default, so it gates the button.
     elGo.disabled = !connected || !chosen;
@@ -791,7 +750,6 @@
     elMsg.style.display = 'none';
     elSetup.classList.add('on');
     elOverlay.classList.remove('hidden');
-    buildGear();
     paintSwatches();
   }
 
@@ -801,8 +759,7 @@
       type: 'SET_LOOK',
       name: elNameIn.value,
       colorIndex: pickedColor,
-      hatIndex: pickedGear,
-      patternIndex: pickedPattern,
+      finishIndex: pickedFinish,
       cohortIndex: pickedYear,
     });
     try { localStorage.setItem(NAME_KEY, elNameIn.value); } catch (e) {}

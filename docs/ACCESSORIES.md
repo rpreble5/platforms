@@ -1,5 +1,11 @@
 # How accessories work
 
+> **DORMANT.** Accessories were retired from the identity system when the
+> bean-family reskin landed (colour × finish × cohort shape carries identity
+> now). The art in `client/display/accessory-art.js` and this document are
+> kept so they can come back without archaeology — but nothing below is wired
+> into the live game, and the roster no longer has `hatIndex`/`patternIndex`.
+
 The code path, from a player tapping a button to pixels on the screen. For how
 to *draw* one, see the header of `client/display/accessory-art.js`; for why the
 design is the way it is, see the identity section of the README.

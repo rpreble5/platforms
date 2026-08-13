@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Roster, sanitizeName } from './roster.js';
-import { COHORTS, COLORS, PATTERNS, POOL_SIZE, SLOTS_PER_COLOR, poolFor } from '../shared/palette.js';
+import { COHORTS, COLORS, FINISHES, LOOK_COUNT, SLOTS_PER_COLOR } from '../shared/palette.js';
 
 /** @param {Roster} r @param {number} n */
 function joinMany(r, n) {
@@ -22,13 +22,20 @@ function joinMany(r, n) {
 
 /** @param {Roster} r */
 function looks(r) {
-  return [...r.byId.values()].map((p) => `${p.colorIndex}:${p.hatIndex}:${p.patternIndex}`);
+  return [...r.byId.values()].map((p) => `${p.cohortIndex}:${p.colorIndex}:${p.finishIndex}`);
 }
 
-test('auto-assigned looks are all distinct, right up to the cap', () => {
+test('auto-assigned looks are all distinct while the cohort has capacity', () => {
+  // 12 colours x 2 finishes = 24 looks per cohort. Every player up to that
+  // point must be unique; past it, joins still succeed as duplicates rather
+  // than turning anyone away — 25+ players of one single year is beyond any
+  // realistic room, and name labels + find-me carry identity from there.
   const r = new Roster();
-  joinMany(r, 40);
-  assert.equal(new Set(looks(r)).size, 40);
+  joinMany(r, LOOK_COUNT);
+  assert.equal(new Set(looks(r)).size, LOOK_COUNT, 'every look distinct at capacity');
+
+  joinMany(r, 40 - LOOK_COUNT);
+  assert.equal(r.byId.size, 40, 'nobody is refused past capacity');
 });
 
 test('the first twelve players get twelve different colours', () => {
@@ -42,84 +49,51 @@ test('looks stay unique with all three years in the room', () => {
   const players = joinMany(r, 36);
   players.forEach((p, i) => r.setLook(p.id, { cohortIndex: i % COHORTS.length }));
   assert.equal(new Set(looks(r)).size, 36);
-  for (const p of players) {
-    assert.ok(poolFor(p.cohortIndex).includes(p.hatIndex), 'accessory is inside its own year');
-  }
 });
 
 test('an uncontested request comes back exactly as asked', () => {
   const r = new Roster();
   const [a] = joinMany(r, 1);
-  r.setLook(a.id, { cohortIndex: 0, colorIndex: 5, hatIndex: poolFor(0)[2], patternIndex: 3 });
+  r.setLook(a.id, { cohortIndex: 0, colorIndex: 5, finishIndex: 1 });
   assert.equal(a.colorIndex, 5);
-  assert.equal(a.hatIndex, poolFor(0)[2]);
-  assert.equal(a.patternIndex, 3);
+  assert.equal(a.finishIndex, 1);
+  assert.equal(a.finish, 'pastel');
 });
 
-test('a collision gives up the pattern first, keeping colour and accessory', () => {
+test('a collision gives up the finish first, keeping the colour', () => {
   const r = new Roster();
   const [a, b] = joinMany(r, 2);
-  const want = { cohortIndex: 0, colorIndex: 5, hatIndex: poolFor(0)[2], patternIndex: 1 };
+  const want = { cohortIndex: 0, colorIndex: 5, finishIndex: 1 };
 
   r.setLook(a.id, { name: 'Ada', ...want });
   r.setLook(b.id, { name: 'Ben', ...want });
 
   assert.equal(b.colorIndex, 5, 'colour survives — the strongest signal');
-  assert.equal(b.hatIndex, poolFor(0)[2], 'accessory survives too');
-  assert.notEqual(b.patternIndex, a.patternIndex, 'the pattern is what moved');
+  assert.notEqual(b.finishIndex, a.finishIndex, 'the finish is what moved');
 });
 
-test('the accessory only moves once every pattern in that pair is gone', () => {
+test('the colour moves only when both its finishes are gone', () => {
   const r = new Roster();
-  const players = joinMany(r, PATTERNS.length + 1);
-  const want = { cohortIndex: 0, colorIndex: 5, hatIndex: poolFor(0)[2] };
+  const players = joinMany(r, FINISHES.length + 1);
+  const want = { cohortIndex: 0, colorIndex: 5 };
   for (const p of players) r.setLook(p.id, want);
 
-  const sameHat = players.filter((p) => p.hatIndex === want.hatIndex);
-  assert.equal(sameHat.length, PATTERNS.length, 'four patterns fit on one accessory');
-  assert.equal(players[PATTERNS.length].colorIndex, 5, 'and the colour still held');
-  assert.notEqual(players[PATTERNS.length].hatIndex, want.hatIndex, 'the accessory moved');
+  const inColour = players.filter((p) => p.colorIndex === 5);
+  assert.equal(inColour.length, FINISHES.length, 'both finishes fit in the colour');
+  assert.notEqual(players[FINISHES.length].colorIndex, 5, 'the one that did not fit moved');
   assert.equal(new Set(looks(r)).size, players.length);
 });
 
-test('the colour moves only when a whole colour is exhausted', () => {
-  // Phrased against however many slots a colour actually holds, and capped at
-  // the roster limit — POOL_SIZE is expected to grow to 12, which would put
-  // SLOTS_PER_COLOR above the 40-player cap and make a literal
-  // "fill it then add one more" test impossible to run.
+test('the same colour and finish is free to players in different years', () => {
+  // Cross-year, the body shape already separates the pair — an egg and a loaf
+  // in jade pastel are not confusable — so only same-year players contend.
   const r = new Roster();
-  const want = Math.min(SLOTS_PER_COLOR + 1, 40);
-  const players = joinMany(r, want);
-  for (const p of players) r.setLook(p.id, { cohortIndex: 1, colorIndex: 3 });
-
-  const inColour = players.filter((p) => p.colorIndex === 3).length;
-  assert.equal(
-    inColour,
-    Math.min(SLOTS_PER_COLOR, want),
-    'everyone who fits in the colour got it'
-  );
-  if (want > SLOTS_PER_COLOR) {
-    assert.notEqual(players[SLOTS_PER_COLOR].colorIndex, 3, 'the one that did not fit moved');
-  }
-  assert.equal(new Set(looks(r)).size, players.length);
-});
-
-test('a full room of one colour and one accessory still has no duplicates', () => {
-  const r = new Roster();
-  const players = joinMany(r, 40);
-  for (const p of players) r.setLook(p.id, { cohortIndex: 2, colorIndex: 0, hatIndex: poolFor(2)[0] });
-  assert.equal(new Set(looks(r)).size, 40, 'the worst case anyone can actually cause');
-});
-
-test('changing year swaps the accessory for one that exists in the new pool', () => {
-  const r = new Roster();
-  const [a] = joinMany(r, 1);
-  r.setLook(a.id, { cohortIndex: 0 });
-  assert.ok(poolFor(0).includes(a.hatIndex));
-
-  r.setLook(a.id, { cohortIndex: 2 });
-  assert.equal(a.cohortIndex, 2);
-  assert.ok(poolFor(2).includes(a.hatIndex), 'no PGY1 accessory left on a PGY3');
+  const [a, b] = joinMany(r, 2);
+  r.setLook(a.id, { cohortIndex: 0, colorIndex: 4, finishIndex: 1 });
+  r.setLook(b.id, { cohortIndex: 2, colorIndex: 4, finishIndex: 1 });
+  assert.equal(a.colorIndex, 4);
+  assert.equal(b.colorIndex, 4, 'no contention across years');
+  assert.equal(b.finishIndex, 1);
 });
 
 test('freeByColor is scoped to one year', () => {
@@ -149,10 +123,12 @@ test('an untyped name follows the look; a typed one does not', () => {
   const r = new Roster();
   const [a, b] = joinMany(r, 2);
 
-  r.setLook(a.id, { cohortIndex: 2, colorIndex: 4, hatIndex: poolFor(2)[0] });
-  assert.equal(a.name, 'Jade Crown', 'auto name tracks the look');
+  r.setLook(a.id, { cohortIndex: 2, colorIndex: 4 });
+  assert.equal(a.name, 'Jade Loaf', 'auto name tracks colour and year');
   r.setLook(a.id, { colorIndex: 0 });
-  assert.equal(a.name, 'Ember Crown');
+  assert.equal(a.name, 'Ember Loaf');
+  r.setLook(a.id, { cohortIndex: 0 });
+  assert.equal(a.name, 'Ember Egg', 'and follows a year change');
 
   r.setLook(b.id, { name: 'Ada', colorIndex: 4 });
   assert.equal(b.name, 'Ada');
@@ -182,7 +158,7 @@ test('reconnecting with the same token keeps the whole look', () => {
   const first = r.resolve(undefined, undefined);
   assert.ok(first.ok);
   const rec = /** @type {any} */ (first).record;
-  r.setLook(rec.id, { name: 'Ada', cohortIndex: 2, colorIndex: 8, hatIndex: poolFor(2)[1] });
+  r.setLook(rec.id, { name: 'Ada', cohortIndex: 2, colorIndex: 8, finishIndex: 1 });
   r.disconnect(rec.id);
 
   const again = r.resolve(rec.token, undefined);
@@ -192,7 +168,7 @@ test('reconnecting with the same token keeps the whole look', () => {
   assert.equal(back.name, 'Ada');
   assert.equal(back.colorIndex, 8);
   assert.equal(back.cohortIndex, 2);
-  assert.equal(back.hatIndex, poolFor(2)[1]);
+  assert.equal(back.finishIndex, 1);
   assert.equal(back.cohortSet, true, 'not made to pick their year again');
   assert.equal(back.connected, true);
 });
@@ -205,12 +181,12 @@ test('a disconnected player keeps their slot reserved', () => {
   assert.equal(r.freeByColor(a.cohortIndex)[a.colorIndex], before, 'still theirs to come back to');
 });
 
-test('a nonsense year or accessory is clamped, not obeyed', () => {
+test('a nonsense year or finish is clamped, not obeyed', () => {
   const r = new Roster();
   const [a] = joinMany(r, 1);
-  r.setLook(a.id, { cohortIndex: 99, hatIndex: 999 });
+  r.setLook(a.id, { cohortIndex: 99, finishIndex: 999 });
   assert.ok(a.cohortIndex >= 0 && a.cohortIndex < COHORTS.length);
-  assert.ok(poolFor(a.cohortIndex).includes(a.hatIndex));
+  assert.ok(a.finishIndex >= 0 && a.finishIndex < FINISHES.length);
 });
 
 test('setLook on an unknown player is a no-op, not a crash', () => {
@@ -230,7 +206,7 @@ test('a serialize/hydrate round trip survives a server restart', () => {
   // roster has to reconnect the two.
   const r = new Roster();
   const [a, b] = joinMany(r, 2);
-  r.setLook(a.id, { name: 'Ada', cohortIndex: 2, colorIndex: 8, hatIndex: poolFor(2)[1] });
+  r.setLook(a.id, { name: 'Ada', cohortIndex: 2, colorIndex: 8, finishIndex: 1 });
 
   const fresh = new Roster();
   assert.equal(fresh.hydrate(JSON.parse(JSON.stringify(r.serialize()))), 2);

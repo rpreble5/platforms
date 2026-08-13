@@ -140,8 +140,7 @@ function onJson(msg) {
         roster.set(p.id, {
           name: p.name,
           color: p.color,
-          hat: p.hat,
-          pattern: p.pattern,
+          finish: p.finish,
           cohortIndex: p.cohortIndex,
           cohortSet: p.cohortSet,
           connected: p.connected,
@@ -628,7 +627,7 @@ async function init() {
   }
 
   addPlayer(world, LOCAL_ID);
-  roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', hat: 'none', connected: true });
+  roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', finish: 'flat', connected: true });
 
   try {
     const pack = await fetch('/api/questions').then((r) => r.json());
