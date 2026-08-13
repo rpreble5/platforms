@@ -99,13 +99,15 @@ What covers it, as fractions of the image height:
 
 ## `assets/fonts/display.woff2` — the display face
 
-A `.woff2` file. Weights 500–800 are used, at sizes from 22px to 74px. A
-variable font covering that range works, as does one static bold weight.
+**Filled: Fredoka** (variable, latin, weight axis 300–700), with its OFL
+license alongside as `OFL-Fredoka.txt`. Draw code asking for 800 clamps to
+700, which is intentional — one file serves every weight.
 
-**Self-host it — don't link Google Fonts.** There's no internet at the venue,
-so a CDN link would silently fall back to the system face on the night. Put the
-file at that exact path; the `@font-face` is already wired up and the display
-waits for the font before its first frame.
+**Self-hosted on purpose — don't link Google Fonts.** There's no internet at
+the venue, so a CDN link would silently fall back to the system face on the
+night. To swap the face, replace the file at this exact path (keep the
+license of whatever you ship); the `@font-face` is already wired up and the
+display waits for the font before its first frame.
 
 ---
 

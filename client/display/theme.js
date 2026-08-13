@@ -48,9 +48,11 @@ export const UI = {
 };
 
 /**
- * Fonts. `DISPLAY` falls back to the system stack until a real face is dropped
- * in — see docs/ART-SPEC.md. The name must match the @font-face in
- * client/display/index.html.
+ * Fonts. `display` is Fredoka (variable, OFL — assets/fonts/display.woff2 +
+ * OFL-Fredoka.txt), served by the @font-face in client/display/index.html;
+ * the system stack is only the fallback for the first frames before it
+ * loads. Fredoka's weight axis tops out at 700, so the 800s in draw code
+ * clamp there — intentional, it keeps one file serving every weight.
  */
 export const FONT = {
   display: '"PlatformsDisplay", ui-rounded, "SF Pro Rounded", system-ui, sans-serif',
