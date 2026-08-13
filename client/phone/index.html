@@ -115,7 +115,6 @@
     60% { transform:scale(1.05); }
     100% { transform:scale(1); }
   }
-  #prevName { font:800 12px/1.2 inherit; color:#8792a6; margin-top:2px; min-height:14px; }
   #setup .lbl {
     font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
     color:#6c7789; margin:20px 0 8px;
@@ -201,7 +200,6 @@
     <div id="idRow">
       <div id="prevWrap">
         <canvas id="preview" width="208" height="300"></canvas>
-        <div id="prevName"></div>
       </div>
       <div>
         <div class="lbl">Your name</div>
@@ -237,7 +235,7 @@
   var elFlag = $('flagbtn'), elMsg = $('msg');
   var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
   var elYears = $('years'), elFins = $('finishes');
-  var elPrev = $('preview'), elPrevWrap = $('prevWrap'), elPrevName = $('prevName');
+  var elPrev = $('preview'), elPrevWrap = $('prevWrap');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
   // ------------------------------------------------------------------ identity
@@ -732,9 +730,6 @@
     g.scale(Z, Z);
     drawBean(g, COLORS[colorIdx].hex, FINISHES[pickedFinish].key, 40, h, cohort.shape, true);
     g.restore();
-    // The automatic name, so name-follows-look is never a surprise. A typed
-    // name is already sitting in the field below — no need to echo it.
-    elPrevName.textContent = elNameIn.value ? '' : lookName(colorIdx, pickedYear >= 0 ? pickedYear : DEFAULT_COHORT);
   }
 
   /** A little hatch-pop when the look changes. CSS does the work. */
@@ -836,7 +831,6 @@
   }
 
   buildPickers();
-  elNameIn.addEventListener('input', paintPreview); // typed name hides the auto caption
   elGo.addEventListener('click', function (e) { e.preventDefault(); submitSetup(); });
   elNameIn.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); submitSetup(); }
