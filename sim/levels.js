@@ -170,28 +170,6 @@ export const PERCH_Y = FLOOR_Y - 160;
 export const ISLAND_Y = FLOOR_Y - 480;
 /** Perches are stepping stones, not destinations — big enough to land on with slack. */
 export const PERCH_W = GRID * 9;
-/**
- * Elevated answer boards are capped so they read as islands rather than
- * shelves. 20 tiles; the 2-answer row layout would otherwise produce 840px
- * monsters half a screen wide.
- */
-const ISLAND_MAX_W = GRID * 20;
-/**
- * Ladder rung sizing. The ladder tapers upward: a broad base you can barely
- * miss from the floor, then rungs that narrow as they rise — by the top you
- * are jumping straight up through one-way platforms, where width matters far
- * less than it does on the first committed jump.
- *
- * The base is allowed to run underneath the boards: a surface TWO tiers below
- * a board keeps its name labels ~106px clear of the answer text, so only the
- * tier directly below (one hop down) has to stay out of the boards' shadow.
- */
-const RUNG_MIN_W = GRID * 6;
-/** How much wider the base rung is than the rungs above it. */
-const RUNG_BASE_EXTRA = GRID * 8;
-/** Flank-ladder rung width, and the minimum air between a rung and a board. */
-const FLANK_RUNG_W = GRID * 4;
-const DAYLIGHT = 8;
 
 /** One hop of height. Every tier in every layout is a multiple of this. */
 export const TIER = FLOOR_Y - PERCH_Y;
@@ -257,97 +235,105 @@ export function buildRowArena(n) {
 }
 
 /**
- * Answers as high islands, tapered ladders to reach them.
+ * Hand-designed island maps, one per answer count — built for THIRTY people
+ * moving at once:
  *
- * Answers sit centred in `n` equal slots, three tiers up, on slabs with
- * plaques hanging beneath them. Each ladder is a stack of
- * one-way rungs at tiers 1-2-3 — jump straight up through each rung and land
- * on it, three proven 160px hops — wide at the base and narrowing upward,
- * with the top rung level with the boards so the last move is a flat hop
- * onto an answer.
+ *  - MULTIPLE PATHS: every board is approachable from both sides — a ladder
+ *    in every inter-board gap AND on both flanks — so no single column ever
+ *    has to carry the room, and picking the far answer never means joining
+ *    the same climb as everyone else.
+ *  - MAXIMUM SPACING: ladders spread across the full width, so the crowd
+ *    distributes instead of piling into one visual knot.
+ *  - BIG SCAFFOLDING: tier-1 bases are the widest surfaces in the arena
+ *    (240-576px) — the first jump from the floor is the one everyone makes
+ *    at the same moment, so it gets the most landing room. Bases may run
+ *    under the boards (two tiers below, labels clear the text by ~106px);
+ *    tier-2 rungs sit strictly in the gaps and flanks — one tier below a
+ *    board, a name label would cross its plaque, so their footprints never
+ *    overlap (the layout test enforces it).
  *
- * Ladder placement is the whole design: at 2-3 answers the boards leave real
- * gaps, so ladders stand in the gap centres; at 4-5 the boards nearly touch
- * and the ladders move to the outer flanks, with the small inter-board gaps
- * crossed by flat board-to-board hops. Either way NO standing surface ever
- * sits in the tier directly below a board's footprint — a player parked there
- * would have their name label drawn across the answer text. The base rung,
- * two tiers down, is exempt (labels there clear the text by ~106px), which is
- * what lets it spread under the boards and catch sloppy first jumps.
+ * `boards`: [centerX, width]. `rungs`: [centerX, tier, width], tiers 1-2-3;
+ * jump straight up through each one-way rung, then a flat hop onto a board.
+ * Boards gave back some width versus the old formula layouts to pay for the
+ * gap ladders — worth it: the ladders are where the crowd lives.
+ *
+ * @type {Record<number, {boards: number[][], rungs: number[][]}>}
+ */
+const ISLANDS = {
+  2: {
+    boards: [[515, 480], [1405, 480]],
+    rungs: [
+      [960, 1, 576], [960, 2, 384], [960, 3, 384],
+      [140, 1, 264], [195, 2, 144], [195, 3, 144],
+      [1780, 1, 264], [1725, 2, 144], [1725, 3, 144],
+    ],
+  },
+  3: {
+    boards: [[367, 432], [960, 432], [1553, 432]],
+    rungs: [
+      [663, 1, 336], [663, 2, 144], [663, 3, 144],
+      [1257, 1, 336], [1257, 2, 144], [1257, 3, 144],
+      [128, 1, 240], [95, 2, 96], [95, 3, 96],
+      [1792, 1, 240], [1825, 2, 96], [1825, 3, 96],
+    ],
+  },
+  4: {
+    boards: [[292, 312], [738, 312], [1182, 312], [1628, 312]],
+    rungs: [
+      [515, 1, 336], [515, 2, 96], [515, 3, 96],
+      [960, 1, 336], [960, 2, 96], [960, 3, 96],
+      [1405, 1, 336], [1405, 2, 96], [1405, 3, 96],
+      [140, 1, 264], [80, 2, 96], [80, 3, 96],
+      [1780, 1, 264], [1840, 2, 96], [1840, 3, 96],
+    ],
+  },
+  5: {
+    boards: [[248, 240], [604, 240], [960, 240], [1316, 240], [1672, 240]],
+    rungs: [
+      [426, 2, 96], [426, 3, 96],
+      [782, 1, 288], [782, 2, 96], [782, 3, 96],
+      [1138, 1, 288], [1138, 2, 96], [1138, 3, 96],
+      [1494, 2, 96], [1494, 3, 96],
+      [140, 1, 264], [72, 2, 96], [72, 3, 96],
+      [1780, 1, 264], [1848, 2, 96], [1848, 3, 96],
+    ],
+  },
+};
+
+/**
  * @param {number} n
  * @returns {Platform[]}
  */
 export function buildIslandArena(n) {
   const count = Math.max(2, Math.min(5, n));
+  const spec = ISLANDS[count];
 
   /** @type {Platform[]} */
   const platforms = [
     { id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 },
   ];
 
-  const usable = WORLD_W - EDGE_MARGIN * 2;
-  const spacing = usable / count;
-  // Boards take what the ladders don't need. Gap ladders (2-3 answers) claim
-  // enough air between boards for a decent rung plus daylight on both sides;
-  // flank ladders (4-5) claim the strip between the screen edge and the
-  // outermost board. A slightly narrower board is a fair price for rungs
-  // people actually land on.
-  const width = Math.min(
-    snapToGrid(spacing - MIN_GAP),
-    ISLAND_MAX_W,
-    count <= 3
-      ? snapToGrid(spacing - RUNG_MIN_W - DAYLIGHT * 2)
-      : snapToGrid(2 * (EDGE_MARGIN + spacing / 2 - (DAYLIGHT + FLANK_RUNG_W + DAYLIGHT)))
-  );
-
-  /** @type {Platform[]} */
-  const boards = [];
-  for (let i = 0; i < count; i++) {
-    const center = EDGE_MARGIN + (i + 0.5) * spacing;
-    boards.push({
+  spec.boards.forEach(([center, w], i) => {
+    platforms.push({
       id: answerId(i),
-      x: center - width / 2,
+      x: center - w / 2,
       y: ISLAND_Y,
-      w: width,
+      w,
       h: ANSWER_H,
       oneWay: true,
       signStyle: 'plaque',
     });
-  }
-  platforms.push(...boards);
-
-  let perch = 0;
-  /** @param {number} x left edge @param {number} y @param {number} w */
-  const rung = (x, y, w) => {
-    platforms.push({ id: `perch${perch++}`, x, y, w, h: ANSWER_H, oneWay: true });
-  };
-
-  if (count <= 3) {
-    // Gap-centre ladders. The mid and top rungs fill the gap up to daylight;
-    // the base spreads wider still, running under the boards on both sides.
-    const midW = Math.floor((spacing - width - DAYLIGHT * 2) / GRID) * GRID;
-    const baseW = midW + RUNG_BASE_EXTRA;
-    for (let j = 0; j < count - 1; j++) {
-      const c = EDGE_MARGIN + (j + 1) * spacing;
-      rung(c - baseW / 2, tierY(1), baseW);
-      rung(c - midW / 2, tierY(2), midW);
-      rung(c - midW / 2, tierY(3), midW);
-    }
-  } else {
-    // Flank ladders just outside the outer boards; inner boards are reached
-    // by hopping across the outer ones. The base extends inward, under the
-    // board, so the first jump from the floor has a big target.
-    const baseW = FLANK_RUNG_W + RUNG_BASE_EXTRA / 2;
-    const last = boards[count - 1];
-    const xl = boards[0].x - DAYLIGHT - FLANK_RUNG_W;
-    rung(xl, tierY(1), baseW);
-    rung(xl, tierY(2), FLANK_RUNG_W);
-    rung(xl, tierY(3), FLANK_RUNG_W);
-    const xr = last.x + last.w + DAYLIGHT;
-    rung(xr + FLANK_RUNG_W - baseW, tierY(1), baseW);
-    rung(xr, tierY(2), FLANK_RUNG_W);
-    rung(xr, tierY(3), FLANK_RUNG_W);
-  }
+  });
+  spec.rungs.forEach(([center, tier, w], j) => {
+    platforms.push({
+      id: `perch${j}`,
+      x: center - w / 2,
+      y: tierY(tier),
+      w,
+      h: ANSWER_H,
+      oneWay: true,
+    });
+  });
 
   return platforms;
 }
@@ -357,8 +343,10 @@ const TIER_BOARD_W = GRID * 14;
 
 /**
  * Hand-placed tier maps for the stacked layouts, one per answer count.
- * `ans` and `perch` are [centerX, tier] pairs; answers keep deck order left
- * to right. Placements obey two rules the reachability test enforces:
+ * `ans` entries are [centerX, tier]; `perch` entries are
+ * [centerX, tier, width=PERCH_W] — tier-1 bases run wide where the label
+ * rule allows, because the first climb is the one the whole room makes at
+ * once. Answers keep deck order left to right. Placements obey two rules the reachability test enforces:
  * every board is reachable from the floor through hops that rise exactly one
  * TIER with at most a small horizontal gap, and nothing on a shared tier
  * touches. Highest surface is tier 4 (y=340) — any higher collides with the
@@ -368,23 +356,23 @@ const TIER_BOARD_W = GRID * 14;
  */
 const TIERED = {
   pyramid: {
-    2: { ans: [[630, 2], [1290, 2]], perch: [[350, 1], [960, 1], [1570, 1], [960, 3]] },
-    3: { ans: [[550, 2], [960, 3], [1370, 2]], perch: [[250, 1], [960, 1], [1670, 1]] },
+    2: { ans: [[630, 2], [1290, 2]], perch: [[350, 1, 288], [960, 1, 288], [1570, 1, 288], [960, 3]] },
+    3: { ans: [[550, 2], [960, 3], [1370, 2]], perch: [[250, 1, 240], [960, 1, 288], [1670, 1, 240]] },
     4: {
       ans: [[430, 2], [745, 3], [1175, 3], [1490, 2]],
-      perch: [[178, 1], [960, 1], [1742, 1], [960, 2]],
+      perch: [[140, 1], [960, 1, 288], [1780, 1], [960, 2]],
     },
     5: {
       ans: [[350, 2], [655, 3], [960, 4], [1265, 3], [1570, 2]],
-      perch: [[178, 1], [960, 1], [1742, 1], [960, 2]],
+      perch: [[178, 1], [960, 1, 288], [1742, 1], [960, 2]],
     },
   },
   'reverse-pyramid': {
-    2: { ans: [[250, 3], [1670, 3]], perch: [[400, 1], [1520, 1], [178, 2], [1742, 2]] },
-    3: { ans: [[250, 3], [960, 1], [1670, 3]], perch: [[400, 1], [1520, 1], [178, 2], [1742, 2]] },
+    2: { ans: [[250, 3], [1670, 3]], perch: [[400, 1, 288], [1520, 1, 288], [178, 2], [1742, 2]] },
+    3: { ans: [[250, 3], [960, 1], [1670, 3]], perch: [[400, 1, 288], [1520, 1, 288], [178, 2], [1742, 2]] },
     4: {
       ans: [[250, 3], [745, 1], [1175, 1], [1670, 3]],
-      perch: [[400, 1], [1520, 1], [178, 2], [1742, 2]],
+      perch: [[400, 1, 288], [1520, 1, 288], [178, 2], [1742, 2]],
     },
     5: {
       ans: [[250, 3], [605, 2], [960, 1], [1315, 2], [1670, 3]],
@@ -422,12 +410,12 @@ export function buildTieredArena(n, layout) {
       signStyle: 'plaque',
     });
   });
-  spec.perch.forEach(([center, tier], j) => {
+  spec.perch.forEach(([center, tier, w = PERCH_W], j) => {
     platforms.push({
       id: `perch${j}`,
-      x: center - PERCH_W / 2,
+      x: center - w / 2,
       y: tierY(tier),
-      w: PERCH_W,
+      w,
       h: ANSWER_H,
       oneWay: true,
     });
