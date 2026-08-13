@@ -98,10 +98,11 @@ export function drawFloor(cx, p) {
 }
 
 /**
- * One answer board: a thin ink-outlined slab, with the text on a plaque
- * hanging below (elevated layouts) or a flag flying above (the flat row).
- * `dy` lets the reveal reuse this for debris — the whole assembly falls as
- * one piece.
+ * One answer board: a thin ink-outlined slab, with the answer TEXT floating
+ * free — below the slab for the elevated layouts ('plaque' position), above
+ * it on the flat row ('flag' position). No banner, pole or posts: the text
+ * carries itself, and the verdict box materializes only at the reveal.
+ * `dy` lets the reveal reuse this for debris — slab and text fall together.
  * @param {CanvasRenderingContext2D} cx
  * @param {Platform} p
  * @param {{state?: 'idle'|'correct'|'wrong', dy?: number}} [opts]
@@ -117,39 +118,10 @@ export function drawSign(cx, p, opts = {}) {
   const ink = terrazzo ? 'rgba(23,20,42,0.9)' : 'rgba(3,5,9,0.8)';
   const r = 9;
 
+  // The slab: face, ink outline, dark landing band on top.
   cx.save();
   cx.lineWidth = 3;
   cx.strokeStyle = ink;
-
-  if (p.signStyle === 'flag') {
-    // Pole first, so the slab's outline sits over its foot.
-    const fx = flagRect(p, dy);
-    cx.beginPath();
-    cx.moveTo(fx.px, y);
-    cx.lineTo(fx.px, fx.y);
-    cx.stroke();
-    cx.fillStyle = way.face;
-    cx.beginPath();
-    cx.roundRect(fx.x, fx.y, fx.w, fx.h, [0, 12, 12, 0]);
-    cx.fill();
-    cx.stroke();
-  } else {
-    // Hanging plaque: two posts, then the board.
-    const pq = plaqueRect(p, dy);
-    for (const t of [0.16, 0.84]) {
-      cx.beginPath();
-      cx.moveTo(p.x + p.w * t, y + SLAB_H);
-      cx.lineTo(p.x + p.w * t, pq.y);
-      cx.stroke();
-    }
-    cx.fillStyle = way.face;
-    cx.beginPath();
-    cx.roundRect(pq.x, pq.y, pq.w, pq.h, 12);
-    cx.fill();
-    cx.stroke();
-  }
-
-  // The slab itself: face, ink outline, dark landing band on top.
   cx.fillStyle = way.face;
   cx.beginPath();
   cx.roundRect(p.x, y, p.w, SLAB_H, r);
@@ -161,72 +133,48 @@ export function drawSign(cx, p, opts = {}) {
   cx.fill();
   cx.restore();
 
-  if (state !== 'idle') {
-    // Right/wrong is deliberately NOT a hue: the winner BRIGHTENS and gets a
-    // bold outline, the losers fade dark and fall. Brightness reads for
-    // everyone, including the ~8% of men who can't trust red-vs-green, and
-    // it survives a projector eating saturation.
-    const zone = signZone(p, dy);
+  if (state === 'wrong') {
+    // Losers dim and fall — hue-free, same as always.
     cx.save();
     cx.globalCompositeOperation = 'source-atop';
-    cx.fillStyle =
-      state === 'correct'
-        ? 'rgba(255,255,255,0.32)'
-        : terrazzo ? 'rgba(20,14,26,0.38)' : 'rgba(20,14,26,0.55)';
-    cx.fillRect(zone.x - 4, zone.y - 4, zone.w + 8, zone.h + 8);
+    cx.fillStyle = terrazzo ? 'rgba(20,14,26,0.38)' : 'rgba(20,14,26,0.55)';
+    cx.fillRect(p.x - 2, y - 2, p.w + 4, SLAB_H + 4);
     cx.restore();
-    if (state === 'correct') {
-      cx.strokeStyle = terrazzo ? 'rgba(23,20,42,0.85)' : 'rgba(244,241,232,0.9)';
-      cx.lineWidth = 6;
-      const t = p.signStyle === 'flag' ? flagRect(p, dy) : plaqueRect(p, dy);
-      cx.beginPath();
-      cx.roundRect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, 14);
-      cx.stroke();
-    }
+  }
+
+  if (state === 'correct') {
+    // The verdict MATERIALIZES: the floating text gets a bright plate and a
+    // bold ink box only at the reveal — minimal while thinking, ceremony at
+    // the answer. Still no hue: brightness and a border carry it.
+    const t = signTextRect(p, dy);
+    cx.save();
+    cx.fillStyle = 'rgba(255,255,255,0.6)';
+    cx.strokeStyle = terrazzo ? 'rgba(23,20,42,0.85)' : 'rgba(244,241,232,0.9)';
+    cx.lineWidth = 5;
+    cx.beginPath();
+    cx.roundRect(t.x, t.y, t.w, t.h, 14);
+    cx.fill();
+    cx.stroke();
+    cx.restore();
   }
 }
 
 /**
- * The plaque's rectangle, for drawing, text and the label-yield rule.
+ * Where a board's floating text lives — hanging space below the slab
+ * ('plaque' position) or flying space above it ('flag' position). Also the
+ * verdict box at the reveal and the label-yield zone (answers beat labels).
  * @param {Platform} p @param {number} [dy]
  */
-export function plaqueRect(p, dy = 0) {
+export function signTextRect(p, dy = 0) {
+  if (p.signStyle === 'flag') {
+    return { x: p.x + 18, y: p.y + dy - FLAG_POLE, w: p.w - 36, h: FLAG_H };
+  }
   return {
     x: p.x + 10,
     y: p.y + dy + SLAB_H + PLAQUE_GAP,
     w: p.w - 20,
     h: PLAQUE_H,
   };
-}
-
-/**
- * The flag's rectangle plus its pole x, same consumers as plaqueRect.
- * @param {Platform} p @param {number} [dy]
- */
-export function flagRect(p, dy = 0) {
-  const px = p.x + 18;
-  return {
-    px,
-    x: px,
-    y: p.y + dy - FLAG_POLE,
-    w: p.w - 36,
-    h: FLAG_H,
-  };
-}
-
-/**
- * The whole drawn assembly's bounding box (slab + plaque/flag + pole zone),
- * used by the reveal wash.
- * @param {Platform} p @param {number} [dy]
- */
-function signZone(p, dy = 0) {
-  const y = p.y + dy;
-  if (p.signStyle === 'flag') {
-    const f = flagRect(p, dy);
-    return { x: p.x, y: f.y, w: p.w, h: y + SLAB_H - f.y };
-  }
-  const q = plaqueRect(p, dy);
-  return { x: p.x, y, w: p.w, h: q.y + q.h - y };
 }
 
 /**
@@ -239,7 +187,7 @@ function signZone(p, dy = 0) {
 export function drawSignText(cx, p, text, opts = {}) {
   const dy = opts.dy ?? 0;
   const state = opts.state ?? 'idle';
-  const box = p.signStyle === 'flag' ? flagRect(p, dy) : plaqueRect(p, dy);
+  const box = signTextRect(p, dy);
   const midY = box.y + box.h / 2;
   const boxW = box.w - 24;
   const boxH = box.h - 12;
