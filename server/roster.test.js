@@ -195,12 +195,27 @@ test('a disconnected player keeps their slot reserved', () => {
   assert.equal(r.freeByColor(a.cohortIndex)[a.colorIndex], before, 'still theirs to come back to');
 });
 
-test('a nonsense year or finish is clamped, not obeyed', () => {
+test('a nonsense year, finish or accessory is clamped, not obeyed', () => {
   const r = new Roster();
   const [a] = joinMany(r, 1);
-  r.setLook(a.id, { cohortIndex: 99, finishIndex: 999 });
+  r.setLook(a.id, { cohortIndex: 99, finishIndex: 999, accessoryIndex: -3 });
   assert.ok(a.cohortIndex >= 0 && a.cohortIndex < COHORTS.length);
   assert.ok(a.finishIndex >= 0 && a.finishIndex < FINISHES.length);
+  assert.equal(a.accessoryIndex, 0, 'nonsense accessory falls back to none');
+});
+
+test('accessories are pure charm: everyone can wear the same one', () => {
+  const r = new Roster();
+  const players = joinMany(r, 5);
+  for (const p of players) r.setLook(p.id, { cohortIndex: 0, accessoryIndex: 10 });
+  assert.ok(
+    players.every((p) => p.accessory === 'propeller'),
+    'no collision logic ever touches an accessory'
+  );
+  // And it survives a reconnect like everything else.
+  r.disconnect(players[0].id);
+  const back = r.resolve(players[0].token, undefined);
+  assert.ok(back.ok && /** @type {any} */ (back).record.accessory === 'propeller');
 });
 
 test('setLook on an unknown player is a no-op, not a crash', () => {

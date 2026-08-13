@@ -197,10 +197,12 @@ committed to a year yet hold no claim, so a lobby full of people mid-setup
 can't exhaust a cohort, and in the unreal case of a 13th same-year player the
 server grants a duplicate rather than refusing the join.
 
-**Accessories are dormant, not deleted.** The hat art and its authoring
-pipeline (`client/display/accessory-art.js`, **[docs/ACCESSORIES.md](docs/ACCESSORIES.md)**)
-are kept out of the identity system for now; if they return they go back on
-top of the bean family.
+**Accessories are pure charm.** Fourteen options (none, flower, shades,
+crown, sprout, fangs, moustache, monocle, beret, party hat, propeller, top
+hat, cowboy, beanie), drawn by the shared renderer in the bean language and
+picked freely on the phone — no pools, no collision logic, because they do
+no identity work. They bake into the cached sprite, so they squash, stretch
+and lean with the body.
 
 **Training year is a costume, never a gameplay difference.** `PLAYER_H` is 56
 for everybody; only the *sprite* changes, growing upward from the feet so the
@@ -500,18 +502,19 @@ press and its release. Three independent layers guard it:
 ```
 .github/    ci.yml -- typecheck + tests + a browser smoke run on every push
 server/     http.js (static + inlined phone page), relay.js (WS), roster.js (identity)
-shared/     protocol.js (wire format), tuning.js (all constants), palette.js, qr.js
+shared/     protocol.js (wire format), tuning.js (all constants), palette.js,
+            avatar.js (the bean + accessory renderer, inlined into the phone), qr.js
 sim/        PURE, no DOM: world.js, player.js, collide.js  -- Node runs these in tests
 client/display/  main.js (loop), input-bus.js, render.js, hud.js, latency-flash.js
-                 sprites.js (avatar cache), accessory-art.js (accessory paths)
+                 sprites.js (avatar cache over shared/avatar.js), anim.js
 client/phone/    index.html -- the entire gamepad, one file
 client/testpad/  N gamepads on one machine, for testing without a crowd
 tools/      loadgen.js, smoke.js, testsheet.js, make-nosleep.sh
 ```
 
-`accessory-art.js` is deliberately DOM-free so a Node test can validate it, and
-it is deliberately *not* in `shared/` — `palette.js` gets inlined into the phone
-page, and the phone needs an accessory's name and glyph but never its geometry.
+`shared/avatar.js` is deliberately DOM-free (the canvas context comes in as an
+argument) so Node tests can validate it and the phone can inline it — the
+setup-card preview draws with the exact function the projector uses.
 
 `shared/protocol.js` is imported unchanged by Node and the display page, and is
 **inlined into the phone page at boot** with its `export` keywords stripped — so

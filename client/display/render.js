@@ -7,6 +7,7 @@
 
 import { FX, RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
+import { accessoryHidesEyes } from '../../shared/avatar.js';
 import { ANSWER_H, ANSWER_SIGN_H, RANGE_ID } from '../../sim/levels.js';
 import { animFor, pruneAnim } from './anim.js';
 import { themeName } from './themes.js';
@@ -23,6 +24,7 @@ import { UI } from './theme.js';
  * @property {string} name
  * @property {string} color
  * @property {string} [finish] 'flat' | 'pastel'
+ * @property {string} [accessory] palette ACCESSORIES key
  * @property {number} [cohortIndex]
  * @property {boolean} [cohortSet]
  * @property {boolean} connected
@@ -145,7 +147,8 @@ export function render(cx, world, roster, game, opts) {
       Math.round(w),
       Math.round(drawnH),
       cohort.shape,
-      false // eyes are drawn live below, so they can look around
+      false, // eyes are drawn live below, so they can look around
+      look.accessory ?? 'none'
     );
 
     // Squash, stretch and lean, all anchored at the feet — a deformation that
@@ -161,15 +164,18 @@ export function render(cx, world, roster, game, opts) {
     cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);
 
     // Live eyes, in the same transformed space so they deform with the body.
-    const er = Math.max(EYES.rMin, w * EYES.r) * (a?.eye.scale ?? 1);
-    const ey = -drawnH + drawnH * EYES.y + (a ? a.eye.dy * er : 0);
-    cx.fillStyle = EYES.color;
-    cx.beginPath();
-    for (const fx of [EYES.x1, EYES.x2]) {
-      const ex = -w / 2 + w * fx + (a ? a.eye.dx * er : 0);
-      cx.ellipse(ex, ey, er, er * (a?.eye.openY ?? 1), 0, 0, Math.PI * 2);
+    // Skipped under an accessory that covers them — shades don't gaze.
+    if (!accessoryHidesEyes(look.accessory ?? 'none')) {
+      const er = Math.max(EYES.rMin, w * EYES.r) * (a?.eye.scale ?? 1);
+      const ey = -drawnH + drawnH * EYES.y + (a ? a.eye.dy * er : 0);
+      cx.fillStyle = EYES.color;
+      cx.beginPath();
+      for (const fx of [EYES.x1, EYES.x2]) {
+        const ex = -w / 2 + w * fx + (a ? a.eye.dx * er : 0);
+        cx.ellipse(ex, ey, er, er * (a?.eye.openY ?? 1), 0, 0, Math.PI * 2);
+      }
+      cx.fill();
     }
-    cx.fill();
     cx.restore();
 
     // Labels auto-hide once the room is crowded — 30 overlapping names is worse

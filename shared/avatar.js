@@ -86,8 +86,18 @@ export function avatarBodyPath(cx, w, h, shape) {
 }
 
 /**
+ * Accessories that cover the eye zone — the renderer (and the display's
+ * live-eye pass) suppress the eyes underneath them.
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function accessoryHidesEyes(key) {
+  return key === 'sunglasses';
+}
+
+/**
  * Draw one bean at the context's origin, w x h. Everything a player is:
- * colour, finish, and their year's body shape.
+ * colour, finish, their year's body shape, and their accessory.
  *
  * @param {CanvasRenderingContext2D} cx
  * @param {string} color the palette hex
@@ -96,8 +106,9 @@ export function avatarBodyPath(cx, w, h, shape) {
  * @param {number} w @param {number} h
  * @param {string} shape 'egg' | 'pill' | 'loaf'
  * @param {boolean} [eyes] false when the caller draws live eyes itself
+ * @param {string} [accessory] a key from palette ACCESSORIES; 'none' skips
  */
-export function drawBean(cx, color, finish, w, h, shape, eyes = true) {
+export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory = 'none') {
   const pastel = finish === 'pastel';
 
   // Body fill: flat keeps the hue nearly full strength; pastel washes it.
@@ -142,7 +153,7 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true) {
     cx.globalAlpha = 1;
   }
 
-  if (eyes) {
+  if (eyes && !accessoryHidesEyes(accessory)) {
     const er = Math.max(EYES.rMin, w * EYES.r);
     cx.fillStyle = EYES.color;
     cx.beginPath();
@@ -150,4 +161,314 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true) {
     cx.arc(w * EYES.x2, h * EYES.y, er, 0, Math.PI * 2);
     cx.fill();
   }
+
+  drawAccessory(cx, accessory, w, h);
 }
+
+/**
+ * The accessory painters — pure charm in the bean language: flat fills, the
+ * theme ink line, positions as body-box fractions so every piece sits right
+ * on all three shapes. All of them stay inside the sprite cache's 18px pad.
+ *
+ * @param {CanvasRenderingContext2D} cx
+ * @param {string} key
+ * @param {number} w @param {number} h
+ */
+export function drawAccessory(cx, key, w, h) {
+  const p = ACCESSORY_PAINTERS[key];
+  if (p) p(cx, w, h);
+}
+
+/** @type {Record<string, (g: CanvasRenderingContext2D, w: number, h: number) => void>} */
+const ACCESSORY_PAINTERS = {
+  flower(g, w, h) {
+    const cx = w * 0.84, cy = h * 0.04, R = w * 0.14;
+    g.lineWidth = 2.2;
+    g.strokeStyle = AVATAR_INK;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      g.fillStyle = '#f7b8c8';
+      g.beginPath();
+      g.ellipse(cx + Math.cos(a) * R, cy + Math.sin(a) * R, R * 0.72, R * 0.72, 0, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
+    g.fillStyle = '#ffd93d';
+    g.beginPath();
+    g.arc(cx, cy, R * 0.52, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+  },
+
+  sunglasses(g, w, h) {
+    const y = h * EYES.y, r = w * 0.16;
+    g.lineWidth = 2.4;
+    g.strokeStyle = AVATAR_INK;
+    g.fillStyle = '#241f3d';
+    for (const fx of [EYES.x1, EYES.x2]) {
+      g.beginPath();
+      g.roundRect(w * fx - r, y - r * 0.85, r * 2, r * 1.7, r * 0.55);
+      g.fill();
+      g.stroke();
+    }
+    g.beginPath();
+    g.moveTo(w * EYES.x1 + r, y - r * 0.3);
+    g.lineTo(w * EYES.x2 - r, y - r * 0.3);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(w * EYES.x1 - r, y - r * 0.3);
+    g.lineTo(w * 0.02, y - r * 0.55);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(w * EYES.x2 + r, y - r * 0.3);
+    g.lineTo(w * 0.98, y - r * 0.55);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.5)';
+    g.lineWidth = 1.6;
+    for (const fx of [EYES.x1, EYES.x2]) {
+      g.beginPath();
+      g.moveTo(w * fx - r * 0.4, y + r * 0.45);
+      g.lineTo(w * fx + r * 0.15, y - r * 0.45);
+      g.stroke();
+    }
+  },
+
+  crown(g, w, h) {
+    const s = w * 0.3;
+    g.lineWidth = 2.2;
+    g.strokeStyle = AVATAR_INK;
+    g.fillStyle = '#ffd93d';
+    g.beginPath();
+    g.moveTo(w * 0.24, 1);
+    g.lineTo(w * 0.2, -s * 0.75);
+    g.lineTo(w * 0.36, -s * 0.3);
+    g.lineTo(w * 0.5, -s * 0.95);
+    g.lineTo(w * 0.64, -s * 0.3);
+    g.lineTo(w * 0.8, -s * 0.75);
+    g.lineTo(w * 0.76, 1);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#d64f63';
+    g.beginPath();
+    g.arc(w * 0.5, -s * 0.28, w * 0.045, 0, Math.PI * 2);
+    g.fill();
+  },
+
+  sprout(g, w, h) {
+    const cx = w * 0.5;
+    g.lineWidth = 2.4;
+    g.strokeStyle = AVATAR_INK;
+    g.beginPath();
+    g.moveTo(cx, 1);
+    g.quadraticCurveTo(cx + w * 0.02, -w * 0.12, cx + w * 0.04, -w * 0.18);
+    g.stroke();
+    g.fillStyle = '#7fc98f';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.ellipse(cx - w * 0.09, -w * 0.2, w * 0.11, w * 0.055, -0.5, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.ellipse(cx + w * 0.16, -w * 0.24, w * 0.11, w * 0.055, 0.45, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+  },
+
+  fangs(g, w, h) {
+    const cy = h * 0.5, cx = w * 0.5;
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.moveTo(cx - w * 0.14, cy);
+    g.quadraticCurveTo(cx, cy + h * 0.02, cx + w * 0.14, cy);
+    g.stroke();
+    g.lineWidth = 1.6;
+    for (const d of [-1, 1]) {
+      const fx = cx + d * w * 0.09;
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.moveTo(fx - w * 0.045, cy + h * 0.004);
+      g.lineTo(fx + w * 0.045, cy + h * 0.004);
+      g.lineTo(fx, cy + h * 0.075);
+      g.closePath();
+      g.fill();
+      g.stroke();
+    }
+  },
+
+  moustache(g, w, h) {
+    const cy = h * 0.485, cx = w * 0.5;
+    g.fillStyle = '#241f3d';
+    for (const d of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.quadraticCurveTo(cx + d * w * 0.13, cy - h * 0.045, cx + d * w * 0.26, cy - h * 0.012);
+      g.quadraticCurveTo(cx + d * w * 0.33, cy + h * 0.006, cx + d * w * 0.31, cy - h * 0.045);
+      g.quadraticCurveTo(cx + d * w * 0.38, cy + h * 0.02, cx + d * w * 0.24, cy + h * 0.05);
+      g.quadraticCurveTo(cx + d * w * 0.1, cy + h * 0.055, cx, cy + h * 0.02);
+      g.closePath();
+      g.fill();
+    }
+  },
+
+  monocle(g, w, h) {
+    const ex = w * EYES.x2, ey = h * EYES.y, r = w * 0.15;
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.6;
+    g.beginPath();
+    g.arc(ex, ey, r, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = 'rgba(210,225,245,0.35)';
+    g.beginPath();
+    g.arc(ex, ey, r - 1.3, 0, Math.PI * 2);
+    g.fill();
+    g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(ex + r * 0.7, ey + r * 0.7);
+    g.quadraticCurveTo(ex + r * 1.4, ey + r * 2.2, ex + r * 0.9, ey + r * 3.1);
+    g.stroke();
+  },
+
+  beret(g, w, h) {
+    g.fillStyle = '#d64f63';
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.ellipse(w * 0.42, h * 0.015, w * 0.34, w * 0.13, -0.12, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.arc(w * 0.42, -w * 0.13, w * 0.045, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+  },
+
+  party(g, w, h) {
+    const ht = w * 0.42, half = w * 0.19;
+    g.save();
+    g.translate(w * 0.5, h * 0.02);
+    g.rotate(-0.08);
+    g.fillStyle = '#5fb8a5';
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.moveTo(-half, 0);
+    g.lineTo(half, 0);
+    g.lineTo(0, -ht);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.save();
+    g.beginPath();
+    g.moveTo(-half, 0);
+    g.lineTo(half, 0);
+    g.lineTo(0, -ht);
+    g.closePath();
+    g.clip();
+    g.fillStyle = '#f7b8c8';
+    g.beginPath();
+    g.moveTo(-half * 0.9, -ht * 0.28);
+    g.lineTo(half * 0.9, -ht * 0.52);
+    g.lineTo(half * 0.9, -ht * 0.34);
+    g.lineTo(-half * 0.9, -ht * 0.1);
+    g.closePath();
+    g.fill();
+    g.restore();
+    g.fillStyle = '#ffd93d';
+    g.beginPath();
+    g.arc(0, -ht, w * 0.055, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.restore();
+  },
+
+  propeller(g, w, h) {
+    const cx = w * 0.5, y0 = h * 0.02;
+    g.fillStyle = '#d64f63';
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.ellipse(cx, y0 + 1, w * 0.3, w * 0.17, 0, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.moveTo(cx, y0 - w * 0.16);
+    g.lineTo(cx, y0 - w * 0.26);
+    g.stroke();
+    for (const d of [-1, 1]) {
+      g.fillStyle = d < 0 ? '#ffd93d' : '#4aa8ff';
+      g.beginPath();
+      g.ellipse(cx + d * w * 0.14, y0 - w * 0.27, w * 0.13, w * 0.05, d * 0.12, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
+    g.fillStyle = '#241f3d';
+    g.beginPath();
+    g.arc(cx, y0 - w * 0.27, w * 0.028, 0, Math.PI * 2);
+    g.fill();
+  },
+
+  tophat(g, w, h) {
+    const cx = w * 0.5, y0 = h * 0.015;
+    g.fillStyle = '#241f3d';
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.roundRect(cx - w * 0.3, y0 - w * 0.045, w * 0.6, w * 0.075, w * 0.03);
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.roundRect(cx - w * 0.19, y0 - w * 0.42, w * 0.38, w * 0.39, [w * 0.04, w * 0.04, 0, 0]);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#d64f63';
+    g.fillRect(cx - w * 0.19 + 1.1, y0 - w * 0.14, w * 0.38 - 2.2, w * 0.075);
+  },
+
+  cowboy(g, w, h) {
+    const cx = w * 0.5, y0 = h * 0.015;
+    g.fillStyle = '#c9a26b';
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.ellipse(cx, y0 - w * 0.1, w * 0.17, w * 0.15, 0, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.moveTo(cx - w * 0.34, y0 - w * 0.06);
+    g.quadraticCurveTo(cx - w * 0.38, y0 + w * 0.05, cx - w * 0.24, y0 + w * 0.03);
+    g.quadraticCurveTo(cx, y0 + w * 0.085, cx + w * 0.24, y0 + w * 0.03);
+    g.quadraticCurveTo(cx + w * 0.38, y0 + w * 0.05, cx + w * 0.34, y0 - w * 0.06);
+    g.quadraticCurveTo(cx + w * 0.12, y0 - w * 0.02, cx, y0 - w * 0.02);
+    g.quadraticCurveTo(cx - w * 0.12, y0 - w * 0.02, cx - w * 0.34, y0 - w * 0.06);
+    g.closePath();
+    g.fill();
+    g.stroke();
+  },
+
+  beanie(g, w, h) {
+    const cx = w * 0.5, y0 = h * 0.03;
+    g.fillStyle = '#4a6da8';
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.ellipse(cx, y0, w * 0.31, w * 0.24, 0, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#3c5a8c';
+    g.beginPath();
+    g.roundRect(cx - w * 0.32, y0 - w * 0.02, w * 0.64, w * 0.09, w * 0.03);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#f6f1ea';
+    g.beginPath();
+    g.arc(cx, y0 - w * 0.26, w * 0.07, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+  },
+};

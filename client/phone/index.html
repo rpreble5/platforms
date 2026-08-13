@@ -148,6 +148,18 @@
     font:800 15px/1 inherit; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.55);
   }
   .fin.sel { border-color:#fff; }
+
+  /* Accessory tiles: a mini bean wearing each option, tinted live to the
+     player's colour by the same shared renderer. Pure charm — nothing here
+     is contested, so nothing ever greys out. */
+  #accs { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .ac {
+    aspect-ratio:0.92; border-radius:12px; background:#141822;
+    border:3px solid transparent; display:grid; place-items:center;
+    touch-action:manipulation; overflow:hidden;
+  }
+  .ac.sel { border-color:#fff; background:#232a38; }
+  .ac canvas { width:78%; height:88%; }
   .sw {
     aspect-ratio:1; border-radius:14px; position:relative;
     border:3px solid transparent; display:grid; place-items:center;
@@ -213,6 +225,8 @@
     <div id="swatches"></div>
     <div class="lbl">Your style</div>
     <div id="finishes"></div>
+    <div class="lbl">Your extra</div>
+    <div id="accs"></div>
     <button id="go" disabled>Connecting…</button>
     <p id="setupNote">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
   </div>
@@ -235,7 +249,7 @@
   var elFlag = $('flagbtn'), elMsg = $('msg');
   var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
   var elYears = $('years'), elFins = $('finishes');
-  var elPrev = $('preview'), elPrevWrap = $('prevWrap');
+  var elPrev = $('preview'), elPrevWrap = $('prevWrap'), elAccs = $('accs');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
   // ------------------------------------------------------------------ identity
@@ -267,6 +281,7 @@
   var joined = false;
   var pickedColor = -1;
   var pickedFinish = 0;     // 0 flat, 1 pastel
+  var pickedAcc = 0;        // ACCESSORIES index; 0 is 'none'
   var pickedYear = -1;      // deliberately unset: nobody should land in a year by accident
   var freeByColor = null;   // number[12] from the server, or null before first ack
 
@@ -401,6 +416,7 @@
     if (msg.cohortSet) {
       if (typeof msg.cohortIndex === 'number') pickedYear = msg.cohortIndex;
       if (typeof msg.finishIndex === 'number') pickedFinish = msg.finishIndex;
+      if (typeof msg.accessoryIndex === 'number') pickedAcc = msg.accessoryIndex;
     }
     if (msg.free) freeByColor = msg.free;
     paintSwatches();
@@ -708,9 +724,36 @@
       elFins.appendChild(t);
     }
 
+    for (var k = 0; k < ACCESSORIES.length; k++) {
+      var a = document.createElement('div');
+      a.className = 'ac';
+      a.dataset.i = String(k);
+      var mini = document.createElement('canvas');
+      mini.width = 84;
+      mini.height = 104;
+      a.appendChild(mini);
+      elAccs.appendChild(a);
+    }
+
     tapper(elYears, '.yr', function (i) { pickedYear = i; popPreview(); paintSwatches(); });
     tapper(elSwatches, '.sw', function (i) { pickedColor = i; popPreview(); paintSwatches(); });
     tapper(elFins, '.fin', function (i) { pickedFinish = i; popPreview(); paintSwatches(); });
+    tapper(elAccs, '.ac', function (i) { pickedAcc = i; popPreview(); paintSwatches(); });
+  }
+
+  /** The accessory tiles: a mini pill bean wearing each option. */
+  function paintAccs(hex, finKey) {
+    for (var i = 0; i < elAccs.children.length; i++) {
+      var cell = elAccs.children[i];
+      cell.classList.toggle('sel', i === pickedAcc);
+      var g = cell.firstChild.getContext('2d');
+      g.clearRect(0, 0, 84, 104);
+      g.save();
+      g.translate(15, 40);
+      g.scale(1.35, 1.35);
+      drawBean(g, hex, finKey, 40, 44, 'pill', true, ACCESSORIES[i].key);
+      g.restore();
+    }
   }
 
   /**
@@ -728,7 +771,7 @@
     g.save();
     g.translate(elPrev.width / 2 - (40 * Z) / 2, 292 - h * Z);
     g.scale(Z, Z);
-    drawBean(g, COLORS[colorIdx].hex, FINISHES[pickedFinish].key, 40, h, cohort.shape, true);
+    drawBean(g, COLORS[colorIdx].hex, FINISHES[pickedFinish].key, 40, h, cohort.shape, true, ACCESSORIES[pickedAcc].key);
     g.restore();
   }
 
@@ -789,6 +832,7 @@
       el.querySelector('.g').textContent = i === pickedColor ? '✓' : '';
     }
     paintFinishes(COLORS[pickedColor >= 0 ? pickedColor : 0].hex);
+    paintAccs(COLORS[pickedColor >= 0 ? pickedColor : 0].hex, FINISHES[pickedFinish].key);
     paintPreview();
 
     // A year is the one thing with no sensible default, so it gates the button.
@@ -812,6 +856,7 @@
       name: elNameIn.value,
       colorIndex: pickedColor,
       finishIndex: pickedFinish,
+      accessoryIndex: pickedAcc,
       cohortIndex: pickedYear,
     });
     try { localStorage.setItem(NAME_KEY, elNameIn.value); } catch (e) {}

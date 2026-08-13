@@ -238,6 +238,7 @@ await phonePage.waitForSelector('#setup.on', { timeout: 5000 });
 const PICK = 4; // jade
 const YEAR = 2; // PGY3
 const FIN = 1; // pastel
+const ACC = 10; // propeller cap
 
 await phonePage.fill('#nameIn', 'Bosco');
 
@@ -259,6 +260,7 @@ const prevBefore = await phonePage
   .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
 await phonePage.locator(`.sw[data-i="${PICK}"]`).click();
 await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
+await phonePage.locator(`.ac[data-i="${ACC}"]`).click();
 const prevAfter = await phonePage
   .locator('#preview')
   .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
@@ -307,6 +309,10 @@ assert(
   onDisplay.finish === 'pastel',
   `the display got the chosen finish (${onDisplay.finish})`
 );
+assert(
+  onDisplay.accessory === 'propeller',
+  `the display got the chosen accessory (${onDisplay.accessory})`
+);
 const box = /** @type {{x:number,y:number,width:number,height:number}} */ (
   await phonePage.locator('#jump').boundingBox()
 );
@@ -345,6 +351,7 @@ if (crowd > 0) {
         type: 'SET_LOOK',
         cohortIndex: i % 3,
         finishIndex: i % 2,
+        accessoryIndex: i % 14,
         colorIndex: i % 12,
       })
     );

@@ -7,7 +7,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AVATAR_INK, EYES, avatarBodyPath, drawBean, shade } from './avatar.js';
+import { AVATAR_INK, EYES, accessoryHidesEyes, avatarBodyPath, drawAccessory, drawBean, shade } from './avatar.js';
+import { ACCESSORIES } from './palette.js';
 
 /** A recording stub for CanvasRenderingContext2D — calls and style sets. */
 function stubCtx() {
@@ -76,6 +77,34 @@ test('bodyPath accepts any shape string without throwing', () => {
     avatarBodyPath(cx, 40, 56, shape);
     assert.ok(cx.calls.includes('closePath'), `${shape || '(empty)'} closes its path`);
   }
+});
+
+test('every accessory in the palette has a painter, and it runs DOM-free', () => {
+  for (const { key } of ACCESSORIES) {
+    const cx = stubCtx();
+    drawBean(cx, '#2fc98d', 'flat', 40, 56, 'pill', true, key);
+    assert.ok(cx.calls.includes('fill'), `${key} draws`);
+    if (key !== 'none') {
+      // The painter actually painted something beyond the body: body+eyes
+      // alone produce exactly two fills (body, eyes).
+      const fills = cx.calls.filter((/** @type {string} */ c) => c === 'fill').length;
+      assert.ok(fills > 2 || cx.calls.filter((/** @type {string} */ c) => c === 'stroke').length > 1,
+        `${key} adds pixels beyond the bare bean`);
+    }
+  }
+});
+
+test('sunglasses suppress the baked eyes; nothing else does', () => {
+  assert.ok(accessoryHidesEyes('sunglasses'));
+  for (const { key } of ACCESSORIES) {
+    if (key !== 'sunglasses') assert.ok(!accessoryHidesEyes(key), `${key} leaves eyes alone`);
+  }
+});
+
+test('drawAccessory ignores unknown keys instead of crashing', () => {
+  const cx = stubCtx();
+  drawAccessory(cx, 'jetpack', 40, 56);
+  assert.equal(cx.calls.length, 0, 'nothing drawn, nothing thrown');
 });
 
 test('shade clamps and mixes in both directions', () => {

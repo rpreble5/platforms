@@ -8,10 +8,12 @@
 
 import { randomUUID } from 'node:crypto';
 import {
+  ACCESSORIES,
   COLORS,
   DEFAULT_COHORT,
   FINISHES,
   SLOTS_PER_COLOR,
+  clampAccessory,
   clampCohort,
   clampFinish,
   identityFor,
@@ -34,6 +36,8 @@ const NAME_STRIP = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u
  * @property {number} colorIndex
  * @property {string} finish 'flat' | 'pastel' — how the hue is rendered
  * @property {number} finishIndex
+ * @property {string} accessory pure charm, free pick — no identity work
+ * @property {number} accessoryIndex
  * @property {number} cohortIndex
  * @property {boolean} cohortSet whether the player has actually chosen a year
  * @property {number} joinIndex
@@ -97,6 +101,8 @@ export class Roster {
       finish: FINISHES[0].key,
       colorIndex: 0,
       finishIndex: 0,
+      accessory: ACCESSORIES[0].key,
+      accessoryIndex: 0,
       // A placeholder until they pick. `cohortSet` is what tells the phone
       // whether the card still has a question to ask.
       cohortIndex: DEFAULT_COHORT,
@@ -123,7 +129,7 @@ export class Roster {
    * never the request, that goes back to the phone.
    *
    * @param {number} id
-   * @param {{name?: string, colorIndex?: number, finishIndex?: number, cohortIndex?: number}} want
+   * @param {{name?: string, colorIndex?: number, finishIndex?: number, accessoryIndex?: number, cohortIndex?: number}} want
    * @returns {PlayerRecord | null}
    */
   setLook(id, want) {
@@ -134,6 +140,12 @@ export class Roster {
       const clean = sanitizeName(want.name);
       r.named = Boolean(clean);
       r.name = clean;
+    }
+
+    // Accessories are charm, not identity: applied verbatim, no resolution.
+    if (Number.isInteger(want.accessoryIndex)) {
+      r.accessoryIndex = clampAccessory(/** @type {number} */ (want.accessoryIndex));
+      r.accessory = ACCESSORIES[r.accessoryIndex].key;
     }
 
     // Committing to a year — moving, or picking one for the FIRST time even
@@ -311,6 +323,8 @@ export class Roster {
         // these two — default to flat rather than rendering undefined.
         finishIndex: clampFinish(p.finishIndex),
         finish: FINISHES[clampFinish(p.finishIndex)].key,
+        accessoryIndex: clampAccessory(p.accessoryIndex),
+        accessory: ACCESSORIES[clampAccessory(p.accessoryIndex)].key,
         connected: false,
         lastSeen: Number.isFinite(p.lastSeen) ? p.lastSeen : Date.now(),
         net: { rttP50: 0, rttP95: 0, loss: 0 },

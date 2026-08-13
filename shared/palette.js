@@ -14,9 +14,8 @@
  *     on the phone, and a contested request slides to the nearest free hue.
  *     The finish is a pure preference and is never taken away.
  *
- * Accessories are RETIRED for now: the hat pools, pool partitioning and the
- * phone's accessory picker are gone from the identity system, though the art
- * (accessory-art.js) is kept dormant in case they return.
+ * Accessories exist but do NO identity work: they are a free pick with no
+ * collision logic, painted by shared/avatar.js in the bean design language.
  *
  * Colours avoid adjacent saturated red/blue pairs and anything that muddies
  * when a projector crushes saturation.
@@ -68,29 +67,32 @@ export const COHORTS = [
 ];
 
 /**
- * DORMANT — accessories are retired from the identity system for now. The
- * table and the art in client/display/accessory-art.js are kept so they can
- * come back without archaeology, but nothing assigns, renders or picks them.
+ * Accessories: pure charm, zero identity work. Colour carries uniqueness, so
+ * these are a free pick — no pools, no collision resolution, wear what you
+ * like. Every key has a painter in shared/avatar.js; the phone previews them
+ * on a mini bean in the player's own colour.
  */
-export const POOL_SIZE = 4;
-
-/** Dormant, like POOL_SIZE above. */
 export const ACCESSORIES = [
-  { key: 'bow', label: 'Bow', glyph: '🎀' },
-  { key: 'bonnet', label: 'Bonnet', glyph: '👒' },
-  { key: 'ears', label: 'Ears', glyph: '🐰' },
-  { key: 'curl', label: 'Curl', glyph: '🌱' },
-
-  { key: 'cap', label: 'Cap', glyph: '🧢' },
-  { key: 'visor', label: 'Visor', glyph: '🥽' },
-  { key: 'antenna', label: 'Antenna', glyph: '📡' },
-  { key: 'tuft', label: 'Tuft', glyph: '⚡' },
-
-  { key: 'crown', label: 'Crown', glyph: '👑' },
-  { key: 'phones', label: 'Phones', glyph: '🎧' },
-  { key: 'horns', label: 'Horns', glyph: '🤘' },
-  { key: 'shades', label: 'Shades', glyph: '🕶️' },
+  { key: 'none', label: 'None' },
+  { key: 'flower', label: 'Flower' },
+  { key: 'sunglasses', label: 'Shades' },
+  { key: 'crown', label: 'Crown' },
+  { key: 'sprout', label: 'Sprout' },
+  { key: 'fangs', label: 'Fangs' },
+  { key: 'moustache', label: 'Moustache' },
+  { key: 'monocle', label: 'Monocle' },
+  { key: 'beret', label: 'Beret' },
+  { key: 'party', label: 'Party hat' },
+  { key: 'propeller', label: 'Propeller' },
+  { key: 'tophat', label: 'Top hat' },
+  { key: 'cowboy', label: 'Cowboy' },
+  { key: 'beanie', label: 'Beanie' },
 ];
+
+/** @param {number} i @returns {number} */
+export function clampAccessory(i) {
+  return Number.isInteger(i) && i >= 0 && i < ACCESSORIES.length ? i : 0;
+}
 
 /**
  * Finishes: the same hue rendered two ways. `flat` is the saturated colour
@@ -123,16 +125,6 @@ export function clampFinish(i) {
 /** The middle year. What a player holds before they've chosen. */
 export const DEFAULT_COHORT = 1;
 
-/**
- * DORMANT — the accessory indices a cohort may use, kept for the dormant
- * accessory art.
- * @param {number} cohortIndex
- * @returns {number[]}
- */
-export function poolFor(cohortIndex) {
-  const c = clampCohort(cohortIndex);
-  return Array.from({ length: POOL_SIZE }, (_, i) => c * POOL_SIZE + i);
-}
 
 /** @param {number} i @returns {number} */
 export function clampCohort(i) {
