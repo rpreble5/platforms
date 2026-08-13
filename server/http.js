@@ -48,10 +48,12 @@ function makeBuilder(root) {
       const protocol = stripExports(readFileSync(path.join(root, 'shared/protocol.js'), 'utf8'));
       const tuning = stripExports(readFileSync(path.join(root, 'shared/tuning.js'), 'utf8'));
       const palette = stripExports(readFileSync(path.join(root, 'shared/palette.js'), 'utf8'));
+      const avatar = stripExports(readFileSync(path.join(root, 'shared/avatar.js'), 'utf8'));
       const out = html
         .replace('/*__PROTOCOL__*/', () => protocol)
         .replace('/*__TUNING__*/', () => tuning)
-        .replace('/*__PALETTE__*/', () => palette);
+        .replace('/*__PALETTE__*/', () => palette)
+        .replace('/*__AVATAR__*/', () => avatar);
       const raw = Buffer.from(out, 'utf8');
       return { gz: gzipSync(raw, { level: 9 }), raw };
     },

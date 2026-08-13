@@ -253,8 +253,16 @@ assert(
   'the finish row offers flat and pastel'
 );
 
+// The live preview repaints with each pick — same renderer as the display.
+const prevBefore = await phonePage
+  .locator('#preview')
+  .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
 await phonePage.locator(`.sw[data-i="${PICK}"]`).click();
 await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
+const prevAfter = await phonePage
+  .locator('#preview')
+  .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
+assert(prevBefore !== prevAfter, 'the setup-card preview repainted with the chosen look');
 assert(
   await phonePage
     .locator(`.sw[data-i="${PICK}"]`)

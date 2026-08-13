@@ -99,6 +99,23 @@
   #setup { display:none; width:100%; max-width:380px; text-align:left; }
   #setup.on { display:block; }
   #setup h1 { text-align:center; }
+
+  /* The live preview: the real renderer, not a mock — the same drawBean the
+     projector uses. It shares a row with name + year so the card still fits
+     a phone screen without scrolling; bottom-aligned so a year change grows
+     the bean upward from its feet, exactly like the display does. */
+  #idRow { display:grid; grid-template-columns:112px 1fr; gap:14px; align-items:end; margin-top:2px; }
+  #idRow .lbl:first-child { margin-top:8px; }
+  #idRow .yr { font-size:14px; padding:13px 0; }
+  #prevWrap { text-align:center; }
+  #preview { width:104px; height:150px; display:inline-block; }
+  #prevWrap.pop #preview { animation:hatch .28s ease-out; }
+  @keyframes hatch {
+    0% { transform:scale(.9) translateY(4px); }
+    60% { transform:scale(1.05); }
+    100% { transform:scale(1); }
+  }
+  #prevName { font:800 12px/1.2 inherit; color:#8792a6; margin-top:2px; min-height:14px; }
   #setup .lbl {
     font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
     color:#6c7789; margin:20px 0 8px;
@@ -181,11 +198,19 @@
 
   <div id="setup">
     <h1>Who are you?</h1>
-    <div class="lbl">Your name</div>
-    <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
-           autocapitalize="words" spellcheck="false" enterkeyhint="done">
-    <div class="lbl">Your year</div>
-    <div id="years"></div>
+    <div id="idRow">
+      <div id="prevWrap">
+        <canvas id="preview" width="208" height="300"></canvas>
+        <div id="prevName"></div>
+      </div>
+      <div>
+        <div class="lbl">Your name</div>
+        <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
+               autocapitalize="words" spellcheck="false" enterkeyhint="done">
+        <div class="lbl">Your year</div>
+        <div id="years"></div>
+      </div>
+    </div>
     <div class="lbl">Your colour</div>
     <div id="swatches"></div>
     <div class="lbl">Your style</div>
@@ -199,6 +224,7 @@
 /*__PROTOCOL__*/
 /*__TUNING__*/
 /*__PALETTE__*/
+/*__AVATAR__*/
 
 (function () {
   'use strict';
@@ -211,6 +237,7 @@
   var elFlag = $('flagbtn'), elMsg = $('msg');
   var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
   var elYears = $('years'), elFins = $('finishes');
+  var elPrev = $('preview'), elPrevWrap = $('prevWrap'), elPrevName = $('prevName');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
   // ------------------------------------------------------------------ identity
@@ -683,9 +710,38 @@
       elFins.appendChild(t);
     }
 
-    tapper(elYears, '.yr', function (i) { pickedYear = i; paintSwatches(); });
-    tapper(elSwatches, '.sw', function (i) { pickedColor = i; paintSwatches(); });
-    tapper(elFins, '.fin', function (i) { pickedFinish = i; paintSwatches(); });
+    tapper(elYears, '.yr', function (i) { pickedYear = i; popPreview(); paintSwatches(); });
+    tapper(elSwatches, '.sw', function (i) { pickedColor = i; popPreview(); paintSwatches(); });
+    tapper(elFins, '.fin', function (i) { pickedFinish = i; popPreview(); paintSwatches(); });
+  }
+
+  /**
+   * The live preview: the REAL renderer (shared/avatar.js, inlined above), so
+   * what the card shows is pixel-for-pixel what the projector will draw —
+   * just bigger. Bottom-aligned so a year change grows the bean from its feet.
+   */
+  function paintPreview() {
+    var g = elPrev.getContext('2d');
+    g.clearRect(0, 0, elPrev.width, elPrev.height);
+    var cohort = COHORTS[pickedYear >= 0 ? pickedYear : DEFAULT_COHORT];
+    var colorIdx = pickedColor >= 0 ? pickedColor : 0;
+    var h = 56 * cohort.height;
+    var Z = 3.6; // tallest body (78.4px) still clears the canvas top
+    g.save();
+    g.translate(elPrev.width / 2 - (40 * Z) / 2, 292 - h * Z);
+    g.scale(Z, Z);
+    drawBean(g, COLORS[colorIdx].hex, FINISHES[pickedFinish].key, 40, h, cohort.shape, true);
+    g.restore();
+    // The automatic name, so name-follows-look is never a surprise. A typed
+    // name is already sitting in the field below — no need to echo it.
+    elPrevName.textContent = elNameIn.value ? '' : lookName(colorIdx, pickedYear >= 0 ? pickedYear : DEFAULT_COHORT);
+  }
+
+  /** A little hatch-pop when the look changes. CSS does the work. */
+  function popPreview() {
+    elPrevWrap.classList.remove('pop');
+    void elPrevWrap.offsetWidth; // restart the animation
+    elPrevWrap.classList.add('pop');
   }
 
   /** Wash a hex colour toward white, matching the display's pastel fill. */
@@ -738,6 +794,7 @@
       el.querySelector('.g').textContent = i === pickedColor ? '✓' : '';
     }
     paintFinishes(COLORS[pickedColor >= 0 ? pickedColor : 0].hex);
+    paintPreview();
 
     // A year is the one thing with no sensible default, so it gates the button.
     elGo.disabled = !connected || !chosen;
@@ -779,6 +836,7 @@
   }
 
   buildPickers();
+  elNameIn.addEventListener('input', paintPreview); // typed name hides the auto caption
   elGo.addEventListener('click', function (e) { e.preventDefault(); submitSetup(); });
   elNameIn.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); submitSetup(); }
