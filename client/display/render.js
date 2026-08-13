@@ -8,7 +8,7 @@
 import { FX, RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { accessoryHidesEyes } from '../../shared/avatar.js';
-import { ANSWER_H, ANSWER_SIGN_H, RANGE_ID } from '../../sim/levels.js';
+import { ANSWER_H, FLAG_H, FLAG_POLE, RANGE_ID, signBelowExtent } from '../../sim/levels.js';
 import { animFor, pruneAnim } from './anim.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
@@ -112,12 +112,11 @@ export function render(cx, world, roster, game, opts) {
   const skirts = [];
   for (const p of world.platforms) {
     if (!p.id?.startsWith('ans') || p.id === RANGE_ID) continue;
-    skirts.push({
-      x: p.x,
-      y: p.y + ANSWER_H,
-      w: p.w,
-      h: (p.signH ?? ANSWER_SIGN_H) - ANSWER_H,
-    });
+    if (p.signStyle === 'flag') {
+      skirts.push({ x: p.x, y: p.y - FLAG_POLE, w: p.w, h: FLAG_H });
+    } else {
+      skirts.push({ x: p.x, y: p.y + ANSWER_H, w: p.w, h: signBelowExtent(p) - ANSWER_H });
+    }
   }
 
   for (const it of items) {

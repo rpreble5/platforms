@@ -20,7 +20,6 @@ import {
   ISLAND_Y,
   RANGE_ID,
   RANGE_MIN_W,
-  TALL_SIGN_H,
   TIER,
   buildArena,
   buildRangeArena,
@@ -366,7 +365,7 @@ test('island boards sit high, and no rung ever stands under a board', () => {
 
     for (const b of boards) {
       assert.equal(b.y, ISLAND_Y, `${n} answers: boards share the high tier`);
-      assert.equal(b.signH, TALL_SIGN_H, `${n} answers: boards carry the tall skirt`);
+      assert.equal(b.signStyle, 'plaque', `${n} answers: text hangs beneath the slab`);
     }
 
     // Ladders are stacks of rungs at tiers 1, 2, 3 — three proven vertical

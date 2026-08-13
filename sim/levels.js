@@ -52,23 +52,41 @@ export const ANSWER_Y = FLOOR_Y - 160;
  */
 export const ANSWER_H = GRID;
 /**
- * Default drawn signboard height versus the one tile row a board actually
- * collides with. The extra hangs below the surface and carries the answer
- * text, so the platform IS the signboard rather than having a label bolted
- * under it.
+ * How the answer text attaches to a platform. The platform itself is now a
+ * thin slab everywhere; the text rides in one of two places, chosen per
+ * layout:
  *
- * Three tile rows here — the flat `row` layout's size, where the floor crowd
- * stands one jump below the boards and a deeper skirt would collide with
- * their name labels. The elevated layouts override per platform with a
- * four-row skirt (`signH`), because their geometry keeps standing surfaces
- * away from the space under the boards. THE LAYOUT RULE that makes big
- * skirts safe: name labels are ~190px wide and sit ~118px above a standing
- * surface, so no surface within 160px below a board may come near its
- * footprint — put ladders in the gaps and flanks, never under the text.
+ *  - 'plaque' — a signboard hanging BELOW the slab on two short posts. Used
+ *    by the elevated layouts (islands, pyramid, reverse-pyramid): a crowd on
+ *    the slab can never cover text beneath it, and a flag above a stacked
+ *    board would spear the board one tier up. THE LAYOUT RULE still applies:
+ *    name labels are ~190px wide and sit ~118px above a standing surface, so
+ *    no surface one tier below a board may come near its footprint.
+ *  - 'flag' — a banner ABOVE the slab on a pole, tall enough to clear the
+ *    heads and name labels of players standing on it. Used by the flat row
+ *    layout, where a hanging plaque would dangle straight into the floor
+ *    crowd's name labels — the constraint that used to force the row's text
+ *    small. Flags finally give the row big text.
+ *
+ * Drawn geometry (the sim collides with none of this; only ANSWER_H is real):
  */
-export const ANSWER_SIGN_H = GRID * 3;
-/** The elevated layouts' four-row signboard: room for two big text lines. */
-export const TALL_SIGN_H = GRID * 4;
+export const SLAB_H = ANSWER_H + 4;
+export const PLAQUE_GAP = 14;
+export const PLAQUE_H = 88;
+export const FLAG_POLE = 200;
+export const FLAG_H = 76;
+
+/** @typedef {'plaque'|'flag'} SignStyle */
+
+/**
+ * The drawn extent below a board's surface — the zone a name label must not
+ * cover (answers beat labels; see render.js).
+ * @param {import('./collide.js').Platform} p
+ * @returns {number}
+ */
+export function signBelowExtent(p) {
+  return p.signStyle === 'plaque' ? SLAB_H + PLAQUE_GAP + PLAQUE_H : SLAB_H;
+}
 
 const EDGE_MARGIN = 70;
 const MIN_GAP = 60;
@@ -230,6 +248,8 @@ export function buildRowArena(n) {
       // Jump-through from below, so a crowd under a platform can still get up
       // onto it instead of bonking and blaming the game.
       oneWay: true,
+      // Text flies ABOVE the row's boards: below them is the floor crowd.
+      signStyle: 'flag',
     });
   }
 
@@ -239,8 +259,8 @@ export function buildRowArena(n) {
 /**
  * Answers as high islands, tapered ladders to reach them.
  *
- * Answers sit centred in `n` equal slots, three tiers up, on tall signboards
- * (`signH`) with room for two big lines of text. Each ladder is a stack of
+ * Answers sit centred in `n` equal slots, three tiers up, on slabs with
+ * plaques hanging beneath them. Each ladder is a stack of
  * one-way rungs at tiers 1-2-3 — jump straight up through each rung and land
  * on it, three proven 160px hops — wide at the base and narrowing upward,
  * with the top rung level with the boards so the last move is a flat hop
@@ -291,7 +311,7 @@ export function buildIslandArena(n) {
       w: width,
       h: ANSWER_H,
       oneWay: true,
-      signH: TALL_SIGN_H,
+      signStyle: 'plaque',
     });
   }
   platforms.push(...boards);
@@ -399,7 +419,7 @@ export function buildTieredArena(n, layout) {
       w: TIER_BOARD_W,
       h: ANSWER_H,
       oneWay: true,
-      signH: TALL_SIGN_H,
+      signStyle: 'plaque',
     });
   });
   spec.perch.forEach(([center, tier], j) => {

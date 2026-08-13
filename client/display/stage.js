@@ -14,7 +14,7 @@
  */
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
-import { ANSWER_H, ANSWER_SIGN_H, FLOOR_Y, rangeX } from '../../sim/levels.js';
+import { ANSWER_H, FLAG_H, FLAG_POLE, FLOOR_Y, PLAQUE_GAP, PLAQUE_H, SLAB_H, rangeX } from '../../sim/levels.js';
 import { SPRITES, art, drawTileBox, drawTiled, has } from './art.js';
 import { FONT, INK, SKY, STAGE, UI } from './theme.js';
 import { activeWay, drawTerrazzoSky, themeName } from './themes.js';
@@ -98,7 +98,10 @@ export function drawFloor(cx, p) {
 }
 
 /**
- * One answer signboard. `alpha` and `dy` let the reveal reuse this for debris.
+ * One answer board: a thin ink-outlined slab, with the text on a plaque
+ * hanging below (elevated layouts) or a flag flying above (the flat row).
+ * `dy` lets the reveal reuse this for debris — the whole assembly falls as
+ * one piece.
  * @param {CanvasRenderingContext2D} cx
  * @param {Platform} p
  * @param {{state?: 'idle'|'correct'|'wrong', dy?: number}} [opts]
@@ -108,75 +111,126 @@ export function drawSign(cx, p, opts = {}) {
   const state = opts.state ?? 'idle';
   const y = p.y + dy;
   const terrazzo = themeName() === 'terrazzo';
-  const r = 10;
-  // Boards declare their own drawn height (the elevated layouts use a taller
-  // skirt for bigger text); the module constant is just the row-layout default.
-  const signH = p.signH ?? ANSWER_SIGN_H;
+  const way = terrazzo
+    ? activeWay()
+    : { face: STAGE.platFace, top: STAGE.platTop, edge: STAGE.platEdge };
+  const ink = terrazzo ? 'rgba(23,20,42,0.9)' : 'rgba(3,5,9,0.8)';
+  const r = 9;
 
-  if (has('platform')) {
-    drawTileBox(cx, art.platform, p.x, y, p.w, signH);
-  } else if (terrazzo) {
-    const way = activeWay();
-    cx.fillStyle = 'rgba(40,40,50,0.10)';
+  cx.save();
+  cx.lineWidth = 3;
+  cx.strokeStyle = ink;
+
+  if (p.signStyle === 'flag') {
+    // Pole first, so the slab's outline sits over its foot.
+    const fx = flagRect(p, dy);
     cx.beginPath();
-    cx.roundRect(p.x + 4, y + 6, p.w, signH, r);
-    cx.fill();
-    cx.fillStyle = way.edge;
-    cx.beginPath();
-    cx.roundRect(p.x, y, p.w, signH, r);
-    cx.fill();
+    cx.moveTo(fx.px, y);
+    cx.lineTo(fx.px, fx.y);
+    cx.stroke();
     cx.fillStyle = way.face;
     cx.beginPath();
-    cx.roundRect(p.x + 5, y + 5, p.w - 10, signH - 12, r - 3);
+    cx.roundRect(fx.x, fx.y, fx.w, fx.h, [0, 12, 12, 0]);
     cx.fill();
-    // The landing surface is the DARK band here — darker than the face, so it
-    // reads as structure rather than shine. Radii are [tl, tr, br, bl].
-    cx.fillStyle = way.top;
-    cx.beginPath();
-    cx.roundRect(p.x, y, p.w, ANSWER_H, [r, r, 4, 4]);
-    cx.fill();
+    cx.stroke();
   } else {
-    cx.fillStyle = STAGE.platEdge;
+    // Hanging plaque: two posts, then the board.
+    const pq = plaqueRect(p, dy);
+    for (const t of [0.16, 0.84]) {
+      cx.beginPath();
+      cx.moveTo(p.x + p.w * t, y + SLAB_H);
+      cx.lineTo(p.x + p.w * t, pq.y);
+      cx.stroke();
+    }
+    cx.fillStyle = way.face;
     cx.beginPath();
-    cx.roundRect(p.x, y, p.w, signH, r);
+    cx.roundRect(pq.x, pq.y, pq.w, pq.h, 12);
     cx.fill();
-    cx.fillStyle = STAGE.platFace;
-    cx.beginPath();
-    cx.roundRect(p.x + 5, y + 5, p.w - 10, signH - 12, r - 3);
-    cx.fill();
-    // The landing surface is the brightest band on the whole stage, because
-    // it's the thing players are aiming at. Radii are [tl, tr, br, bl].
-    cx.fillStyle = STAGE.platTop;
-    cx.beginPath();
-    cx.roundRect(p.x, y, p.w, ANSWER_H, [r, r, 4, 4]);
-    cx.fill();
+    cx.stroke();
   }
+
+  // The slab itself: face, ink outline, dark landing band on top.
+  cx.fillStyle = way.face;
+  cx.beginPath();
+  cx.roundRect(p.x, y, p.w, SLAB_H, r);
+  cx.fill();
+  cx.stroke();
+  cx.fillStyle = way.top;
+  cx.beginPath();
+  cx.roundRect(p.x + 2, y + 2, p.w - 4, 11, [r - 2, r - 2, 3, 3]);
+  cx.fill();
+  cx.restore();
 
   if (state !== 'idle') {
     // Right/wrong is deliberately NOT a hue: the winner BRIGHTENS and gets a
-    // bold outline, the losers fade dark and fall. Brightness plus the ✓/✕
-    // icons read for everyone, including the ~8% of men who can't trust
-    // red-vs-green, and they survive a projector eating saturation.
+    // bold outline, the losers fade dark and fall. Brightness reads for
+    // everyone, including the ~8% of men who can't trust red-vs-green, and
+    // it survives a projector eating saturation.
+    const zone = signZone(p, dy);
     cx.save();
     cx.globalCompositeOperation = 'source-atop';
     cx.fillStyle =
       state === 'correct'
         ? 'rgba(255,255,255,0.32)'
         : terrazzo ? 'rgba(20,14,26,0.38)' : 'rgba(20,14,26,0.55)';
-    cx.fillRect(p.x - 4, y - 4, p.w + 8, signH + 8);
+    cx.fillRect(zone.x - 4, zone.y - 4, zone.w + 8, zone.h + 8);
     cx.restore();
     if (state === 'correct') {
       cx.strokeStyle = terrazzo ? 'rgba(23,20,42,0.85)' : 'rgba(244,241,232,0.9)';
       cx.lineWidth = 6;
+      const t = p.signStyle === 'flag' ? flagRect(p, dy) : plaqueRect(p, dy);
       cx.beginPath();
-      cx.roundRect(p.x - 3, y - 3, p.w + 6, signH + 6, r + 3);
+      cx.roundRect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, 14);
       cx.stroke();
     }
   }
 }
 
 /**
- * Answer text, set into the skirt below the landing surface.
+ * The plaque's rectangle, for drawing, text and the label-yield rule.
+ * @param {Platform} p @param {number} [dy]
+ */
+export function plaqueRect(p, dy = 0) {
+  return {
+    x: p.x + 10,
+    y: p.y + dy + SLAB_H + PLAQUE_GAP,
+    w: p.w - 20,
+    h: PLAQUE_H,
+  };
+}
+
+/**
+ * The flag's rectangle plus its pole x, same consumers as plaqueRect.
+ * @param {Platform} p @param {number} [dy]
+ */
+export function flagRect(p, dy = 0) {
+  const px = p.x + 18;
+  return {
+    px,
+    x: px,
+    y: p.y + dy - FLAG_POLE,
+    w: p.w - 36,
+    h: FLAG_H,
+  };
+}
+
+/**
+ * The whole drawn assembly's bounding box (slab + plaque/flag + pole zone),
+ * used by the reveal wash.
+ * @param {Platform} p @param {number} [dy]
+ */
+function signZone(p, dy = 0) {
+  const y = p.y + dy;
+  if (p.signStyle === 'flag') {
+    const f = flagRect(p, dy);
+    return { x: p.x, y: f.y, w: p.w, h: y + SLAB_H - f.y };
+  }
+  const q = plaqueRect(p, dy);
+  return { x: p.x, y, w: p.w, h: q.y + q.h - y };
+}
+
+/**
+ * Answer text, set into the plaque (or the flag).
  * @param {CanvasRenderingContext2D} cx
  * @param {Platform} p
  * @param {string} text
@@ -185,14 +239,10 @@ export function drawSign(cx, p, opts = {}) {
 export function drawSignText(cx, p, text, opts = {}) {
   const dy = opts.dy ?? 0;
   const state = opts.state ?? 'idle';
-  const skirtTop = p.y + ANSWER_H + dy;
-  const skirtH = (p.signH ?? ANSWER_SIGN_H) - ANSWER_H;
-  const midY = skirtTop + skirtH / 2;
-
-  // No ✓/✕ icons: they shoved the answer text sideways at the exact moment
-  // everyone is reading it. The brighten/outline on the board and the fade on
-  // the losers carry the verdict; the text never moves.
-  const boxW = p.w - 40;
+  const box = p.signStyle === 'flag' ? flagRect(p, dy) : plaqueRect(p, dy);
+  const midY = box.y + box.h / 2;
+  const boxW = box.w - 24;
+  const boxH = box.h - 12;
 
   cx.save();
   cx.textAlign = 'center';
@@ -208,18 +258,18 @@ export function drawSignText(cx, p, text, opts = {}) {
   // Long answers WRAP instead of spilling off the board. One line while it
   // stays big enough to read across a room; below that, two balanced lines;
   // and the size always scales down far enough that nothing ever overflows —
-  // a cropped drug name is a wrong answer waiting to happen. Caps sized for
-  // the four-row signboard skirt.
+  // a cropped drug name is a wrong answer waiting to happen.
   cx.font = `800 54px ${FONT.display}`;
   const wRef = cx.measureText(text).width;
   const oneSize = Math.min(54, Math.floor((54 * boxW) / Math.max(1, wRef)));
+  const cxp = box.x + box.w / 2;
 
   if (oneSize >= 30 || !text.includes(' ')) {
     cx.font = `800 ${Math.max(14, oneSize)}px ${FONT.display}`;
-    cx.fillText(text, p.x + p.w / 2, midY);
+    cx.fillText(text, cxp, midY);
   } else {
     const words = text.split(' ');
-    cx.font = `800 32px ${FONT.display}`;
+    cx.font = `800 34px ${FONT.display}`;
     let best = { a: text, b: '', w: cx.measureText(text).width };
     for (let i = 1; i < words.length; i++) {
       const a = words.slice(0, i).join(' ');
@@ -229,12 +279,12 @@ export function drawSignText(cx, p, text, opts = {}) {
     }
     const size = Math.max(
       12,
-      Math.min(32, Math.floor((32 * boxW) / Math.max(1, best.w)), Math.floor((skirtH - 10) / 2.15))
+      Math.min(34, Math.floor((34 * boxW) / Math.max(1, best.w)), Math.floor((boxH - 6) / 2.15))
     );
     cx.font = `800 ${size}px ${FONT.display}`;
     const gap = size * 0.62;
-    cx.fillText(best.a, p.x + p.w / 2, midY - gap);
-    cx.fillText(best.b, p.x + p.w / 2, midY + gap);
+    cx.fillText(best.a, cxp, midY - gap);
+    cx.fillText(best.b, cxp, midY + gap);
   }
   cx.restore();
 }
@@ -247,35 +297,31 @@ export function drawSignText(cx, p, text, opts = {}) {
  * @param {Platform} p
  */
 export function drawPerch(cx, p) {
-  const h = ANSWER_H + 12;
+  const h = ANSWER_H + 8;
   if (has('platform')) {
     drawTileBox(cx, art.platform, p.x, p.y, p.w, h);
     return;
   }
-  if (themeName() === 'terrazzo') {
-    const way = activeWay();
-    cx.fillStyle = 'rgba(40,40,50,0.10)';
-    cx.beginPath();
-    cx.roundRect(p.x + 3, p.y + 5, p.w, h, 8);
-    cx.fill();
-    cx.fillStyle = way.edge;
-    cx.beginPath();
-    cx.roundRect(p.x, p.y, p.w, h, 8);
-    cx.fill();
-    cx.fillStyle = way.top;
-    cx.beginPath();
-    cx.roundRect(p.x + 3, p.y + 3, p.w - 6, ANSWER_H - 10, 6);
-    cx.fill();
-    return;
-  }
-  cx.fillStyle = STAGE.platEdge;
+  // An ink-outlined capsule with the colourway's landing band — the same
+  // language as the answer slabs, so the ladders read as part of the set.
+  const terrazzo = themeName() === 'terrazzo';
+  const way = terrazzo
+    ? activeWay()
+    : { face: STAGE.platFace, top: STAGE.platTop };
+  const r = h / 2;
+  cx.save();
+  cx.fillStyle = way.face;
+  cx.strokeStyle = terrazzo ? 'rgba(23,20,42,0.9)' : 'rgba(3,5,9,0.8)';
+  cx.lineWidth = 3;
   cx.beginPath();
-  cx.roundRect(p.x, p.y, p.w, h, 8);
+  cx.roundRect(p.x, p.y, p.w, h, r);
   cx.fill();
-  cx.fillStyle = STAGE.platTop;
+  cx.stroke();
+  cx.fillStyle = way.top;
   cx.beginPath();
-  cx.roundRect(p.x + 3, p.y + 3, p.w - 6, ANSWER_H - 8, 6);
+  cx.roundRect(p.x + 2, p.y + 2, p.w - 4, 11, [r - 2, r - 2, 4, 4]);
   cx.fill();
+  cx.restore();
 }
 
 /** Where the range rail floats: above the tallest avatar and its name label. */
