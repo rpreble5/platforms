@@ -116,6 +116,10 @@ export const FINDME_SHOW_MS = 2000;
  */
 export const FX = {
   confetti: true,
+  // Squash & stretch, lean, and live eyes on the avatars. Render-only — the
+  // collision box never changes — and one flag because the pieces are tuned
+  // as a set: squash without lean reads as glitch, not character.
+  avatarAnim: true,
 };
 
 /**

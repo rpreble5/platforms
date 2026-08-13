@@ -5,11 +5,12 @@
  * buffer worth 16-33ms of deliberate added latency, and co-locating deletes it.
  */
 
-import { RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
+import { FX, RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { ANSWER_H, ANSWER_SIGN_H, RANGE_ID } from '../../sim/levels.js';
+import { animFor, pruneAnim } from './anim.js';
 import { themeName } from './themes.js';
-import { AVATAR_PAD, getAvatar, getLabel, shade } from './sprites.js';
+import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
 import { drawFloor, drawPerch, drawSky } from './stage.js';
 import { UI } from './theme.js';
@@ -85,6 +86,7 @@ export function render(cx, world, roster, game, opts) {
 
   const count = world.players.size;
   const scale = avatarScale(count);
+  if (FX.avatarAnim) pruneAnim(world.players);
 
   /** @type {Array<{x:number, y:number, w:number, p:Player}>} */
   const items = [];
@@ -144,9 +146,33 @@ export function render(cx, world, roster, game, opts) {
       Math.round(w),
       Math.round(drawnH),
       look.pattern,
-      cohort.shape
+      cohort.shape,
+      false // eyes are drawn live below, so they can look around
     );
-    cx.drawImage(sprite, Math.round(it.x - AVATAR_PAD), Math.round(top - AVATAR_PAD));
+
+    // Squash, stretch and lean, all anchored at the feet — a deformation that
+    // breaks floor contact reads as floating, so the bottom-centre is the one
+    // point that never moves. Render-only: the collision box is untouched.
+    const a = FX.avatarAnim ? animFor(p, world.t) : null;
+    cx.save();
+    cx.translate(it.x + w / 2, it.y + h);
+    if (a) {
+      cx.rotate(a.lean);
+      cx.scale(a.sx, a.sy);
+    }
+    cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);
+
+    // Live eyes, in the same transformed space so they deform with the body.
+    const er = Math.max(EYES.rMin, w * EYES.r) * (a?.eye.scale ?? 1);
+    const ey = -drawnH + drawnH * EYES.y + (a ? a.eye.dy * er : 0);
+    cx.fillStyle = EYES.color;
+    cx.beginPath();
+    for (const fx of [EYES.x1, EYES.x2]) {
+      const ex = -w / 2 + w * fx + (a ? a.eye.dx * er : 0);
+      cx.ellipse(ex, ey, er, er * (a?.eye.openY ?? 1), 0, 0, Math.PI * 2);
+    }
+    cx.fill();
+    cx.restore();
 
     // Labels auto-hide once the room is crowded — 30 overlapping names is worse
     // than none. Find-me always keeps its own label.
