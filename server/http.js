@@ -152,10 +152,16 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
-    // Accessory authoring loop: every shape on its own year's body, at the three
-    // sizes the game draws, with anything clipped by the sprite margin flagged.
+    // Avatar preview: every colour in both finishes on each year's body.
     if (pathname === '/sprites' || pathname === '/sprites/') {
       sendFile(res, path.join(root, 'client/display/sprites-preview.html'));
+      return;
+    }
+
+    // Level design loop: drag platforms on the real renderer, with the layout
+    // rules checked live and an export snippet for sim/levels.js.
+    if (pathname === '/levels' || pathname === '/levels/') {
+      sendFile(res, path.join(root, 'client/display/level-editor.html'));
       return;
     }
 

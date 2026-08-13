@@ -343,7 +343,7 @@ const TIER_BOARD_W = GRID * 14;
 
 /**
  * Hand-placed tier maps for the stacked layouts, one per answer count.
- * `ans` entries are [centerX, tier]; `perch` entries are
+ * `ans` entries are [centerX, tier, width=TIER_BOARD_W]; `perch` entries are
  * [centerX, tier, width=PERCH_W] — tier-1 bases run wide where the label
  * rule allows, because the first climb is the one the whole room makes at
  * once. Answers keep deck order left to right. Placements obey two rules the reachability test enforces:
@@ -399,12 +399,12 @@ export function buildTieredArena(n, layout) {
     { id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 },
   ];
 
-  spec.ans.forEach(([center, tier], i) => {
+  spec.ans.forEach(([center, tier, w = TIER_BOARD_W], i) => {
     platforms.push({
       id: answerId(i),
-      x: center - TIER_BOARD_W / 2,
+      x: center - w / 2,
       y: tierY(tier),
-      w: TIER_BOARD_W,
+      w,
       h: ANSWER_H,
       oneWay: true,
       signStyle: 'plaque',

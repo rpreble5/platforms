@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Level editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #241d3c; color: #e6e0f5;
+    font: 500 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+    display: grid; grid-template-rows: auto 1fr; height: 100vh;
+  }
+  header {
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    padding: 10px 16px; background: #1a1430; border-bottom: 1px solid #443a68;
+  }
+  h1 { font-size: 14px; margin: 0 10px 0 0; letter-spacing: .06em; color: #9ff5c9; }
+  select, button {
+    background: #3b3160; color: inherit; border: 1px solid #5a4d8a;
+    border-radius: 8px; padding: 6px 10px; font: inherit;
+  }
+  button:active { filter: brightness(1.3); }
+  label.tog { display: flex; gap: 6px; align-items: center; color: #bdb3dd; }
+  header .hint { color: #7a6fa3; font-size: 12px; margin-left: auto; }
+  main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+  #stagewrap { position: relative; overflow: hidden; display: grid; place-items: center; padding: 10px; }
+  canvas#stage { width: 100%; max-height: 100%; aspect-ratio: 16/9; border-radius: 8px; cursor: grab; }
+  aside {
+    border-left: 1px solid #443a68; padding: 12px 14px; overflow: auto;
+    display: flex; flex-direction: column; gap: 10px; background: #1f1936;
+  }
+  aside h2 { font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: #9a90bd; margin: 6px 0 0; }
+  #checks div { padding: 2px 0; font-size: 13px; }
+  #checks .ok { color: #7fe0af; }
+  #checks .bad { color: #ff9d8a; }
+  textarea {
+    width: 100%; min-height: 220px; background: #14102a; color: #cfe3f4;
+    border: 1px solid #443a68; border-radius: 8px;
+    font: 12px/1.5 ui-monospace, Menlo, monospace; padding: 8px; white-space: pre;
+  }
+  #sel { color: #bdb3dd; font-size: 13px; min-height: 3em; }
+  kbd { background: #443a68; border-radius: 4px; padding: 0 5px; font: 600 11px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LEVEL EDITOR</h1>
+  <select id="layout">
+    <option value="islands">islands</option>
+    <option value="pyramid">pyramid</option>
+    <option value="reverse-pyramid">reverse-pyramid</option>
+  </select>
+  <select id="count">
+    <option>2</option><option>3</option><option selected>4</option><option>5</option>
+  </select>
+  <button id="addRung">+ rung</button>
+  <button id="reset">reset to shipped</button>
+  <label class="tog"><input type="checkbox" id="crowd"> crowd (28)</label>
+  <label class="tog"><input type="checkbox" id="play"> play (A/D + Space)</label>
+  <span class="hint">
+    drag to move · drag an edge to resize · <kbd>←→↑↓</kbd> nudge · <kbd>Del</kbd> remove rung ·
+    y snaps to tiers, width to the grid
+  </span>
+</header>
+
+<main>
+  <div id="stagewrap"><canvas id="stage" width="1920" height="1080"></canvas></div>
+  <aside>
+    <h2>Selection</h2>
+    <div id="sel">nothing selected</div>
+    <h2>Rules</h2>
+    <div id="checks"></div>
+    <h2>Export — paste into sim/levels.js (or hand it to Claude)</h2>
+    <textarea id="out" readonly></textarea>
+  </aside>
+</main>
+
+<script type="module">
+import {
+  ANSWER_H, FLOOR_Y, GRID, ISLAND_Y, TIER, buildArena, answerId, tierY, signBelowExtent,
+} from '/sim/levels.js';
+import { PHYS, STEP_MS, WORLD_H, WORLD_W } from '/shared/tuning.js';
+import { BTN_JUMP, BTN_LEFT, BTN_RIGHT } from '/shared/protocol.js';
+import { addPlayer, createWorld, step } from '/sim/world.js';
+import { drawFloor, drawPerch, drawSign, drawSignText, drawSky } from '/client/display/stage.js';
+import { setRound, setTheme } from '/client/display/themes.js';
+import { drawBean } from '/shared/avatar.js';
+
+setTheme('terrazzo');
+setRound(0);
+
+const $ = (id) => document.getElementById(id);
+const cv = $('stage');
+const cx = cv.getContext('2d');
+
+const ANSWERS = [
+  'Spironolactone', 'Add an ACE inhibitor or ARB', 'Chlorthalidone', 'Hydralazine', 'Doxazosin',
+];
+const TIERS = [1, 2, 3, 4].map(tierY);
+
+let layout = 'islands';
+let count = 4;
+/** the editable platform list — same objects the game builders produce */
+let plats = [];
+let selected = null;
+let world = null; // play mode
+
+function load() {
+  plats = buildArena(count, layout);
+  selected = null;
+  world = null;
+  $('play').checked = false;
+}
+
+// ------------------------------------------------------------------ drawing
+function draw() {
+  drawSky(cx, performance.now());
+  for (const p of plats) {
+    if (p.id === 'floor') drawFloor(cx, p);
+    else if (String(p.id).startsWith('perch')) drawPerch(cx, p);
+  }
+  const boards = plats.filter((p) => String(p.id).startsWith('ans'));
+  boards.forEach((p, i) => {
+    drawSign(cx, p, {});
+    drawSignText(cx, p, ANSWERS[i % ANSWERS.length], {});
+  });
+
+  // tier guides
+  cx.save();
+  cx.strokeStyle = 'rgba(23,20,42,0.12)';
+  cx.setLineDash([6, 10]);
+  for (const y of TIERS) {
+    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(WORLD_W, y); cx.stroke();
+  }
+  cx.restore();
+
+  // crowd preview: beans spread across surfaces, width-weighted
+  if ($('crowd').checked && !world) {
+    const spots = [];
+    for (const s of plats.filter((p) => p.id !== 'floor' && p.id !== 'pit')) {
+      const n = Math.max(1, Math.round(s.w / 130));
+      for (let k = 0; k < n; k++) spots.push({ x: s.x + ((k + 0.5) / n) * s.w, y: s.y });
+    }
+    for (let i = 0; i < 12; i++) spots.push({ x: 120 + i * 150, y: FLOOR_Y });
+    const cols = ['#ff5a3c', '#ffa62b', '#ffd93d', '#a7e04a', '#2fc98d', '#26c6da', '#4aa8ff', '#7c72ff', '#b168ff', '#ff5fd2', '#ff7a9c', '#e8e2d4'];
+    const shapes = ['egg', 'pill', 'loaf'];
+    const hs = [42, 56, 78.4];
+    for (let i = 0; i < Math.min(28, spots.length); i++) {
+      const s = spots[(i * 7) % spots.length];
+      cx.save();
+      cx.translate(s.x - 20, s.y - hs[i % 3]);
+      drawBean(cx, cols[i % 12], i % 2 ? 'pastel' : 'flat', 40, hs[i % 3], shapes[i % 3], true, 'none');
+      cx.restore();
+    }
+  }
+
+  // play mode avatar
+  if (world) {
+    for (const p of world.players.values()) {
+      cx.save();
+      cx.translate(p.x, p.y);
+      drawBean(cx, '#2fc98d', 'flat', p.w, p.h, 'pill', true, 'none');
+      cx.restore();
+    }
+  }
+
+  // selection + violations
+  const bad = violations();
+  for (const p of plats) {
+    if (p.id === 'floor' || p.id === 'pit') continue;
+    if (bad.ids.has(p.id)) {
+      cx.strokeStyle = 'rgba(255,90,60,0.9)';
+      cx.lineWidth = 3;
+      cx.setLineDash([8, 6]);
+      cx.strokeRect(p.x - 4, p.y - 4, p.w + 8, ANSWER_H + 8);
+      cx.setLineDash([]);
+    }
+  }
+  if (selected) {
+    cx.strokeStyle = '#9ff5c9';
+    cx.lineWidth = 3;
+    cx.strokeRect(selected.x - 5, selected.y - 5, selected.w + 10, ANSWER_H + 10);
+    // reach envelope: where a hop from this surface can land
+    cx.save();
+    cx.strokeStyle = 'rgba(63,220,154,0.35)';
+    cx.lineWidth = 2;
+    cx.strokeRect(selected.x - 120, selected.y - TIER - 6, selected.w + 240, 12); // climb targets
+    cx.strokeRect(selected.x - 150, selected.y - 6, selected.w + 300, 12); // flat targets
+    cx.restore();
+  }
+}
+
+// ------------------------------------------------------------------ rules
+function violations() {
+  const ids = new Set();
+  const msgs = [];
+  const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0);
+  const solid = plats.filter((p) => p.id !== 'pit');
+
+  // reachability: climb (one tier up, gap<=120) or flat hop (gap<=150)
+  const reached = new Set(['floor']);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const from of solid) {
+      if (!reached.has(String(from.id))) continue;
+      for (const to of solid) {
+        if (reached.has(String(to.id))) continue;
+        const climb = from.y - to.y === TIER && gap(from, to) <= 120;
+        const flat = from.y === to.y && gap(from, to) <= 150;
+        if (climb || flat) { reached.add(String(to.id)); grew = true; }
+      }
+    }
+  }
+  for (const p of solid) {
+    if (p.id === 'floor') continue;
+    if (!reached.has(String(p.id))) { ids.add(p.id); msgs.push(`${p.id} is UNREACHABLE`); }
+  }
+
+  // label rule: no rung exactly one tier below a board's footprint
+  const boards = solid.filter((p) => String(p.id).startsWith('ans'));
+  for (const r of solid.filter((p) => String(p.id).startsWith('perch'))) {
+    for (const b of boards) {
+      if (r.y - b.y !== TIER) continue;
+      const ov = Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x);
+      if (ov > 0) { ids.add(r.id); msgs.push(`${r.id} sits under ${b.id} — labels will cross its text`); }
+    }
+  }
+
+  // same-tier daylight
+  const byY = new Map();
+  for (const p of solid.filter((q) => q.id !== 'floor')) {
+    (byY.get(p.y) ?? byY.set(p.y, []).get(p.y)).push(p);
+  }
+  for (const row of byY.values()) {
+    row.sort((a, b) => a.x - b.x);
+    for (let i = 1; i < row.length; i++) {
+      const g = row[i].x - (row[i - 1].x + row[i - 1].w);
+      const both = String(row[i].id).startsWith('ans') && String(row[i - 1].id).startsWith('ans');
+      const min = both ? 40 : 8;
+      if (g < min) { ids.add(row[i].id); msgs.push(`${row[i - 1].id}/${row[i].id} gap ${Math.round(g)}px (< ${min})`); }
+    }
+  }
+
+  // banner ceiling
+  for (const p of solid) {
+    if (p.id !== 'floor' && p.y < 340) { ids.add(p.id); msgs.push(`${p.id} is above the question banner line`); }
+  }
+  return { ids, msgs };
+}
+
+function refreshPanel() {
+  const { msgs } = violations();
+  $('checks').innerHTML = msgs.length
+    ? msgs.map((m) => `<div class="bad">✕ ${m}</div>`).join('')
+    : '<div class="ok">✓ reachable · labels clear · spacing ok · under the banner</div>';
+  $('sel').textContent = selected
+    ? `${selected.id} — centre ${Math.round(selected.x + selected.w / 2)}, tier ${Math.round((FLOOR_Y - selected.y) / TIER)}, width ${selected.w}`
+    : 'nothing selected';
+  $('out').value = exportSnippet();
+}
+
+// ------------------------------------------------------------------ export
+function exportSnippet() {
+  const boards = plats.filter((p) => String(p.id).startsWith('ans'));
+  const rungs = plats.filter((p) => String(p.id).startsWith('perch'));
+  const c = (p) => Math.round(p.x + p.w / 2);
+  const t = (p) => Math.round((FLOOR_Y - p.y) / TIER);
+  if (layout === 'islands') {
+    return `// ISLANDS[${count}] in sim/levels.js\n${count}: {\n  boards: [${boards
+      .map((b) => `[${c(b)}, ${b.w}]`)
+      .join(', ')}],\n  rungs: [\n    ${rungs.map((r) => `[${c(r)}, ${t(r)}, ${r.w}]`).join(',\n    ')},\n  ],\n},`;
+  }
+  return `// TIERED['${layout}'][${count}] in sim/levels.js\n${count}: {\n  ans: [${boards
+    .map((b) => `[${c(b)}, ${t(b)}, ${b.w}]`)
+    .join(', ')}],\n  perch: [${rungs.map((r) => `[${c(r)}, ${t(r)}, ${r.w}]`).join(', ')}],\n},`;
+}
+
+// ------------------------------------------------------------------ mouse
+let drag = null;
+const toWorld = (e) => {
+  const r = cv.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) / r.width) * WORLD_W, y: ((e.clientY - r.top) / r.height) * WORLD_H };
+};
+const hit = (pt) =>
+  plats.find(
+    (p) => p.id !== 'floor' && p.id !== 'pit' &&
+      pt.x >= p.x - 8 && pt.x <= p.x + p.w + 8 && pt.y >= p.y - 14 && pt.y <= p.y + ANSWER_H + 14
+  ) ?? null;
+
+cv.addEventListener('pointerdown', (e) => {
+  const pt = toWorld(e);
+  const p = hit(pt);
+  selected = p;
+  if (p) {
+    const edge = pt.x < p.x + 16 ? 'l' : pt.x > p.x + p.w - 16 ? 'r' : null;
+    drag = { p, edge, dx: pt.x - p.x, dw: p.w };
+    cv.setPointerCapture(e.pointerId);
+  }
+  refreshPanel();
+});
+cv.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const pt = toWorld(e);
+  const { p, edge } = drag;
+  if (edge === 'r') {
+    p.w = Math.max(GRID, Math.round((pt.x - p.x) / GRID) * GRID);
+  } else if (edge === 'l') {
+    const right = p.x + p.w;
+    const nx = Math.min(pt.x, right - GRID);
+    p.w = Math.max(GRID, Math.round((right - nx) / GRID) * GRID);
+    p.x = right - p.w;
+  } else {
+    p.x = Math.round(pt.x - drag.dx);
+    // snap y to the nearest tier
+    let best = TIERS[0];
+    for (const y of TIERS) if (Math.abs(pt.y - y) < Math.abs(pt.y - best)) best = y;
+    p.y = best;
+  }
+  refreshPanel();
+});
+cv.addEventListener('pointerup', () => { drag = null; });
+
+// ------------------------------------------------------------------ keys
+addEventListener('keydown', (e) => {
+  if (world) return; // play mode owns the keys
+  if (!selected) return;
+  const stepPx = e.shiftKey ? GRID : 2;
+  if (e.key === 'ArrowLeft') { selected.x -= stepPx; e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { selected.x += stepPx; e.preventDefault(); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    const i = TIERS.indexOf(selected.y);
+    const ni = Math.max(0, Math.min(TIERS.length - 1, i + (e.key === 'ArrowUp' ? 1 : -1)));
+    selected.y = TIERS[ni];
+    e.preventDefault();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && String(selected.id).startsWith('perch')) {
+    plats = plats.filter((p) => p !== selected);
+    selected = null;
+  }
+  refreshPanel();
+});
+
+// ------------------------------------------------------------------ play mode
+let mask = 0;
+addEventListener('keydown', (e) => {
+  if (!world) return;
+  const k = e.key.toLowerCase();
+  if (k === 'a' || k === 'arrowleft') mask |= BTN_LEFT;
+  if (k === 'd' || k === 'arrowright') mask |= BTN_RIGHT;
+  if (k === ' ' || k === 'w' || k === 'arrowup') mask |= BTN_JUMP;
+  e.preventDefault();
+});
+addEventListener('keyup', (e) => {
+  if (!world) return;
+  const k = e.key.toLowerCase();
+  if (k === 'a' || k === 'arrowleft') mask &= ~BTN_LEFT;
+  if (k === 'd' || k === 'arrowright') mask &= ~BTN_RIGHT;
+  if (k === ' ' || k === 'w' || k === 'arrowup') mask &= ~BTN_JUMP;
+});
+
+$('play').addEventListener('change', () => {
+  if ($('play').checked) {
+    world = createWorld(plats);
+    const p = addPlayer(world, 1);
+    p.x = 960; p.y = FLOOR_Y - p.h - 2;
+  } else world = null;
+});
+
+// ------------------------------------------------------------------ toolbar
+$('layout').addEventListener('change', () => { layout = $('layout').value; load(); refreshPanel(); });
+$('count').addEventListener('change', () => { count = Number($('count').value); load(); refreshPanel(); });
+$('reset').addEventListener('click', () => { load(); refreshPanel(); });
+$('addRung').addEventListener('click', () => {
+  let n = 0;
+  while (plats.some((p) => p.id === `perch${n}`)) n++;
+  const r = { id: `perch${n}`, x: 960 - 96, y: tierY(1), w: 192, h: ANSWER_H, oneWay: true };
+  plats.push(r);
+  selected = r;
+  refreshPanel();
+});
+
+// ------------------------------------------------------------------ loop
+function frame() {
+  requestAnimationFrame(frame);
+  if (world) {
+    const p = world.players.get(1);
+    if (p) {
+      p.input.pressEdge |= mask & BTN_JUMP & ~p.input.held;
+      p.input.held = mask;
+    }
+    step(world, STEP_MS);
+    step(world, STEP_MS);
+  }
+  draw();
+}
+
+void signBelowExtent; void ISLAND_Y; void PHYS; void answerId;
+load();
+refreshPanel();
+frame();
+</script>
+</body>
+</html>

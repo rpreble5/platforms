@@ -122,6 +122,12 @@ path, and those are the terms that dominate.
 `/sprites` is the avatar preview page — every colour in both finishes on each
 year's body, at the three sizes the game draws.
 
+`/levels` is the level editor — drag platforms on the real renderer, with the
+layout rules (reachability, the label rule, spacing, the banner ceiling)
+checked live, a 28-bean crowd preview, and a play mode to feel the jumps.
+It exports the exact table entry to paste into `ISLANDS` or `TIERED` in
+`sim/levels.js`; `npm test` then re-verifies the same rules the editor shows.
+
 ### Two things that look exactly like client isolation but aren't
 
 - **The host firewall.** macOS prompts on first run; Windows Defender blocks
