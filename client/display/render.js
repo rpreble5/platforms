@@ -89,17 +89,20 @@ export function render(cx, world, roster, game, opts) {
   const scale = avatarScale(count);
   if (FX.avatarAnim) pruneAnim(world.players);
 
-  /** @type {Array<{x:number, y:number, w:number, p:Player}>} */
+  /** @type {Array<{x:number, y:number, w:number, coh:number, p:Player}>} */
   const items = [];
   for (const p of world.players.values()) {
-    items.push({ x: p.x, y: p.y, w: p.w * scale, p });
+    const coh = clampCohort(roster.get(p.id)?.cohortIndex ?? -1);
+    items.push({ x: p.x, y: p.y, w: p.w * scale, coh, p });
   }
   if (RENDER_PUSH_APART > 0) separate(items);
 
-  // Draw back-to-front by y so overlapping avatars read as depth. Sorting by
-  // id as the tiebreak keeps the stacking order stable when two avatars sit at
-  // the same height — otherwise a pile flickers as sort order churns.
-  items.sort((a, b) => a.y - b.y || a.p.id - b.p.id);
+  // Seniority is the depth layer: PGY3 loaves in the back, PGY2 pills in the
+  // middle, PGY1 eggs up front — the tall silhouettes peek over the short
+  // ones instead of hiding them, theatre-riser style. Within a layer it's
+  // back-to-front by y, with id as the tiebreak so a pile doesn't flicker as
+  // sort order churns.
+  items.sort((a, b) => b.coh - a.coh || a.y - b.y || a.p.id - b.p.id);
 
   const anyFindMe = items.some((it) => it.p.findMeUntil > world.t);
 
