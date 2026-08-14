@@ -191,7 +191,7 @@ Three axes carry identity:
 
 The finish is the same hue rendered two ways: **flat** is the saturated colour
 with a bold ink outline, **pastel** is washed toward white with a deep
-same-hue outline and a blush. Both belong to the terrazzo stage.
+same-hue outline and a blush. Both read cleanly on every stage theme.
 
 **The colour is the claim.** One jade PGY1, full stop: taken colours grey out
 on the phone for your year, and a contested request slides to the nearest

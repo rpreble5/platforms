@@ -97,7 +97,7 @@ export function clampAccessory(i) {
 /**
  * Finishes: the same hue rendered two ways. `flat` is the saturated colour
  * with a bold ink outline; `pastel` is the colour washed toward white with a
- * deep same-hue outline and a blush. Both belong to the terrazzo stage, and
+ * deep same-hue outline and a blush. Both read on every stage theme, and
  * players simply pick which they like — a pure preference, never overridden,
  * because the colour alone carries uniqueness.
  */

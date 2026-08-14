@@ -35,11 +35,13 @@ test('rotation is deterministic, cycles the table, and rests on teal', () => {
   assert.equal(activeWay().key, 'teal');
 });
 
-test('unknown themes fall back to terrazzo', () => {
+test('unknown themes fall back to glass, the default', () => {
   setTheme('dusk');
   assert.equal(themeName(), 'dusk');
+  setTheme('terrazzo');
+  assert.equal(themeName(), 'terrazzo');
   setTheme('lava-lamp');
-  assert.equal(themeName(), 'terrazzo');
+  assert.equal(themeName(), 'glass');
   setTheme(undefined);
-  assert.equal(themeName(), 'terrazzo');
+  assert.equal(themeName(), 'glass');
 });

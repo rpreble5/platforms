@@ -339,10 +339,10 @@ export function loadQuestions(root, packFile = 'default.json') {
     }
   }
 
-  let theme = 'terrazzo';
+  let theme = 'glass';
   if (pack.theme !== undefined) {
     if (['terrazzo', 'dusk', 'glass'].includes(pack.theme)) theme = pack.theme;
-    else problems.push(`theme "${pack.theme}" is unknown — using terrazzo`);
+    else problems.push(`theme "${pack.theme}" is unknown — using glass`);
   }
 
   if (problems.length) {

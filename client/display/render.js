@@ -266,7 +266,7 @@ function drawGlassReflections(cx, items, roster, world, scale) {
     // Clip starts below the landing strip so the reflection never brightens it.
     cx.roundRect(panel.x, panel.y + 8, panel.w, panel.h - 8, Math.min(panel.r, (panel.h - 8) / 2));
     cx.clip();
-    cx.globalAlpha = look.connected ? 0.16 : 0.06;
+    cx.globalAlpha = look.connected ? 0.08 : 0.03;
     cx.translate(midX, panel.y);
     cx.scale(1, -1);
     cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);

@@ -2,19 +2,18 @@
  * Level themes. A theme is a package — sky, floor, boards, perches and reveal
  * treatment designed together — never just a background swap.
  *
- * The default is `terrazzo`: a warm off-white field with sparse pastel chips,
- * pale board faces, and the structural surfaces (landing tops and the ground)
- * cut dark in the level's hue. The board colourway ROTATES per question —
- * same geometry, fresh level feel each round, at zero cost. Rotation is
- * deterministic from the question index so a restart replays identically.
+ * The default is `glass`: a smooth gradient field with big soft light blobs,
+ * every platform a chunk of frosted glass with its answer inside, and subtle
+ * reflections of the players standing on it (see GLASS_FAMILIES below).
  *
- * `dusk` is the original night look, kept whole; packs opt in with
- * `"theme": "dusk"`.
+ * `terrazzo` is the light alternative — a warm off-white field with sparse
+ * pastel chips, pale board faces, and the structural surfaces cut dark in the
+ * level's hue, ROTATING per question. It exists because projectors in
+ * half-lit rooms render bright fields far better than dark ones; if the venue
+ * projector washes the glass gradients out, packs switch with
+ * `"theme": "terrazzo"`. `dusk` is the original night look, kept whole.
  *
- * Light backgrounds won on purpose: projectors in half-lit rooms render
- * bright fields far better than dark ones (dark exposes their weak black
- * levels), and the twelve saturated player colours pop hardest against the
- * dark floor cut. The chips are STATIC — the celebration confetti is the only
+ * Everything decorative is STATIC — the celebration confetti is the only
  * confetti-shaped thing that ever moves.
  */
 
@@ -177,12 +176,12 @@ export function drawGlassSky(cx, w, h) {
 
 const THEMES = /** @type {const} */ (['terrazzo', 'dusk', 'glass']);
 
-let themeKey = 'terrazzo';
+let themeKey = 'glass';
 let way = WAYS[1]; // teal: the lobby/showdown resting colourway
 
-/** @param {string | undefined} key unknown keys fall back to terrazzo */
+/** @param {string | undefined} key unknown keys fall back to glass */
 export function setTheme(key) {
-  themeKey = THEMES.includes(/** @type {any} */ (key)) ? /** @type {string} */ (key) : 'terrazzo';
+  themeKey = THEMES.includes(/** @type {any} */ (key)) ? /** @type {string} */ (key) : 'glass';
 }
 
 /** @returns {string} */
