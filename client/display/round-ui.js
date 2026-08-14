@@ -14,6 +14,7 @@ import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, standings, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
+import { glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
 
 /**
@@ -141,25 +142,28 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
 function drawMenu(cx, menu, playerCount) {
   const joined = Math.max(0, playerCount - 1);
   const pack = menu.packs[menu.packIndex];
-  const rowH = 64;
+  const rowH = 66;
+  const dividerGap = 26;
   const w = 880;
-  const h = 196 + menu.items.length * rowH;
+  const settings = menu.items.filter((it) => it === 'pack' || it === 'time').length;
+  const h = 172 + menu.items.length * rowH + (settings ? dividerGap : 0) + 28;
   // Right of the latency HUD's column, left of the QR: the one strip of sky
   // nothing else claims.
   const x0 = 420;
-  panel(cx, x0, 64, w, h);
+  const y0 = 64;
+  panel(cx, x0, y0, w, h);
 
   cx.fillStyle = UI.paper;
   cx.font = `800 58px ${FONT.display}`;
   cx.textAlign = 'left';
   cx.textBaseline = 'alphabetic';
-  cx.fillText('Scan to join', x0 + 40, 142);
+  cx.fillText('Scan to join', x0 + 44, y0 + 80);
 
   cx.font = `600 26px ${FONT.ui}`;
-  cx.fillStyle = joined ? UI.correct : UI.dim;
+  cx.fillStyle = joined ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.45)';
   cx.fillText(
-    joined ? `${joined} player${joined === 1 ? '' : 's'} in — run around, more can join any time` : 'waiting for players…',
-    x0 + 40, 186
+    joined ? `${joined} player${joined === 1 ? '' : 's'} in` : 'waiting for players…',
+    x0 + 44, y0 + 124
   );
 
   /** @param {'pack'|'time'|'quiz'|'showdown'} item @returns {[string, string]} */
@@ -179,39 +183,55 @@ function drawMenu(cx, menu, playerCount) {
       case 'quiz':
         return ['Start quiz', ''];
       case 'showdown':
-        return ['Start showdown ☠', 'no points — last one standing'];
+        return ['Start showdown', 'no points · last one standing'];
       default:
         return ['', ''];
     }
   };
 
-  let ry = 236;
+  let ry = y0 + 172;
+  let dividerDrawn = false;
   menu.items.forEach((item, i) => {
+    const action = item === 'quiz' || item === 'showdown';
+    if (action && settings && !dividerDrawn) {
+      // One quiet line between the settings and the two ways to begin.
+      cx.strokeStyle = 'rgba(255,255,255,0.14)';
+      cx.lineWidth = 1;
+      cx.beginPath();
+      cx.moveTo(x0 + 32, ry + 8);
+      cx.lineTo(x0 + w - 32, ry + 8);
+      cx.stroke();
+      ry += dividerGap;
+      dividerDrawn = true;
+    }
+
     const selected = i === menu.sel;
     if (selected) {
-      cx.fillStyle = 'rgba(255,255,255,0.08)';
+      // The selection is a piece of brighter glass, not a colour.
+      cx.fillStyle = 'rgba(255,255,255,0.12)';
+      cx.strokeStyle = 'rgba(255,255,255,0.4)';
+      cx.lineWidth = 1.5;
       cx.beginPath();
-      cx.roundRect(x0 + 24, ry - 40, w - 48, 56, 12);
+      cx.roundRect(x0 + 24, ry, w - 48, rowH - 8, 15);
       cx.fill();
+      cx.stroke();
     }
+
     const [label, value] = rowText(item);
-    cx.font = `800 32px ${FONT.display}`;
-    cx.fillStyle = selected ? UI.gold : UI.paper;
-    cx.fillText(`${selected ? '▸ ' : '  '}${label}`, x0 + 40, ry);
+    const baseline = ry + rowH / 2 + 10;
+    cx.font = `${action ? 800 : 700} 31px ${FONT.display}`;
+    cx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.82)';
+    cx.fillText(label, x0 + 44, baseline);
 
     if (value) {
       cx.textAlign = 'right';
-      cx.font = `600 26px ${FONT.ui}`;
-      cx.fillStyle = selected ? UI.paper : UI.dim;
-      cx.fillText(value, x0 + w - 40, ry);
+      cx.font = `600 25px ${FONT.ui}`;
+      cx.fillStyle = selected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)';
+      cx.fillText(value, x0 + w - 44, baseline);
       cx.textAlign = 'left';
     }
     ry += rowH;
   });
-
-  cx.font = `500 20px ${FONT.ui}`;
-  cx.fillStyle = UI.dim;
-  cx.fillText('↑↓ select · ←→ change · Enter go · H latency HUD · or drive it from the host page', x0 + 40, 64 + h - 28);
 }
 
 /**
@@ -229,7 +249,7 @@ function drawLobby(cx, playerCount) {
   cx.fillText('Scan to join', 110, 148);
 
   cx.font = `600 30px ${FONT.ui}`;
-  cx.fillStyle = joined ? UI.correct : UI.dim;
+  cx.fillStyle = joined ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.45)';
   cx.fillText(
     joined ? `${joined} player${joined === 1 ? '' : 's'} in — press ENTER to start` : 'waiting for players…',
     110, 202
@@ -454,6 +474,44 @@ function drawFinal(cx, g, roster) {
  * @param {string} [edge]
  */
 function panel(cx, x, y, w, h, edge) {
+  if (themeName() === 'glass') {
+    // Panels are cut from the same glass as the platforms: a frosted window
+    // onto the sky under a dark veil (the veil is what keeps white text
+    // readable over the bright blobs), a sheen, and a light rim.
+    const frost = glassFrost(WORLD_W, WORLD_H);
+    const r = 24;
+    cx.save();
+    cx.beginPath();
+    cx.roundRect(x, y, w, h, r);
+    cx.shadowColor = 'rgba(4,6,24,0.45)';
+    cx.shadowBlur = 34;
+    cx.shadowOffsetY = 14;
+    cx.fillStyle = 'rgba(14,10,30,0.72)';
+    cx.fill();
+    cx.shadowColor = 'rgba(0,0,0,0)';
+    cx.clip();
+    if (frost) {
+      cx.drawImage(frost, 0, 0);
+      cx.fillStyle = 'rgba(12,8,28,0.62)';
+      cx.fillRect(x, y, w, h);
+    }
+    const sheen = cx.createLinearGradient(x, y, x + w * 0.6, y + h);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.10)');
+    sheen.addColorStop(0.4, 'rgba(255,255,255,0.02)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = sheen;
+    cx.fillRect(x, y, w, h);
+    cx.restore();
+
+    cx.save();
+    cx.beginPath();
+    cx.roundRect(x + 1, y + 1, w - 2, h - 2, r - 1);
+    cx.strokeStyle = edge ?? 'rgba(255,255,255,0.32)';
+    cx.lineWidth = edge ? 3 : 1.5;
+    cx.stroke();
+    cx.restore();
+    return;
+  }
   cx.fillStyle = UI.panel;
   cx.beginPath();
   cx.roundRect(x, y, w, h, 20);
