@@ -60,7 +60,122 @@ const CHIPS = [
   'rgba(196,170,214,0.45)',
 ];
 
-const THEMES = /** @type {const} */ (['terrazzo', 'dusk']);
+/**
+ * The `glass` theme: a smooth colour-field gradient with big soft light blobs,
+ * and every platform drawn as a chunk of frosted glass with the answer INSIDE
+ * it. Canvas has no backdrop-filter, but blurring a smooth gradient is a
+ * visual no-op — so translucent white panels over this sky read as real glass
+ * at zero per-frame cost.
+ *
+ * @typedef {object} GlassFamily
+ * @property {string} key
+ * @property {[string, string, string]} stops gradient top → mid → bottom
+ * @property {Array<{x:number, y:number, r:number, c:string}>} blobs
+ *   pre-blurred light shapes: fractional centre/radius, centre colour
+ *   (fades to its own zero-alpha, never to grey)
+ * @property {string} glassFill panel body
+ * @property {string} glassRim panel border
+ * @property {string} text answer ink on the glass
+ * @property {string} textDim wrong-answer ink
+ * @property {string} floorBody
+ * @property {string} floorTop
+ * @property {string} floorEdge
+ */
+
+/** @type {Record<string, GlassFamily>} */
+export const GLASS_FAMILIES = {
+  dusk: {
+    key: 'dusk',
+    stops: ['#3b2670', '#63307f', '#1d1546'],
+    blobs: [
+      { x: 0.2, y: 0.3, r: 0.32, c: 'rgba(255,140,180,0.22)' },
+      { x: 0.79, y: 0.2, r: 0.28, c: 'rgba(122,162,255,0.24)' },
+      { x: 0.55, y: 0.74, r: 0.4, c: 'rgba(168,96,228,0.18)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.13)',
+    glassRim: 'rgba(255,255,255,0.45)',
+    text: 'rgba(255,255,255,0.96)',
+    textDim: 'rgba(255,255,255,0.45)',
+    floorBody: '#171038',
+    floorTop: '#241a4e',
+    floorEdge: 'rgba(255,255,255,0.22)',
+  },
+  ocean: {
+    key: 'ocean',
+    stops: ['#0d3f66', '#127a86', '#071f3c'],
+    blobs: [
+      { x: 0.24, y: 0.26, r: 0.32, c: 'rgba(120,235,255,0.20)' },
+      { x: 0.76, y: 0.34, r: 0.3, c: 'rgba(90,255,190,0.16)' },
+      { x: 0.5, y: 0.78, r: 0.42, c: 'rgba(80,150,255,0.18)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.13)',
+    glassRim: 'rgba(255,255,255,0.45)',
+    text: 'rgba(255,255,255,0.96)',
+    textDim: 'rgba(255,255,255,0.45)',
+    floorBody: '#081a30',
+    floorTop: '#0e2a45',
+    floorEdge: 'rgba(255,255,255,0.22)',
+  },
+  frost: {
+    key: 'frost',
+    stops: ['#e6eefa', '#f3ecf6', '#c8d7ec'],
+    blobs: [
+      { x: 0.22, y: 0.3, r: 0.34, c: 'rgba(255,170,190,0.30)' },
+      { x: 0.76, y: 0.22, r: 0.3, c: 'rgba(140,180,255,0.30)' },
+      { x: 0.52, y: 0.76, r: 0.42, c: 'rgba(170,140,235,0.22)' },
+    ],
+    // Light field: the glass needs more body and a hard rim or it vanishes.
+    glassFill: 'rgba(255,255,255,0.42)',
+    glassRim: 'rgba(255,255,255,0.95)',
+    text: 'rgba(35,32,66,0.95)',
+    textDim: 'rgba(35,32,66,0.45)',
+    floorBody: '#39406a',
+    floorTop: '#4a5280',
+    floorEdge: 'rgba(255,255,255,0.35)',
+  },
+};
+
+let glassFamilyKey = 'dusk';
+
+/** @param {string | undefined} key unknown keys fall back to dusk */
+export function setGlassFamily(key) {
+  glassFamilyKey = key && key in GLASS_FAMILIES ? key : 'dusk';
+}
+
+/** @returns {GlassFamily} */
+export function glassFam() {
+  return GLASS_FAMILIES[glassFamilyKey];
+}
+
+/**
+ * The glass sky: one smooth diagonal gradient plus a few big radial light
+ * blobs. Static, like the terrazzo chips — the blobs already look blurred,
+ * which is the whole trick.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} w @param {number} h
+ */
+export function drawGlassSky(cx, w, h) {
+  const f = glassFam();
+  const g = cx.createLinearGradient(0, 0, w * 0.22, h);
+  g.addColorStop(0, f.stops[0]);
+  g.addColorStop(0.55, f.stops[1]);
+  g.addColorStop(1, f.stops[2]);
+  cx.fillStyle = g;
+  cx.fillRect(0, 0, w, h);
+
+  for (const b of f.blobs) {
+    const r = b.r * w;
+    const rg = cx.createRadialGradient(b.x * w, b.y * h, 0, b.x * w, b.y * h, r);
+    rg.addColorStop(0, b.c);
+    // Fade to the same hue at zero alpha — fading to transparent black greys
+    // the midfield out.
+    rg.addColorStop(1, b.c.replace(/[\d.]+\)$/, '0)'));
+    cx.fillStyle = rg;
+    cx.fillRect(b.x * w - r, b.y * h - r, r * 2, r * 2);
+  }
+}
+
+const THEMES = /** @type {const} */ (['terrazzo', 'dusk', 'glass']);
 
 let themeKey = 'terrazzo';
 let way = WAYS[1]; // teal: the lobby/showdown resting colourway

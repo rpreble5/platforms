@@ -17,7 +17,7 @@ import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { ANSWER_H, FLAG_H, FLAG_POLE, FLOOR_Y, PLAQUE_GAP, PLAQUE_H, SLAB_H, rangeX } from '../../sim/levels.js';
 import { SPRITES, art, drawTileBox, drawTiled, has } from './art.js';
 import { FONT, INK, SKY, STAGE, UI } from './theme.js';
-import { activeWay, drawTerrazzoSky, themeName } from './themes.js';
+import { activeWay, drawGlassSky, drawTerrazzoSky, glassFam, themeName } from './themes.js';
 
 /** @typedef {import('../../sim/collide.js').Platform} Platform */
 
@@ -32,6 +32,10 @@ export function drawSky(cx, t) {
   }
   if (themeName() === 'terrazzo') {
     drawTerrazzoSky(cx, WORLD_W, WORLD_H);
+    return;
+  }
+  if (themeName() === 'glass') {
+    drawGlassSky(cx, WORLD_W, WORLD_H);
     return;
   }
   const g = cx.createLinearGradient(0, 0, 0, WORLD_H);
@@ -88,7 +92,9 @@ export function drawFloor(cx, p) {
   // it anchors the light field and makes the player colours pop hardest.
   const c = themeName() === 'terrazzo'
     ? { body: activeWay().fBody, top: activeWay().fTop, edge: activeWay().fEdge }
-    : { body: STAGE.floorBody, top: STAGE.floorTop, edge: STAGE.floorEdge };
+    : themeName() === 'glass'
+      ? { body: glassFam().floorBody, top: glassFam().floorTop, edge: glassFam().floorEdge }
+      : { body: STAGE.floorBody, top: STAGE.floorTop, edge: STAGE.floorEdge };
   cx.fillStyle = c.body;
   cx.fillRect(p.x, p.y, p.w, visibleH);
   cx.fillStyle = c.top;
@@ -111,6 +117,10 @@ export function drawSign(cx, p, opts = {}) {
   const dy = opts.dy ?? 0;
   const state = opts.state ?? 'idle';
   const y = p.y + dy;
+  if (themeName() === 'glass') {
+    drawGlassChunk(cx, p.x, y, p.w, GLASS_CHUNK_H, 20, state);
+    return;
+  }
   const terrazzo = themeName() === 'terrazzo';
   const way = terrazzo
     ? activeWay()
@@ -160,12 +170,79 @@ export function drawSign(cx, p, opts = {}) {
 }
 
 /**
+ * How tall a glass answer chunk is: the collision slab plus the whole text
+ * zone, drawn as ONE block of glass with the answer inside it. Deliberately
+ * equal to the plaque style's below-extent so it occupies exactly the space
+ * the layouts (and the label-yield rule) already reserve.
+ */
+export const GLASS_CHUNK_H = SLAB_H + PLAQUE_GAP + PLAQUE_H;
+
+/**
+ * One glass panel: frosted body, diagonal sheen, a brighter landing strip on
+ * top, and a light rim. Wrong answers dim behind a dark wash; the correct one
+ * lights up — brighter body, hard rim, and an outer glow.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {number} r
+ * @param {'idle'|'correct'|'wrong'} state
+ */
+function drawGlassChunk(cx, x, y, w, h, r, state) {
+  const fam = glassFam();
+  cx.save();
+  cx.beginPath();
+  cx.roundRect(x, y, w, h, r);
+  // A soft drop shadow separates the glass from the field it echoes — on the
+  // light frost family this is most of what says "panel" at all.
+  cx.shadowColor = state === 'correct' ? 'rgba(255,255,255,0.9)' : 'rgba(4,6,24,0.30)';
+  cx.shadowBlur = state === 'correct' ? 36 : 22;
+  cx.shadowOffsetY = state === 'correct' ? 0 : 10;
+  cx.fillStyle = state === 'correct' ? 'rgba(255,255,255,0.34)' : fam.glassFill;
+  cx.fill();
+  cx.shadowColor = 'rgba(0,0,0,0)';
+
+  cx.clip();
+  // Diagonal sheen across the top-left: the one gradient that sells "glass".
+  const sheen = cx.createLinearGradient(x, y, x + w * 0.7, y + h);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.18)');
+  sheen.addColorStop(0.45, 'rgba(255,255,255,0.03)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  cx.fillStyle = sheen;
+  cx.fillRect(x, y, w, h);
+
+  // The landing strip: the surface players stand on stays legible as a
+  // surface even though the whole chunk is translucent.
+  cx.fillStyle = state === 'correct' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)';
+  cx.fillRect(x, y, w, 8);
+
+  if (state === 'wrong') {
+    cx.fillStyle = 'rgba(8,7,20,0.45)';
+    cx.fillRect(x, y, w, h);
+  }
+  cx.restore();
+
+  cx.save();
+  cx.beginPath();
+  cx.roundRect(x + 1, y + 1, w - 2, h - 2, r - 1);
+  cx.strokeStyle = state === 'correct' ? 'rgba(255,255,255,0.95)' : fam.glassRim;
+  cx.lineWidth = state === 'correct' ? 4 : 2;
+  cx.stroke();
+  cx.restore();
+}
+
+/**
  * Where a board's floating text lives — hanging space below the slab
  * ('plaque' position) or flying space above it ('flag' position). Also the
  * verdict box at the reveal and the label-yield zone (answers beat labels).
+ *
+ * The glass theme has no flying text at all: every answer sits INSIDE its
+ * glass chunk, below the landing strip, whatever the layout — flags were
+ * retired there on purpose.
  * @param {Platform} p @param {number} [dy]
  */
 export function signTextRect(p, dy = 0) {
+  if (themeName() === 'glass') {
+    return { x: p.x + 14, y: p.y + dy + 18, w: p.w - 28, h: GLASS_CHUNK_H - 30 };
+  }
   if (p.signStyle === 'flag') {
     return { x: p.x + 18, y: p.y + dy - FLAG_POLE, w: p.w - 36, h: FLAG_H };
   }
@@ -199,6 +276,8 @@ export function drawSignText(cx, p, text, opts = {}) {
   if (themeName() === 'terrazzo') {
     cx.fillStyle = activeWay().text;
     if (state === 'wrong') cx.globalAlpha = 0.55;
+  } else if (themeName() === 'glass') {
+    cx.fillStyle = state === 'wrong' ? glassFam().textDim : glassFam().text;
   } else {
     cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
   }
@@ -248,6 +327,12 @@ export function drawPerch(cx, p) {
   const h = ANSWER_H + 8;
   if (has('platform')) {
     drawTileBox(cx, art.platform, p.x, p.y, p.w, h);
+    return;
+  }
+  if (themeName() === 'glass') {
+    // The same glass, one bite of it: rungs are small chunks in the identical
+    // material so the ladders read as part of the set.
+    drawGlassChunk(cx, p.x, p.y, p.w, h, h / 2, 'idle');
     return;
   }
   // An ink-outlined capsule with the colourway's landing band — the same

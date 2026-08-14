@@ -13,7 +13,7 @@ import { animFor, pruneAnim } from './anim.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
-import { drawFloor, drawPerch, drawSky } from './stage.js';
+import { GLASS_CHUNK_H, drawFloor, drawPerch, drawSky } from './stage.js';
 import { UI } from './theme.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
@@ -113,14 +113,21 @@ export function render(cx, world, roster, game, opts) {
   // answer 30 people are trying to read.
   /** @type {Array<{x:number, y:number, w:number, h:number}>} */
   const skirts = [];
+  const glass = themeName() === 'glass';
   for (const p of world.platforms) {
     if (!p.id?.startsWith('ans') || p.id === RANGE_ID) continue;
-    if (p.signStyle === 'flag') {
+    if (glass) {
+      // Glass answers live inside the chunk below the surface, whatever the
+      // layout says about flags — the yield zone follows the text.
+      skirts.push({ x: p.x, y: p.y + ANSWER_H, w: p.w, h: GLASS_CHUNK_H - ANSWER_H });
+    } else if (p.signStyle === 'flag') {
       skirts.push({ x: p.x, y: p.y - FLAG_POLE, w: p.w, h: FLAG_H });
     } else {
       skirts.push({ x: p.x, y: p.y + ANSWER_H, w: p.w, h: signBelowExtent(p) - ANSWER_H });
     }
   }
+
+  if (glass) drawGlassReflections(cx, items, roster, world, scale);
 
   for (const it of items) {
     const p = it.p;
@@ -199,6 +206,72 @@ export function render(cx, world, roster, game, opts) {
   cx.globalAlpha = 1;
 
   if (opts.qr) drawJoin(cx, opts.qr, opts.joinUrl, count);
+}
+
+/**
+ * Subtle reflections of the players standing on glass: each grounded avatar is
+ * mirrored across the surface it stands on, at low alpha, clipped inside the
+ * chunk. Cheap — the sprites are already cached canvases, and only players
+ * whose feet rest exactly on a panel top qualify. Drawn before the avatar
+ * pass so every reflection sits under every body.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {Array<{x:number, y:number, w:number, p:Player}>} items
+ * @param {Map<number, Look>} roster
+ * @param {World} world
+ * @param {number} scale
+ */
+function drawGlassReflections(cx, items, roster, world, scale) {
+  /** @type {Array<{x:number, y:number, w:number, h:number, r:number}>} */
+  const panels = [];
+  for (const p of world.platforms) {
+    if (p.id === RANGE_ID) continue;
+    if (p.id?.startsWith('ans')) {
+      panels.push({ x: p.x, y: p.y, w: p.w, h: GLASS_CHUNK_H, r: 20 });
+    } else if (p.id?.startsWith('perch')) {
+      const h = ANSWER_H + 8;
+      panels.push({ x: p.x, y: p.y, w: p.w, h, r: h / 2 });
+    }
+  }
+  if (!panels.length) return;
+
+  for (const it of items) {
+    const p = it.p;
+    const w = p.w * scale;
+    const h = p.h * scale;
+    // Grounding is judged on the COLLISION box (p.h, unscaled): the sim rests
+    // feet at platform tops in that space, while the drawn height shrinks
+    // with the crowd.
+    const feetY = it.y + p.h;
+    const midX = it.x + w / 2;
+    const panel = panels.find(
+      (s) => Math.abs(feetY - s.y) < 3 && midX > s.x - 6 && midX < s.x + s.w + 6
+    );
+    if (!panel) continue;
+
+    const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', finish: 'flat', connected: true };
+    const cohort = COHORTS[clampCohort(look.cohortIndex ?? -1)];
+    const drawnH = h * cohort.height;
+    const sprite = getAvatar(
+      look.color,
+      look.finish ?? 'flat',
+      Math.round(w),
+      Math.round(drawnH),
+      cohort.shape,
+      true, // static eyes are fine at reflection alpha
+      look.accessory ?? 'none'
+    );
+
+    cx.save();
+    cx.beginPath();
+    // Clip starts below the landing strip so the reflection never brightens it.
+    cx.roundRect(panel.x, panel.y + 8, panel.w, panel.h - 8, Math.min(panel.r, (panel.h - 8) / 2));
+    cx.clip();
+    cx.globalAlpha = look.connected ? 0.16 : 0.06;
+    cx.translate(midX, panel.y);
+    cx.scale(1, -1);
+    cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);
+    cx.restore();
+  }
 }
 
 /**
