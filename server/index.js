@@ -96,6 +96,7 @@ server.listen(PORT, HOST, () => {
   console.log(`  players   ${bold(joinUrl)}`);
   console.log(`  display   ${bold(`http://localhost:${PORT}/display/`)}`);
   console.log(`  host      ${bold(hostUrl)}  (keep the key to yourself)`);
+  console.log(`  levels    ${bold(`http://localhost:${PORT}/levels`)}`);
   console.log('');
 
   const others = lanAddresses().filter((a) => a.address !== addr?.address);
