@@ -161,7 +161,15 @@ export function drawGlassSky(cx, w, h) {
   g.addColorStop(1, f.stops[2]);
   cx.fillStyle = g;
   cx.fillRect(0, 0, w, h);
+  drawGlassBlobs(cx, w, h, f);
+}
 
+/**
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} w @param {number} h
+ * @param {GlassFamily} f
+ */
+function drawGlassBlobs(cx, w, h, f) {
   for (const b of f.blobs) {
     const r = b.r * w;
     const rg = cx.createRadialGradient(b.x * w, b.y * h, 0, b.x * w, b.y * h, r);
@@ -172,6 +180,54 @@ export function drawGlassSky(cx, w, h) {
     cx.fillStyle = rg;
     cx.fillRect(b.x * w - r, b.y * h - r, r * 2, r * 2);
   }
+}
+
+/** @type {HTMLCanvasElement | null} */
+let frostCanvas = null;
+let frostKey = '';
+
+/**
+ * The frosted backdrop the glass panels window into. Canvas has no
+ * backdrop-filter, so this fakes one properly: the sky is re-rendered with
+ * the light blobs doubled up (so colour visibly bleeds through the frost),
+ * then heavily blurred by the classic downscale/upscale trick — no ctx.filter
+ * dependency, works in every browser. Built ONCE per family and cached;
+ * per-frame cost is a clipped drawImage, which is nothing.
+ * @param {number} w @param {number} h world size, from the caller so this
+ *   module stays free of tuning imports
+ * @returns {HTMLCanvasElement | null} null outside a DOM (tests, node)
+ */
+export function glassFrost(w, h) {
+  if (frostCanvas && frostKey === glassFamilyKey) return frostCanvas;
+  if (typeof document === 'undefined') return null;
+  const f = glassFam();
+
+  const src = document.createElement('canvas');
+  src.width = w;
+  src.height = h;
+  const sc = /** @type {CanvasRenderingContext2D} */ (src.getContext('2d'));
+  drawGlassSky(sc, w, h);
+  // A second pass of blobs: through real frosted glass the lights behind
+  // glow stronger than the wall does, and it makes the blur legible.
+  drawGlassBlobs(sc, w, h, f);
+
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(w / 24));
+  small.height = Math.max(1, Math.round(h / 24));
+  const smc = /** @type {CanvasRenderingContext2D} */ (small.getContext('2d'));
+  smc.drawImage(src, 0, 0, small.width, small.height);
+
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const oc = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
+  oc.imageSmoothingEnabled = true;
+  oc.imageSmoothingQuality = 'high';
+  oc.drawImage(small, 0, 0, w, h);
+
+  frostCanvas = out;
+  frostKey = glassFamilyKey;
+  return out;
 }
 
 const THEMES = /** @type {const} */ (['terrazzo', 'dusk', 'glass']);
