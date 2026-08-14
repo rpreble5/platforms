@@ -15,6 +15,8 @@ import { createReadStream, readdirSync, readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
+import { deleteLevel, listLevels, saveLevel } from './levels-store.js';
+
 /** @type {Record<string, string>} */
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -108,6 +110,41 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
     if (pathname === '/api/packs') {
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       res.end(JSON.stringify(listPacks(root)));
+      return;
+    }
+
+    // The level library. Reads are open; writes are how the /levels editor
+    // saves, and deletes exist so housekeeping never means shelling into the
+    // levels/ directory. Names are matched against the actual library — the
+    // client never supplies a filename.
+    if (pathname === '/api/levels') {
+      if (req.method === 'POST') {
+        readBody(req, 64 * 1024)
+          .then((body) => {
+            const saved = saveLevel(root, JSON.parse(body));
+            if (!saved) {
+              res.writeHead(400, { 'Content-Type': MIME['.json'] });
+              res.end(JSON.stringify({ error: 'not a level: needs a name and 2-5 boards' }));
+              return;
+            }
+            res.writeHead(200, { 'Content-Type': MIME['.json'] });
+            res.end(JSON.stringify({ ok: true, slug: saved.slug, spec: saved.spec }));
+          })
+          .catch((err) => {
+            res.writeHead(400, { 'Content-Type': MIME['.json'] });
+            res.end(JSON.stringify({ error: String(err) }));
+          });
+        return;
+      }
+      if (req.method === 'DELETE') {
+        const name = url.searchParams.get('name') ?? '';
+        const gone = deleteLevel(root, name);
+        res.writeHead(gone ? 200 : 404, { 'Content-Type': MIME['.json'] });
+        res.end(JSON.stringify({ ok: gone }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      res.end(JSON.stringify(listLevels(root)));
       return;
     }
 
@@ -215,6 +252,32 @@ function sendFile(res, abs) {
     'Content-Length': String(st.size),
   });
   createReadStream(abs).pipe(res);
+}
+
+/**
+ * Collect a request body, capped — the only writer is the level editor, and
+ * a level is a few hundred bytes, so anything huge is a mistake or mischief.
+ * @param {import('node:http').IncomingMessage} req
+ * @param {number} cap bytes
+ * @returns {Promise<string>}
+ */
+function readBody(req, cap) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    /** @type {Buffer[]} */
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > cap) {
+        reject(new Error('body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
 }
 
 

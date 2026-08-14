@@ -57,6 +57,26 @@ world.spawn = { x: 1920 / 2 - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 
 let lastPhase = game.phase;
 const flash = new LatencyFlash();
 
+/**
+ * Designed levels from levels/*.json, via /api/levels. Kept in a module var
+ * so pack changes (which replace `game`) don't lose the pool, and refreshed
+ * at idle moments so a save in the /levels editor is picked up by the next
+ * game without reloading the display.
+ * @type {import('../../sim/levels.js').LevelSpec[]}
+ */
+let levelPool = [];
+async function refreshLevels() {
+  try {
+    const list = await fetch('/api/levels').then((r) => r.json());
+    if (Array.isArray(list)) {
+      levelPool = list;
+      game.levelPool = levelPool;
+    }
+  } catch {
+    // keep whatever we had — an empty pool just means shipped layouts
+  }
+}
+
 /** @type {Map<number, import('./render.js').Look>} */
 const roster = new Map();
 /** @type {Map<number, {rttP50:number, rttP95:number, loss:number}>} */
@@ -267,6 +287,7 @@ async function selectPack(index) {
     const pack = await fetch(`/api/questions?pack=${encodeURIComponent(file)}`).then((r) => r.json());
     if (pack?.questions?.length) {
       game = createGame(pack.questions, pack.answerMs);
+      game.levelPool = levelPool;
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
       setTheme(pack.theme);
       hud.note = '';
@@ -400,6 +421,9 @@ function frame(now) {
         });
       }
     }
+    // Idle moments re-read the level library, so save-in-editor → play is
+    // seamless without reloading the display.
+    if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) void refreshLevels();
     lastPhase = game.phase;
   }
 
@@ -663,6 +687,7 @@ async function init() {
     const pack = await fetch('/api/questions').then((r) => r.json());
     if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
     else hud.note = 'no questions loaded — check questions/default.json';
+    await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
     setTheme(pack?.theme);
     const packs = await fetch('/api/packs').then((r) => r.json());

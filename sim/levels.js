@@ -425,6 +425,83 @@ export function buildTieredArena(n, layout) {
 }
 
 /**
+ * A designed level, as saved by the /levels editor into levels/*.json.
+ * Boards and rungs share one triple shape — [centerX, tier, width] — so a
+ * level is nothing but placements: no layout taxonomy, no per-layout builder.
+ * `boards.length` IS the level's answer count; the round machine picks levels
+ * whose count matches the question.
+ *
+ * @typedef {object} LevelSpec
+ * @property {string} name
+ * @property {Array<[number, number, number]>} boards [centerX, tier 1-4, width]
+ * @property {Array<[number, number, number]>} rungs same triple, stepping stones
+ */
+
+/**
+ * Clamp untrusted level JSON into a usable LevelSpec, or null if it isn't
+ * one. Shared by the save endpoint (untrusted network body) and the loaders
+ * (files are hand-editable), so a corrupt file degrades to "level skipped",
+ * never to NaN geometry in the arena.
+ * @param {any} raw
+ * @returns {LevelSpec | null}
+ */
+export function sanitizeLevelSpec(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 40) : '';
+  if (!name) return null;
+
+  /** @param {any} v @returns {[number, number, number] | null} */
+  const triple = (v) => {
+    if (!Array.isArray(v) || v.length !== 3 || !v.every((n) => Number.isFinite(n))) return null;
+    const w = Math.max(GRID, Math.min(WORLD_W, Math.round(v[2])));
+    const center = Math.max(-w / 2, Math.min(WORLD_W + w / 2, Math.round(v[0])));
+    const tier = Math.max(1, Math.min(4, Math.round(v[1])));
+    return [center, tier, w];
+  };
+
+  const boards = (Array.isArray(raw.boards) ? raw.boards : []).map(triple).filter(Boolean);
+  if (boards.length < 2 || boards.length > 5) return null;
+  const rungs = (Array.isArray(raw.rungs) ? raw.rungs : []).map(triple).filter(Boolean).slice(0, 32);
+  return { name, boards: /** @type {any} */ (boards), rungs: /** @type {any} */ (rungs) };
+}
+
+/**
+ * Build an arena from a designed level: standard floor, the boards as answer
+ * platforms (in array order — ans0 is the leftmost the editor saved), the
+ * rungs as perches. Same construction as every hand-placed builder above.
+ * @param {LevelSpec} spec
+ * @returns {Platform[]}
+ */
+export function buildCustomArena(spec) {
+  /** @type {Platform[]} */
+  const platforms = [
+    { id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 },
+  ];
+  spec.boards.forEach(([center, tier, w], i) => {
+    platforms.push({
+      id: answerId(i),
+      x: center - w / 2,
+      y: tierY(tier),
+      w,
+      h: ANSWER_H,
+      oneWay: true,
+      signStyle: 'plaque',
+    });
+  });
+  spec.rungs.forEach(([center, tier, w], j) => {
+    platforms.push({
+      id: `perch${j}`,
+      x: center - w / 2,
+      y: tierY(tier),
+      w,
+      h: ANSWER_H,
+      oneWay: true,
+    });
+  });
+  return platforms;
+}
+
+/**
  * Largest legal board width at or below `px` — a whole number of tiles, and
  * never zero. Anything that wants a board of a particular size goes through
  * here, so the rounding rule lives in exactly one place.

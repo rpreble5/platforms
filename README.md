@@ -125,8 +125,15 @@ year's body, at the three sizes the game draws.
 `/levels` is the level editor — drag platforms on the real renderer, with the
 layout rules (reachability, the label rule, spacing, the banner ceiling)
 checked live, a 28-bean crowd preview, and a play mode to feel the jumps.
-It exports the exact table entry to paste into `ISLANDS` or `TIERED` in
-`sim/levels.js`; `npm test` then re-verifies the same rules the editor shows.
+**Save** writes the level to `levels/<name>.json` on the server; the display
+re-reads that library at every lobby, so save → start a round is the whole
+loop. During a game, each choice question uses a designed level whose board
+count matches its answer count, rotating deterministically through the
+library; questions can pin one by name with `"level": "<name>"`, and any
+count with no designed level falls back to the shipped layout tables in
+`sim/levels.js`. Start a design from a saved level or from any shipped
+layout as a template; boards can be added, removed, moved and resized
+freely (2-5 per level).
 
 ### Two things that look exactly like client isolation but aren't
 

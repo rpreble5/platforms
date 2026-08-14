@@ -18,7 +18,7 @@
  * just doesn't drive the maths.
  */
 
-import { RANGE_ID, buildArena, buildRangeArena, answerId, spawnFor } from './levels.js';
+import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, answerId, spawnFor } from './levels.js';
 import { step } from './world.js';
 
 export const PHASE = /** @type {const} */ ({
@@ -75,6 +75,8 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {string[]} [answers]
  * @property {number} [correct]
  * @property {import('./levels.js').Layout} [layout] choice arenas only; islands if absent
+ * @property {string} [level] pin a designed level from the pool by name;
+ *   ignored if its answer count doesn't match this question's
  * @property {number} [min]
  * @property {number} [max]
  * @property {[number, number]} [answer]
@@ -107,6 +109,8 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {Map<number, string|null>} atBuzzer playerId -> platform id they were
  *   on when the timer ended
  * @property {boolean} paused
+ * @property {import('./levels.js').LevelSpec[]} levelPool designed levels; a
+ *   choice question uses one whose board count matches, rotating by qIndex
  */
 
 /**
@@ -128,6 +132,7 @@ export function createGame(questions, answerMs = 12000) {
     debrisT: 0,
     atBuzzer: new Map(),
     paused: false,
+    levelPool: [],
   };
 }
 
@@ -301,9 +306,27 @@ export function nextQuestion(g, world) {
   world.platforms =
     q.type === 'range'
       ? buildRangeArena(/** @type {import('./levels.js').RangeQuestion} */ (q))
-      : buildArena(q.answers?.length ?? 2, q.layout);
+      : choiceArena(g, q);
   respawnAll(world);
   enter(g, world, PHASE.INTRO);
+}
+
+/**
+ * The arena for a choice question. Designed levels win: a question can pin
+ * one by name, otherwise the pool's levels with a matching board count
+ * rotate by question index — deterministic, so a restart replays the same
+ * levels in the same order, exactly like the colourway rotation. With no
+ * matching level the shipped layout tables carry the round, so a pool of
+ * seven levels never has to cover every answer count on day one.
+ * @param {Game} g @param {Question} q
+ * @returns {import('./collide.js').Platform[]}
+ */
+function choiceArena(g, q) {
+  const n = q.answers?.length ?? 2;
+  const fits = g.levelPool.filter((l) => l.boards.length === n);
+  const named = q.level ? fits.find((l) => l.name === q.level) : null;
+  const pick = named ?? (fits.length ? fits[g.qIndex % fits.length] : null);
+  return pick ? buildCustomArena(pick) : buildArena(n, q.layout);
 }
 
 /**

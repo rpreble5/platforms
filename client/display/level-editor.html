@@ -12,16 +12,19 @@
     display: grid; grid-template-rows: auto 1fr; height: 100vh;
   }
   header {
-    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     padding: 10px 16px; background: #1a1430; border-bottom: 1px solid #443a68;
   }
   h1 { font-size: 14px; margin: 0 10px 0 0; letter-spacing: .06em; color: #9ff5c9; }
-  select, button {
+  select, button, input[type=text] {
     background: #3b3160; color: inherit; border: 1px solid #5a4d8a;
     border-radius: 8px; padding: 6px 10px; font: inherit;
   }
+  input[type=text] { width: 150px; background: #14102a; }
   button:active { filter: brightness(1.3); }
+  button.primary { background: #1f5c46; border-color: #2fa47a; }
   label.tog { display: flex; gap: 6px; align-items: center; color: #bdb3dd; }
+  #status { color: #7fe0af; font-size: 12px; min-width: 120px; }
   header .hint { color: #7a6fa3; font-size: 12px; margin-left: auto; }
   main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
   #stagewrap { position: relative; overflow: hidden; display: grid; place-items: center; padding: 10px; }
@@ -35,7 +38,7 @@
   #checks .ok { color: #7fe0af; }
   #checks .bad { color: #ff9d8a; }
   textarea {
-    width: 100%; min-height: 220px; background: #14102a; color: #cfe3f4;
+    width: 100%; min-height: 200px; background: #14102a; color: #cfe3f4;
     border: 1px solid #443a68; border-radius: 8px;
     font: 12px/1.5 ui-monospace, Menlo, monospace; padding: 8px; white-space: pre;
   }
@@ -47,20 +50,21 @@
 
 <header>
   <h1>LEVEL EDITOR</h1>
-  <select id="layout">
-    <option value="islands">islands</option>
-    <option value="pyramid">pyramid</option>
-    <option value="reverse-pyramid">reverse-pyramid</option>
-  </select>
-  <select id="count">
-    <option>2</option><option>3</option><option selected>4</option><option>5</option>
-  </select>
+  <select id="lib" title="load a saved level or start from a shipped template"></select>
+  <input type="text" id="name" placeholder="level name" maxlength="40">
+  <button id="save" class="primary" title="write levels/&lt;name&gt;.json on the server">Save</button>
+  <button id="del" title="delete this level from the library">Delete</button>
+  <button id="addBoard">+ board</button>
   <button id="addRung">+ rung</button>
-  <button id="reset">reset to shipped</button>
+  <select id="theme" title="preview theme">
+    <option value="glass" selected>glass</option>
+    <option value="terrazzo">terrazzo</option>
+  </select>
   <label class="tog"><input type="checkbox" id="crowd"> crowd (28)</label>
   <label class="tog"><input type="checkbox" id="play"> play (A/D + Space)</label>
+  <span id="status"></span>
   <span class="hint">
-    drag to move · drag an edge to resize · <kbd>←→↑↓</kbd> nudge · <kbd>Del</kbd> remove rung ·
+    drag to move · drag an edge to resize · <kbd>←→↑↓</kbd> nudge · <kbd>Del</kbd> remove ·
     y snaps to tiers, width to the grid
   </span>
 </header>
@@ -72,23 +76,23 @@
     <div id="sel">nothing selected</div>
     <h2>Rules</h2>
     <div id="checks"></div>
-    <h2>Export — paste into sim/levels.js (or hand it to Claude)</h2>
+    <h2>Level JSON — Save writes this to levels/ on the server</h2>
     <textarea id="out" readonly></textarea>
   </aside>
 </main>
 
 <script type="module">
 import {
-  ANSWER_H, FLOOR_Y, GRID, ISLAND_Y, TIER, buildArena, answerId, tierY, signBelowExtent,
+  ANSWER_H, FLOOR_Y, GRID, TIER, answerId, buildArena, buildCustomArena, tierY,
 } from '/sim/levels.js';
-import { PHYS, STEP_MS, WORLD_H, WORLD_W } from '/shared/tuning.js';
+import { STEP_MS, WORLD_H, WORLD_W } from '/shared/tuning.js';
 import { BTN_JUMP, BTN_LEFT, BTN_RIGHT } from '/shared/protocol.js';
 import { addPlayer, createWorld, step } from '/sim/world.js';
 import { drawFloor, drawPerch, drawSign, drawSignText, drawSky } from '/client/display/stage.js';
 import { setRound, setTheme } from '/client/display/themes.js';
 import { drawBean } from '/shared/avatar.js';
 
-setTheme('terrazzo');
+setTheme('glass');
 setRound(0);
 
 const $ = (id) => document.getElementById(id);
@@ -99,19 +103,122 @@ const ANSWERS = [
   'Spironolactone', 'Add an ACE inhibitor or ARB', 'Chlorthalidone', 'Hydralazine', 'Doxazosin',
 ];
 const TIERS = [1, 2, 3, 4].map(tierY);
+const TEMPLATES = [
+  ['islands', 2], ['islands', 3], ['islands', 4], ['islands', 5],
+  ['pyramid', 3], ['pyramid', 4], ['pyramid', 5],
+  ['reverse-pyramid', 3], ['reverse-pyramid', 4],
+];
 
-let layout = 'islands';
-let count = 4;
 /** the editable platform list — same objects the game builders produce */
 let plats = [];
 let selected = null;
 let world = null; // play mode
+/** saved levels from /api/levels */
+let library = [];
+let statusTimer;
 
-function load() {
-  plats = buildArena(count, layout);
+const isBoard = (p) => String(p.id).startsWith('ans');
+const isRung = (p) => String(p.id).startsWith('perch');
+const centreOf = (p) => Math.round(p.x + p.w / 2);
+const tierOf = (p) => Math.round((FLOOR_Y - p.y) / TIER);
+
+function status(text, bad = false) {
+  $('status').textContent = text;
+  $('status').style.color = bad ? '#ff9d8a' : '#7fe0af';
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => ($('status').textContent = ''), 3000);
+}
+
+// ------------------------------------------------------------------ library
+async function refreshLibrary(selectName) {
+  try {
+    library = await fetch('/api/levels').then((r) => r.json());
+  } catch {
+    library = [];
+  }
+  const lib = $('lib');
+  lib.innerHTML = '';
+  const saved = document.createElement('optgroup');
+  saved.label = 'library';
+  for (const l of library) {
+    const o = document.createElement('option');
+    o.value = `lib:${l.name}`;
+    o.textContent = `${l.name} (${l.boards.length})`;
+    saved.appendChild(o);
+  }
+  if (library.length) lib.appendChild(saved);
+  const tpl = document.createElement('optgroup');
+  tpl.label = 'new from template';
+  for (const [layout, count] of TEMPLATES) {
+    const o = document.createElement('option');
+    o.value = `tpl:${layout}:${count}`;
+    o.textContent = `${layout} · ${count} answers`;
+    tpl.appendChild(o);
+  }
+  lib.appendChild(tpl);
+  if (selectName && library.some((l) => l.name === selectName)) lib.value = `lib:${selectName}`;
+}
+
+function loadSelection() {
+  const v = $('lib').value;
   selected = null;
   world = null;
   $('play').checked = false;
+  if (v.startsWith('lib:')) {
+    const l = library.find((x) => `lib:${x.name}` === v);
+    if (l) {
+      plats = buildCustomArena(l);
+      $('name').value = l.name;
+    }
+  } else {
+    const [, layout, count] = v.split(':');
+    plats = buildArena(Number(count), layout).filter((p) => p.id !== 'pit');
+    $('name').value = '';
+  }
+  renumber();
+  refreshPanel();
+}
+
+/** the current design as a saveable LevelSpec (boards left-to-right) */
+function toSpec() {
+  return {
+    name: $('name').value.trim() || 'untitled',
+    boards: plats.filter(isBoard).map((p) => [centreOf(p), tierOf(p), p.w]),
+    rungs: plats.filter(isRung).map((p) => [centreOf(p), tierOf(p), p.w]),
+  };
+}
+
+/** Boards are answers, so ans0..N always reads left-to-right on screen. */
+function renumber() {
+  const boards = plats.filter(isBoard).sort((a, b) => centreOf(a) - centreOf(b));
+  boards.forEach((p, i) => (p.id = answerId(i)));
+  plats.sort((a, b) => (a.id === 'floor' ? -1 : b.id === 'floor' ? 1 : 0));
+}
+
+async function save() {
+  const spec = toSpec();
+  if (spec.name === 'untitled') { status('name the level first', true); $('name').focus(); return; }
+  const { msgs } = violations();
+  if (msgs.length && !confirm(`This level has ${msgs.length} rule warning(s):\n\n${msgs.join('\n')}\n\nSave anyway?`)) return;
+  try {
+    const r = await fetch('/api/levels', { method: 'POST', body: JSON.stringify(spec) });
+    const j = await r.json();
+    if (!r.ok) { status(j.error ?? 'save failed', true); return; }
+    status(`saved levels/${j.slug}.json`);
+    await refreshLibrary(spec.name);
+  } catch (err) {
+    status(String(err), true);
+  }
+}
+
+async function remove() {
+  const name = $('name').value.trim();
+  if (!name) { status('nothing to delete', true); return; }
+  if (!confirm(`Delete "${name}" from the library?`)) return;
+  const r = await fetch(`/api/levels?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+  status(r.ok ? `deleted ${name}` : 'not in the library', r.ok === false);
+  await refreshLibrary();
+  loadSelection();
 }
 
 // ------------------------------------------------------------------ drawing
@@ -119,17 +226,17 @@ function draw() {
   drawSky(cx, performance.now());
   for (const p of plats) {
     if (p.id === 'floor') drawFloor(cx, p);
-    else if (String(p.id).startsWith('perch')) drawPerch(cx, p);
+    else if (isRung(p)) drawPerch(cx, p);
   }
-  const boards = plats.filter((p) => String(p.id).startsWith('ans'));
+  const boards = plats.filter(isBoard);
   boards.forEach((p, i) => {
     drawSign(cx, p, {});
     drawSignText(cx, p, ANSWERS[i % ANSWERS.length], {});
   });
 
-  // tier guides
+  // tier guides — light on the glass gradient, ink on terrazzo
   cx.save();
-  cx.strokeStyle = 'rgba(23,20,42,0.12)';
+  cx.strokeStyle = $('theme').value === 'glass' ? 'rgba(255,255,255,0.15)' : 'rgba(23,20,42,0.12)';
   cx.setLineDash([6, 10]);
   for (const y of TIERS) {
     cx.beginPath(); cx.moveTo(0, y); cx.lineTo(WORLD_W, y); cx.stroke();
@@ -139,7 +246,7 @@ function draw() {
   // crowd preview: beans spread across surfaces, width-weighted
   if ($('crowd').checked && !world) {
     const spots = [];
-    for (const s of plats.filter((p) => p.id !== 'floor' && p.id !== 'pit')) {
+    for (const s of plats.filter((p) => p.id !== 'floor')) {
       const n = Math.max(1, Math.round(s.w / 130));
       for (let k = 0; k < n; k++) spots.push({ x: s.x + ((k + 0.5) / n) * s.w, y: s.y });
     }
@@ -169,7 +276,7 @@ function draw() {
   // selection + violations
   const bad = violations();
   for (const p of plats) {
-    if (p.id === 'floor' || p.id === 'pit') continue;
+    if (p.id === 'floor') continue;
     if (bad.ids.has(p.id)) {
       cx.strokeStyle = 'rgba(255,90,60,0.9)';
       cx.lineWidth = 3;
@@ -197,7 +304,10 @@ function violations() {
   const ids = new Set();
   const msgs = [];
   const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0);
-  const solid = plats.filter((p) => p.id !== 'pit');
+  const solid = plats;
+
+  const nBoards = plats.filter(isBoard).length;
+  if (nBoards < 2 || nBoards > 5) msgs.push(`${nBoards} boards — a level needs 2-5 answers`);
 
   // reachability: climb (one tier up, gap<=120) or flat hop (gap<=150)
   const reached = new Set(['floor']);
@@ -219,8 +329,8 @@ function violations() {
   }
 
   // label rule: no rung exactly one tier below a board's footprint
-  const boards = solid.filter((p) => String(p.id).startsWith('ans'));
-  for (const r of solid.filter((p) => String(p.id).startsWith('perch'))) {
+  const boards = solid.filter(isBoard);
+  for (const r of solid.filter(isRung)) {
     for (const b of boards) {
       if (r.y - b.y !== TIER) continue;
       const ov = Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x);
@@ -237,7 +347,7 @@ function violations() {
     row.sort((a, b) => a.x - b.x);
     for (let i = 1; i < row.length; i++) {
       const g = row[i].x - (row[i - 1].x + row[i - 1].w);
-      const both = String(row[i].id).startsWith('ans') && String(row[i - 1].id).startsWith('ans');
+      const both = isBoard(row[i]) && isBoard(row[i - 1]);
       const min = both ? 40 : 8;
       if (g < min) { ids.add(row[i].id); msgs.push(`${row[i - 1].id}/${row[i].id} gap ${Math.round(g)}px (< ${min})`); }
     }
@@ -256,25 +366,9 @@ function refreshPanel() {
     ? msgs.map((m) => `<div class="bad">✕ ${m}</div>`).join('')
     : '<div class="ok">✓ reachable · labels clear · spacing ok · under the banner</div>';
   $('sel').textContent = selected
-    ? `${selected.id} — centre ${Math.round(selected.x + selected.w / 2)}, tier ${Math.round((FLOOR_Y - selected.y) / TIER)}, width ${selected.w}`
+    ? `${selected.id} — centre ${centreOf(selected)}, tier ${tierOf(selected)}, width ${selected.w}`
     : 'nothing selected';
-  $('out').value = exportSnippet();
-}
-
-// ------------------------------------------------------------------ export
-function exportSnippet() {
-  const boards = plats.filter((p) => String(p.id).startsWith('ans'));
-  const rungs = plats.filter((p) => String(p.id).startsWith('perch'));
-  const c = (p) => Math.round(p.x + p.w / 2);
-  const t = (p) => Math.round((FLOOR_Y - p.y) / TIER);
-  if (layout === 'islands') {
-    return `// ISLANDS[${count}] in sim/levels.js\n${count}: {\n  boards: [${boards
-      .map((b) => `[${c(b)}, ${b.w}]`)
-      .join(', ')}],\n  rungs: [\n    ${rungs.map((r) => `[${c(r)}, ${t(r)}, ${r.w}]`).join(',\n    ')},\n  ],\n},`;
-  }
-  return `// TIERED['${layout}'][${count}] in sim/levels.js\n${count}: {\n  ans: [${boards
-    .map((b) => `[${c(b)}, ${t(b)}, ${b.w}]`)
-    .join(', ')}],\n  perch: [${rungs.map((r) => `[${c(r)}, ${t(r)}, ${r.w}]`).join(', ')}],\n},`;
+  $('out').value = JSON.stringify(toSpec(), null, 2);
 }
 
 // ------------------------------------------------------------------ mouse
@@ -285,7 +379,7 @@ const toWorld = (e) => {
 };
 const hit = (pt) =>
   plats.find(
-    (p) => p.id !== 'floor' && p.id !== 'pit' &&
+    (p) => p.id !== 'floor' &&
       pt.x >= p.x - 8 && pt.x <= p.x + p.w + 8 && pt.y >= p.y - 14 && pt.y <= p.y + ANSWER_H + 14
   ) ?? null;
 
@@ -318,13 +412,18 @@ cv.addEventListener('pointermove', (e) => {
     for (const y of TIERS) if (Math.abs(pt.y - y) < Math.abs(pt.y - best)) best = y;
     p.y = best;
   }
+  renumber();
   refreshPanel();
 });
 cv.addEventListener('pointerup', () => { drag = null; });
 
 // ------------------------------------------------------------------ keys
+const inControl = (e) =>
+  e.target instanceof HTMLElement && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT');
+
 addEventListener('keydown', (e) => {
   if (world) return; // play mode owns the keys
+  if (inControl(e)) return; // typing a name / picking a level, not editing
   if (!selected) return;
   const stepPx = e.shiftKey ? GRID : 2;
   if (e.key === 'ArrowLeft') { selected.x -= stepPx; e.preventDefault(); }
@@ -334,17 +433,22 @@ addEventListener('keydown', (e) => {
     const ni = Math.max(0, Math.min(TIERS.length - 1, i + (e.key === 'ArrowUp' ? 1 : -1)));
     selected.y = TIERS[ni];
     e.preventDefault();
-  } else if ((e.key === 'Delete' || e.key === 'Backspace') && String(selected.id).startsWith('perch')) {
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (isBoard(selected) && plats.filter(isBoard).length <= 2) {
+      status('a level needs at least 2 boards', true);
+      return;
+    }
     plats = plats.filter((p) => p !== selected);
     selected = null;
   }
+  renumber();
   refreshPanel();
 });
 
 // ------------------------------------------------------------------ play mode
 let mask = 0;
 addEventListener('keydown', (e) => {
-  if (!world) return;
+  if (!world || inControl(e)) return;
   const k = e.key.toLowerCase();
   if (k === 'a' || k === 'arrowleft') mask |= BTN_LEFT;
   if (k === 'd' || k === 'arrowright') mask |= BTN_RIGHT;
@@ -368,9 +472,19 @@ $('play').addEventListener('change', () => {
 });
 
 // ------------------------------------------------------------------ toolbar
-$('layout').addEventListener('change', () => { layout = $('layout').value; load(); refreshPanel(); });
-$('count').addEventListener('change', () => { count = Number($('count').value); load(); refreshPanel(); });
-$('reset').addEventListener('click', () => { load(); refreshPanel(); });
+$('lib').addEventListener('change', loadSelection);
+$('save').addEventListener('click', save);
+$('del').addEventListener('click', remove);
+$('theme').addEventListener('change', () => setTheme($('theme').value));
+$('name').addEventListener('input', refreshPanel);
+$('addBoard').addEventListener('click', () => {
+  if (plats.filter(isBoard).length >= 5) { status('5 boards is the maximum', true); return; }
+  const b = { id: 'ansX', x: 960 - 156, y: tierY(3), w: 312, h: ANSWER_H, oneWay: true, signStyle: 'plaque' };
+  plats.push(b);
+  selected = b;
+  renumber();
+  refreshPanel();
+});
 $('addRung').addEventListener('click', () => {
   let n = 0;
   while (plats.some((p) => p.id === `perch${n}`)) n++;
@@ -395,9 +509,8 @@ function frame() {
   draw();
 }
 
-void signBelowExtent; void ISLAND_Y; void PHYS; void answerId;
-load();
-refreshPanel();
+await refreshLibrary();
+loadSelection();
 frame();
 </script>
 </body>
