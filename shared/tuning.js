@@ -120,6 +120,9 @@ export const FX = {
   // collision box never changes — and one flag because the pieces are tuned
   // as a set: squash without lean reads as glitch, not character.
   avatarAnim: true,
+  // Pentatonic landing notes on the display's speakers (M mutes live,
+  // N cycles the voicing). See client/display/audio.js.
+  sound: true,
 };
 
 /**

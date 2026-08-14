@@ -28,6 +28,7 @@ import { PHASE, answerWindow, createGame, currentQuestion, respawnAll, skip, sta
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
 import { setRound, setTheme } from './themes.js';
+import { cycleVoice, tickAudio, toggleMuted, unlockAudio } from './audio.js';
 import { drawConfetti } from './fx.js';
 import { drawRoundOverlay } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
@@ -70,6 +71,15 @@ let qr = null;
 
 const hud = { detail: false, note: '' };
 const tune = { on: false, index: 0 };
+
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let noteTimer;
+/** A transient HUD message that clears itself. @param {string} text */
+function note(text) {
+  hud.note = text;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => (hud.note = ''), 2200);
+}
 
 // The local keyboard player. Server ids start at 1, so 0 is always free.
 // Being able to drive an avatar from the host keyboard makes it possible to
@@ -373,6 +383,9 @@ function frame(now) {
   if (showdown?.phase === SD_PHASE.DONE) endShowdown();
   lastSteps = steps;
 
+  // Landing notes ride the same frame as the landing squash.
+  tickAudio(world);
+
   if (game.phase !== lastPhase) {
     if (game.phase === PHASE.REVEAL) {
       for (const r of game.results) {
@@ -470,9 +483,21 @@ function frame(now) {
 function onKey(e, down) {
   const k = e.key.toLowerCase();
 
+  // Any key is the user gesture that lets the browser start audio — the
+  // host's very first Enter unlocks the speakers as a side effect.
+  if (down) unlockAudio();
+
   if (down && !e.repeat) {
     if (k === 'h') {
       hud.detail = !hud.detail;
+      return;
+    }
+    if (k === 'm') {
+      note(toggleMuted() ? 'sound muted — M to unmute' : 'sound on');
+      return;
+    }
+    if (k === 'n') {
+      note(`landing notes: ${cycleVoice()}`);
       return;
     }
     if (k === 't') {
@@ -556,6 +581,7 @@ function onKey(e, down) {
 
 addEventListener('keydown', (e) => onKey(e, true));
 addEventListener('keyup', (e) => onKey(e, false));
+addEventListener('pointerdown', unlockAudio);
 // A window that loses focus must release, or the avatar runs forever.
 addEventListener('blur', () => {
   localMask = 0;
