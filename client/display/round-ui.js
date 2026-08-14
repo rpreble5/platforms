@@ -211,7 +211,7 @@ function drawMenu(cx, menu, playerCount) {
 
   cx.font = `500 20px ${FONT.ui}`;
   cx.fillStyle = UI.dim;
-  cx.fillText('↑↓ select · ←→ change · Enter go · or drive it from the host page', x0 + 40, 64 + h - 28);
+  cx.fillText('↑↓ select · ←→ change · Enter go · H latency HUD · or drive it from the host page', x0 + 40, 64 + h - 28);
 }
 
 /**

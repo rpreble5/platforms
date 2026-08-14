@@ -9,6 +9,7 @@
  */
 
 import { STEP_HZ } from '../../shared/tuning.js';
+import { artState } from './art.js';
 import { percentile, recent } from './input-bus.js';
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -21,7 +22,7 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
  * @property {number[]} frameSamples
  * @property {number} steps last frame's sim step count
  * @property {number} players
- * @property {boolean} detail
+ * @property {number} mode 0 hidden · 1 panel · 2 panel + per-player detail
  * @property {string} note
  */
 
@@ -30,6 +31,14 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
  * @param {HudModel} m
  */
 export function drawHud(cx, m) {
+  // Hidden is the default: this is a dev/tuning tool, and a party screen
+  // shouldn't boot looking like a network dashboard. Notes still surface —
+  // pause, mute and voicing feedback must not depend on the HUD being open.
+  if (m.mode === 0) {
+    if (m.note) drawNotePill(cx, m.note);
+    return;
+  }
+
   const frameP50 = percentile(m.frameSamples, 0.5);
   const frameP95 = percentile(m.frameSamples, 0.95);
   // Both windows are time-bounded, so these describe the last few seconds
@@ -50,6 +59,9 @@ export function drawHud(cx, m) {
   }
 
   const rows = [
+    ...(artState.missing.length
+      ? [['procedural', artState.missing.join(', ')]]
+      : []),
     ['players', String(m.players)],
     ['msg/s', m.bus.msgsPerSec.toFixed(0)],
     ['air rtt p50', airP50.length ? `${median(airP50).toFixed(0)} ms` : '—'],
@@ -71,7 +83,7 @@ export function drawHud(cx, m) {
   cx.fillStyle = '#7fd8a8';
   cx.fillText('LATENCY', 40, top + 26);
   cx.fillStyle = '#5a6478';
-  cx.fillText('H detail · T tune · F flash', 128, top + 26);
+  cx.fillText(`H ${m.mode === 1 ? 'detail' : 'hide'} · T tune · F flash`, 128, top + 26);
 
   cx.font = `500 15px ${MONO}`;
   let y = top + 52;
@@ -91,7 +103,21 @@ export function drawHud(cx, m) {
     cx.fillText(m.note, 40, y + 4);
   }
 
-  if (m.detail) drawPerPlayer(cx, m);
+  if (m.mode === 2) drawPerPlayer(cx, m);
+}
+
+/**
+ * The HUD-less note: a small self-sizing pill in the HUD's spot, so "PAUSED"
+ * and the mute/voicing confirmations read even with the dashboard hidden.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {string} text
+ */
+function drawNotePill(cx, text) {
+  cx.font = `600 15px ${MONO}`;
+  const w = cx.measureText(text).width + 36;
+  panel(cx, 24, 170, w, 40);
+  cx.fillStyle = '#ffd93d';
+  cx.fillText(text, 42, 195);
 }
 
 /**

@@ -336,10 +336,11 @@ Optimise p99 and never-drop-an-input.
 
 ## Measuring it properly
 
-**The HUD** (top-left) shows what software can see: air RTT p50/p95 reported by
-each phone, loss, relay delay, queue→tick delay, and frame time. Watch frame
-p95 — above ~20 ms you're dropping frames and your *renderer*, not your network,
-is the latency problem.
+**The HUD** (top-left, hidden by default — press **H** to cycle hidden →
+panel → panel + per-player detail) shows what software can see: air RTT
+p50/p95 reported by each phone, loss, relay delay, queue→tick delay, and frame
+time. Watch frame p95 — above ~20 ms you're dropping frames and your
+*renderer*, not your network, is the latency problem.
 
 **The flash test** is the only measurement that includes touch sampling and the
 TV, i.e. the terms that dominate:

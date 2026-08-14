@@ -69,7 +69,10 @@ let joinUrl = '';
 /** @type {{size:number, modules:Uint8Array[]} | null} */
 let qr = null;
 
-const hud = { detail: false, note: '' };
+// The latency HUD is a dev/tuning tool, hidden by default — H cycles
+// hidden → panel → panel + per-player detail. Transient notes (pause, mute,
+// voicing) draw their own pill even while the HUD is hidden.
+const hud = { mode: 0, note: '' };
 const tune = { on: false, index: 0 };
 
 /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -419,7 +422,7 @@ function frame(now) {
     frameSamples,
     steps: lastSteps,
     players: world.players.size,
-    detail: hud.detail,
+    mode: hud.mode,
     note: hud.note,
   });
   if (tune.on) drawTuner(cx);
@@ -489,7 +492,7 @@ function onKey(e, down) {
 
   if (down && !e.repeat) {
     if (k === 'h') {
-      hud.detail = !hud.detail;
+      hud.mode = (hud.mode + 1) % 3;
       return;
     }
     if (k === 'm') {
@@ -649,9 +652,9 @@ async function init() {
       .then(() => document.fonts.ready)
       .catch(() => undefined),
   ]);
-  if (artResult.missing.length) {
-    hud.note = `drawing ${artResult.missing.join(', ')} procedurally — see docs/ART-SPEC.md`;
-  }
+  // Missing art is reported inside the latency HUD (press H), not as a
+  // standing on-screen note: the game is fully procedural by design, so on a
+  // party screen this is dev information, not a warning.
 
   addPlayer(world, LOCAL_ID);
   roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', finish: 'flat', connected: true });
