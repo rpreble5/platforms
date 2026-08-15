@@ -33,6 +33,13 @@ export const PHASE = /** @type {const} */ ({
 
 export const BASE_POINTS = 1000;
 export const MAX_SPEED_BONUS = 500;
+/**
+ * Paid to every covering member of a team that puts someone on EVERY correct
+ * platform of a select-all question (teams mode only). Sized against
+ * BASE_POINTS so coordination matters but a fast solo answer still beats a
+ * sloppy covered one.
+ */
+export const TEAM_COVER_BONUS = 500;
 
 /** Question slides in and platforms rise. Inputs stay live throughout. */
 export const INTRO_MS = 3000;
@@ -73,7 +80,9 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {string} text
  * @property {'range'} [type]
  * @property {string[]} [answers]
- * @property {number} [correct]
+ * @property {number | number[]} [correct] one index, or several for
+ *   select-all-that-apply (any correct platform scores; in teams mode a
+ *   cohort covering all of them earns TEAM_COVER_BONUS)
  * @property {import('./levels.js').Layout} [layout] choice arenas only; islands if absent
  * @property {string} [level] pin a designed level from the pool by name;
  *   ignored if its answer count doesn't match this question's
@@ -111,6 +120,13 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {boolean} paused
  * @property {import('./levels.js').LevelSpec[]} levelPool designed levels; a
  *   choice question uses one whose board count matches, rotating by qIndex
+ * @property {'solo'|'teams'} mode teams = cohort play: select-all questions
+ *   pay a coverage bonus when a year covers every correct platform
+ * @property {(id: number) => number} cohortOf team index for a player, or -1
+ *   to exclude (keyboard player, anyone who never picked a year); supplied by
+ *   the display, so the sim never knows about rosters
+ * @property {Map<number, boolean>} coverage per-team full-coverage verdicts
+ *   from the round just scored (empty outside teams-mode select-all rounds)
  */
 
 /**
@@ -133,6 +149,9 @@ export function createGame(questions, answerMs = 12000) {
     atBuzzer: new Map(),
     paused: false,
     levelPool: [],
+    mode: /** @type {'solo'|'teams'} */ ('solo'),
+    cohortOf: () => -1,
+    coverage: new Map(),
   };
 }
 
@@ -147,15 +166,31 @@ export function answerWindow(g) {
 }
 
 /**
- * The platform that counts as the correct answer — a signboard for multiple
- * choice, the floor band for a range. Everything that scores goes through
- * this, so neither the arrivals recorder nor the buzzer snapshot knows which
- * kind of round it is in.
+ * Every correct answer index for a choice question. `correct` is a single
+ * index for a normal question or an array for select-all-that-apply; this is
+ * the one place that difference is absorbed.
  * @param {Question} q
- * @returns {string}
+ * @returns {number[]}
  */
-export function targetId(q) {
-  return q.type === 'range' ? RANGE_ID : answerId(q.correct ?? 0);
+export function correctIndexes(q) {
+  return Array.isArray(q.correct) ? q.correct : [q.correct ?? 0];
+}
+
+/** @param {Question} q @returns {boolean} more than one platform is right */
+export function isMulti(q) {
+  return q.type !== 'range' && correctIndexes(q).length > 1;
+}
+
+/**
+ * The platforms that count as correct — the floor band for a range, one or
+ * several signboards for choice. Everything that scores goes through this,
+ * so neither the arrivals recorder nor the buzzer snapshot knows which kind
+ * of round it is in, or how many right answers it has.
+ * @param {Question} q
+ * @returns {Set<string>}
+ */
+export function targetIds(q) {
+  return q.type === 'range' ? new Set([RANGE_ID]) : new Set(correctIndexes(q).map(answerId));
 }
 
 /**
@@ -267,11 +302,11 @@ function enter(g, world, phase) {
     // with the ground they chose to stand on.
     const q = currentQuestion(g);
     if (q) {
-      const keep = targetId(q);
+      const keep = targetIds(q);
       const doomed = world.platforms.filter((p) =>
         q.type === 'range'
           ? p.id === 'floorL' || p.id === 'floorR'
-          : p.id?.startsWith('ans') && p.id !== keep
+          : p.id?.startsWith('ans') && !keep.has(p.id)
       );
       world.platforms = world.platforms.filter((p) => !doomed.includes(p));
       g.debris = doomed;
@@ -397,10 +432,11 @@ export function respawnAll(world) {
 function recordArrivals(g, world, offset = 0) {
   const q = currentQuestion(g);
   if (!q) return;
-  const target = targetId(q);
+  const targets = targetIds(q);
   for (const p of world.players.values()) {
     if (g.arrivals.has(p.id)) continue;
-    if (p.standingOn?.id === target) g.arrivals.set(p.id, offset + g.phaseT);
+    const id = p.standingOn?.id;
+    if (id && targets.has(id)) g.arrivals.set(p.id, offset + g.phaseT);
   }
 }
 
@@ -411,8 +447,12 @@ function recordArrivals(g, world, offset = 0) {
 function score(g, world) {
   const q = currentQuestion(g);
   if (!q) return;
-  const target = targetId(q);
+  const targets = targetIds(q);
   const window = answerWindow(g);
+
+  /** where each player's answer counts: buzzer spot, else the settle spot */
+  const spotOf = (/** @type {import('./player.js').Player} */ p) =>
+    g.atBuzzer.get(p.id) ?? (p.standingOn ?? p.lastStoodOn)?.id;
 
   /** @type {Result[]} */
   const results = [];
@@ -422,7 +462,9 @@ function score(g, world) {
     // dead after the buzzer, so there's nothing to game, and every way of
     // losing credit through no fault of your own is closed off.
     const settled = (p.standingOn ?? p.lastStoodOn)?.id;
-    const onTarget = g.atBuzzer.get(p.id) === target || settled === target;
+    const buzzer = g.atBuzzer.get(p.id);
+    const onTarget =
+      (buzzer != null && targets.has(buzzer)) || (settled != null && targets.has(settled));
     if (!onTarget) {
       results.push({ id: p.id, correct: false, points: 0, rank: 0, arrivalMs: Infinity });
       continue;
@@ -435,6 +477,35 @@ function score(g, world) {
       rank: 0,
       arrivalMs,
     });
+  }
+
+  // Team coverage, the whole point of a select-all round in teams mode: a
+  // team whose members stand on EVERY correct platform at the buzzer earns
+  // the bonus — paid to its members who were part of the coverage, so
+  // standing on the floor cheering contributes nothing. Coverage is judged
+  // with the same buzzer-or-settle union as individual credit.
+  g.coverage = new Map();
+  if (g.mode === 'teams' && isMulti(q)) {
+    /** @type {Map<number, Set<string>>} team -> covered platform ids */
+    const covered = new Map();
+    for (const p of world.players.values()) {
+      const team = g.cohortOf(p.id);
+      if (team < 0) continue;
+      const spot = spotOf(p);
+      if (spot != null && targets.has(spot)) {
+        let set = covered.get(team);
+        if (!set) covered.set(team, (set = new Set()));
+        set.add(spot);
+      }
+    }
+    for (const [team, spots] of covered) {
+      const full = spots.size === targets.size;
+      g.coverage.set(team, full);
+      if (!full) continue;
+      for (const r of results) {
+        if (r.correct && g.cohortOf(r.id) === team) r.points += TEAM_COVER_BONUS;
+      }
+    }
   }
 
   // Rank is display only — it never feeds the maths, precisely so that a

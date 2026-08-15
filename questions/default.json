@@ -84,6 +84,16 @@
       "answers": ["Malleus", "Incus", "Stapes", "Coccyx"],
       "correct": 3,
       "layout": "reverse-pyramid"
+    },
+    {
+      "text": "Select every gas giant",
+      "answers": ["Jupiter", "Mars", "Saturn", "Venus", "Neptune", "Mercury"],
+      "correct": [0, 2, 4]
+    },
+    {
+      "text": "Which of these are first-line for hypertension?",
+      "answers": ["Lisinopril", "Hydralazine", "Amlodipine", "Clonidine"],
+      "correct": [0, 2]
     }
   ]
 }

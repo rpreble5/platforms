@@ -193,7 +193,8 @@ function render() {
       alist.replaceChildren(...qz.answers.map((a, i) => {
         const li = document.createElement('li');
         li.textContent = a;
-        if (i === qz.correct) li.className = 'correct';
+        const rights = Array.isArray(qz.correct) ? qz.correct : [qz.correct];
+        if (rights.includes(i)) li.className = 'correct';
         return li;
       }));
       alist.hidden = false;

@@ -12,7 +12,7 @@
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
-import { PHASE, answerWindow, currentQuestion, standings, teamStandings } from '../../sim/round.js';
+import { PHASE, answerWindow, currentQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
@@ -40,10 +40,11 @@ export function drawSigns(cx, world, g) {
     return;
   }
 
+  const keep = q ? targetIds(q) : new Set();
   for (const p of world.platforms) {
     if (!p.id?.startsWith('ans')) continue;
     const i = Number(p.id.slice(3));
-    const state = revealing && q && i === q.correct ? 'correct' : 'idle';
+    const state = revealing && q && keep.has(p.id) ? 'correct' : 'idle';
     drawSign(cx, p, { state });
     if (q) drawSignText(cx, p, q.answers?.[i] ?? '', { state });
   }
@@ -96,8 +97,9 @@ function fallOffset(t) {
  * @property {number} packIndex
  * @property {number} sel
  * @property {boolean} loading
- * @property {Array<'pack'|'time'|'quiz'|'showdown'>} items
+ * @property {Array<'pack'|'time'|'mode'|'quiz'|'showdown'>} items
  * @property {number} answerMs
+ * @property {'solo'|'teams'} mode
  */
 
 /**
@@ -145,7 +147,7 @@ function drawMenu(cx, menu, playerCount) {
   const rowH = 66;
   const dividerGap = 26;
   const w = 880;
-  const settings = menu.items.filter((it) => it === 'pack' || it === 'time').length;
+  const settings = menu.items.filter((it) => it === 'pack' || it === 'time' || it === 'mode').length;
   const h = 172 + menu.items.length * rowH + (settings ? dividerGap : 0) + 28;
   // Right of the latency HUD's column, left of the QR: the one strip of sky
   // nothing else claims.
@@ -166,7 +168,7 @@ function drawMenu(cx, menu, playerCount) {
     x0 + 44, y0 + 124
   );
 
-  /** @param {'pack'|'time'|'quiz'|'showdown'} item @returns {[string, string]} */
+  /** @param {'pack'|'time'|'mode'|'quiz'|'showdown'} item @returns {[string, string]} */
   const rowText = (item) => {
     switch (item) {
       case 'pack':
@@ -180,6 +182,8 @@ function drawMenu(cx, menu, playerCount) {
         ];
       case 'time':
         return ['Answer time', `◂ ${Math.round(menu.answerMs / 1000)}s ▸`];
+      case 'mode':
+        return ['Teams', `◂ ${menu.mode === 'teams' ? 'PGY years' : 'off — solo play'} ▸`];
       case 'quiz':
         return ['Start quiz', ''];
       case 'showdown':
@@ -298,11 +302,24 @@ function drawQuestion(cx, g) {
     cx.fillText(String(Math.ceil(secsLeft)), WORLD_W - 40, 98);
   }
 
+  // A select-all round says so out loud, or half the room hunts for THE
+  // answer and blames the game. In teams mode it also states the job.
+  const multiTag = isMulti(q)
+    ? g.mode === 'teams'
+      ? 'SELECT ALL THAT APPLY — your year must cover every correct answer'
+      : 'SELECT ALL THAT APPLY — any correct answer scores'
+    : null;
+
   if (g.phase === PHASE.INTRO) {
     cx.textAlign = 'center';
     cx.font = `700 26px ${FONT.ui}`;
     cx.fillStyle = UI.dim;
     cx.fillText('get ready…', WORLD_W / 2, 128);
+  } else if (multiTag && g.phase === PHASE.ANSWER) {
+    cx.textAlign = 'center';
+    cx.font = `800 24px ${FONT.display}`;
+    cx.fillStyle = UI.gold;
+    cx.fillText(multiTag, WORLD_W / 2, 128);
   }
 
   // Say it out loud, or the settle reads as the game having hung.

@@ -45,8 +45,12 @@ test('sanitizeLevelSpec rejects non-levels', () => {
   assert.equal(sanitizeLevelSpec('hi'), null);
   assert.equal(sanitizeLevelSpec({ boards: [[1, 1, 1], [2, 2, 2]] }), null, 'no name');
   assert.equal(sanitizeLevelSpec({ name: 'one board', boards: [[500, 3, 300]] }), null);
-  assert.equal(
+  assert.ok(
     sanitizeLevelSpec({ name: 'six', boards: Array.from({ length: 6 }, (_, i) => [i * 300, 3, 200]) }),
+    'six boards is legal — select-all rounds use them'
+  );
+  assert.equal(
+    sanitizeLevelSpec({ name: 'seven', boards: Array.from({ length: 7 }, (_, i) => [i * 260, 3, 200]) }),
     null
   );
 });

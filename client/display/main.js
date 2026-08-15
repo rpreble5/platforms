@@ -21,6 +21,7 @@ import {
   TWEAKABLE,
 } from '../../shared/tuning.js';
 import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJson } from '../../shared/protocol.js';
+import { clampCohort } from '../../shared/palette.js';
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
@@ -252,21 +253,39 @@ const menu = {
   /** @type {Array<{file:string, name:string, questions:number, showdown:boolean}>} */
   packs: [],
   packIndex: 0,
-  // The cursor starts on "Start quiz" (row 2), so a plain Enter in the lobby
+  // The cursor starts on "Start quiz" (row 3), so a plain Enter in the lobby
   // still does what it has always done — including for the smoke test.
-  sel: 2,
+  sel: 3,
   loading: false,
+  /** @type {'solo'|'teams'} */
+  mode: 'solo',
 };
 
 /** Menu rows, in display order. Showdown appears only when the pack has one. */
 function menuItems() {
-  /** @type {Array<'pack'|'time'|'quiz'|'showdown'>} */
-  const items = ['pack', 'time', 'quiz'];
+  /** @type {Array<'pack'|'time'|'mode'|'quiz'|'showdown'>} */
+  const items = ['pack', 'time', 'mode', 'quiz'];
   if (showdownSpec) items.push('showdown');
   // Switching to a pack without a showdown can strand the cursor one row past
   // the end; pull it back rather than crash the key handler.
   if (menu.sel >= items.length) menu.sel = items.length - 1;
   return items;
+}
+
+/**
+ * Team index for the sim's scoring: the player's committed training year.
+ * Uncommitted players (and the keyboard avatar) are -1 — never on a team.
+ * @param {number} id
+ */
+function cohortOf(id) {
+  const look = roster.get(id);
+  return look?.cohortSet ? clampCohort(look.cohortIndex ?? -1) : -1;
+}
+
+/** Push the menu's mode choice (and the team lookup) onto the live game. */
+function applyMode() {
+  game.mode = menu.mode;
+  game.cohortOf = cohortOf;
 }
 
 function menuOpen() {
@@ -288,6 +307,7 @@ async function selectPack(index) {
     if (pack?.questions?.length) {
       game = createGame(pack.questions, pack.answerMs);
       game.levelPool = levelPool;
+      applyMode();
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
       setTheme(pack.theme);
       hud.note = '';
@@ -312,16 +332,22 @@ function cycleTime(dir) {
   lastCheckpoint = 0;
 }
 
-/** @param {'pack'|'time'|'quiz'|'showdown'} item @param {number} dir */
+/** @param {'pack'|'time'|'mode'|'quiz'|'showdown'} item @param {number} dir */
 function menuAdjust(item, dir) {
   if (item === 'pack') void selectPack(menu.packIndex + dir);
   else if (item === 'time') cycleTime(dir);
+  else if (item === 'mode') {
+    menu.mode = menu.mode === 'teams' ? 'solo' : 'teams';
+    applyMode();
+  }
 }
 
-/** @param {'pack'|'time'|'quiz'|'showdown'} item */
+/** @param {'pack'|'time'|'mode'|'quiz'|'showdown'} item */
 function menuActivate(item) {
-  if (item === 'quiz') startGame(game, world);
-  else if (item === 'showdown') startShowdown();
+  if (item === 'quiz') {
+    applyMode();
+    startGame(game, world);
+  } else if (item === 'showdown') startShowdown();
   else menuAdjust(item, 1);
 }
 
@@ -687,6 +713,7 @@ async function init() {
     const pack = await fetch('/api/questions').then((r) => r.json());
     if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
     else hud.note = 'no questions loaded — check questions/default.json';
+    applyMode();
     await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
     setTheme(pack?.theme);

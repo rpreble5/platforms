@@ -22,7 +22,7 @@
 
 import { FX } from '../../shared/tuning.js';
 import { COLORS } from '../../shared/palette.js';
-import { PHASE, currentQuestion, targetId } from '../../sim/round.js';
+import { PHASE, currentQuestion, targetIds } from '../../sim/round.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
 /** @typedef {import('../../sim/round.js').Game} Game */
@@ -101,8 +101,12 @@ export function drawConfetti(cx, game, world) {
     revealSeen = game.qIndex;
     const q = currentQuestion(game);
     if (q && game.results.some((r) => r.correct)) {
-      const plat = world.platforms.find((pl) => pl.id === targetId(q));
-      if (plat) burstConfetti(plat);
+      // Every correct platform gets its burst — a select-all reveal
+      // celebrates the whole covered set.
+      const keep = targetIds(q);
+      for (const plat of world.platforms) {
+        if (plat.id && keep.has(plat.id)) burstConfetti(plat);
+      }
     }
   }
   if (game.phase !== PHASE.REVEAL && game.phase !== PHASE.SCORE) revealSeen = -1;

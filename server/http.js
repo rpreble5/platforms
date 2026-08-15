@@ -358,8 +358,8 @@ export function loadQuestions(root, packFile = 'default.json') {
       problems.push(`${where}: missing text or answers — skipped`);
       return false;
     }
-    if (q.answers.length < 2 || q.answers.length > 5) {
-      problems.push(`${where}: ${q.answers.length} answers, must be 2-5 — skipped`);
+    if (q.answers.length < 2 || q.answers.length > 6) {
+      problems.push(`${where}: ${q.answers.length} answers, must be 2-6 — skipped`);
       return false;
     }
     if (
@@ -369,7 +369,19 @@ export function loadQuestions(root, packFile = 'default.json') {
       problems.push(`${where}: unknown layout "${q.layout}" — using islands`);
       delete q.layout;
     }
-    if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.answers.length) {
+    // `correct` is one index, or an array for select-all-that-apply: at
+    // least two right (else it's a normal question) and at least one wrong
+    // (else the round has no stakes).
+    if (Array.isArray(q.correct)) {
+      const inRange = q.correct.every(
+        (/** @type {any} */ c) => Number.isInteger(c) && c >= 0 && c < q.answers.length
+      );
+      const distinct = new Set(q.correct).size === q.correct.length;
+      if (!inRange || !distinct || q.correct.length < 2 || q.correct.length >= q.answers.length) {
+        problems.push(`${where}: select-all "correct" needs 2+ distinct in-range indexes and at least one wrong answer — skipped`);
+        return false;
+      }
+    } else if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.answers.length) {
       problems.push(`${where}: "correct" is out of range — skipped`);
       return false;
     }

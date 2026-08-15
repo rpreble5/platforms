@@ -307,7 +307,7 @@ function violations() {
   const solid = plats;
 
   const nBoards = plats.filter(isBoard).length;
-  if (nBoards < 2 || nBoards > 5) msgs.push(`${nBoards} boards — a level needs 2-5 answers`);
+  if (nBoards < 2 || nBoards > 6) msgs.push(`${nBoards} boards — a level needs 2-6 answers`);
 
   // reachability: climb (one tier up, gap<=120) or flat hop (gap<=150)
   const reached = new Set(['floor']);
@@ -478,7 +478,7 @@ $('del').addEventListener('click', remove);
 $('theme').addEventListener('change', () => setTheme($('theme').value));
 $('name').addEventListener('input', refreshPanel);
 $('addBoard').addEventListener('click', () => {
-  if (plats.filter(isBoard).length >= 5) { status('5 boards is the maximum', true); return; }
+  if (plats.filter(isBoard).length >= 6) { status('6 boards is the maximum', true); return; }
   const b = { id: 'ansX', x: 960 - 156, y: tierY(3), w: 312, h: ANSWER_H, oneWay: true, signStyle: 'plaque' };
   plats.push(b);
   selected = b;

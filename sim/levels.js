@@ -187,6 +187,10 @@ export function tierY(t) {
  * @returns {Platform[]}
  */
 export function buildArena(n, layout = 'islands') {
+  // The hand-placed tables stop at 5. A six-answer round (select-all) falls
+  // back to the formulaic row — or, better, to a designed 6-board level via
+  // the level pool, which is checked before this ever runs.
+  if (n > 5) return buildRowArena(n);
   if (layout === 'row') return buildRowArena(n);
   if (layout === 'pyramid' || layout === 'reverse-pyramid') {
     return buildTieredArena(n, layout);
@@ -202,7 +206,7 @@ export function buildArena(n, layout = 'islands') {
  * @returns {Platform[]}
  */
 export function buildRowArena(n) {
-  const count = Math.max(2, Math.min(5, n));
+  const count = Math.max(2, Math.min(6, n));
 
   /** @type {Platform[]} */
   const platforms = [
@@ -460,7 +464,7 @@ export function sanitizeLevelSpec(raw) {
   };
 
   const boards = (Array.isArray(raw.boards) ? raw.boards : []).map(triple).filter(Boolean);
-  if (boards.length < 2 || boards.length > 5) return null;
+  if (boards.length < 2 || boards.length > 6) return null;
   const rungs = (Array.isArray(raw.rungs) ? raw.rungs : []).map(triple).filter(Boolean).slice(0, 32);
   return { name, boards: /** @type {any} */ (boards), rungs: /** @type {any} */ (rungs) };
 }
