@@ -462,7 +462,7 @@ function drawFinal(cx, g, roster) {
   cx.fillText('Final scores', WORLD_W / 2, y + 78);
   cx.font = `600 24px ${FONT.ui}`;
   cx.fillStyle = UI.faint;
-  cx.fillText('press R to play again', WORLD_W / 2, y + 114);
+  cx.fillText('R  play again        Q  main menu', WORLD_W / 2, y + 114);
 
   // The year rivalry gets the top slot on the final board — it's the thing
   // the whole room shares, where individual rank belongs to one person.

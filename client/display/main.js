@@ -221,6 +221,9 @@ function onJson(msg) {
           if (showdown) endShowdown();
           else startGame(game, world);
           break;
+        case 'menu':
+          toMenu();
+          break;
         case 'showdown':
           if (!showdown && (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER)) {
             startShowdown();
@@ -379,6 +382,31 @@ function endShowdown() {
   respawnAll(world);
   game.phase = PHASE.LOBBY;
   game.phaseT = 0;
+}
+
+/**
+ * Back to the lobby menu, from a finished game or an abandoned one.
+ *
+ * The final screen used to offer only "play again", which replays the same
+ * pack with the same settings — so switching pack, answer time or teams meant
+ * restarting the server. This is the way out: a fresh Game over the same deck,
+ * with the pack/time/mode settings the host already chose left intact.
+ *
+ * Scores go. That is the point — this is a new game, not a pause — and the
+ * board is still on screen when the host presses it.
+ */
+function toMenu() {
+  if (showdown) {
+    endShowdown();
+    return;
+  }
+  game = createGame(game.questions, game.answerMs);
+  game.levelPool = levelPool;
+  applyMode();
+  world.platforms = buildArena(4);
+  respawnAll(world);
+  menu.sel = Math.max(0, menuItems().indexOf('quiz'));
+  lastCheckpoint = 0;
 }
 
 /**
@@ -597,6 +625,13 @@ function onKey(e, down) {
     if (k === 'r') {
       if (showdown) endShowdown();
       else startGame(game, world);
+      return;
+    }
+    // Q for the menu. Deliberately live outside the lobby too, not just at
+    // GAME_OVER: "wrong pack" is realised mid-round, and R (restart) is
+    // already an equally big button on the same keyboard.
+    if (k === 'q' && (showdown || game.phase !== PHASE.LOBBY)) {
+      toMenu();
       return;
     }
     if (k === 's' && !showdown && (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER)) {
