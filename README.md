@@ -558,9 +558,9 @@ come from JSDoc + `checkJs`, so the dev loop is save-and-refresh.
   secure context and `wakeLock` is unavailable. The fallback is a silent looping
   video; `nosleep.webm` is committed and covers Android, but iOS Safari won't
   play VP8 and needs an MP4 — run `bash tools/make-nosleep.sh` (needs a real
-  ffmpeg) to build it. Until then iPhones rely on the "Auto-Lock: Never"
-  instruction on the join screen. In practice sleep is only a risk during the
-  lobby; players tap constantly during a round.
+  ffmpeg) to build it. Until then iPhones rely on the host's 30-second player
+  briefing ("Set Auto-Lock to Never" — see `docs/venue-check.md`). In practice
+  sleep is only a risk during the lobby; players tap constantly during a round.
 - **No haptics on iOS.** `navigator.vibrate` doesn't exist in Safari, so the
   visual press feedback carries the whole job there.
 - **Player cap is 40**, with the longest-gone disconnected slot reclaimed when

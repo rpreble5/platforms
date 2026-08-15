@@ -194,7 +194,6 @@
     font:800 19px/1 inherit; color:#0b0d12; background:#3ddc9a;
   }
   #go[disabled] { background:#2b3446; color:#6c7789; }
-  #setupNote { text-align:center; margin-top:14px; font-size:12px; color:#6c7789; }
 </style>
 </head>
 <body>
@@ -253,7 +252,6 @@
       <button id="back">Back</button>
       <button id="go" disabled>Connecting…</button>
     </div>
-    <p id="setupNote">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
   </div>
 </div>
 
@@ -667,7 +665,8 @@
   // The phone page is plain HTTP so it is NOT a secure context and wakeLock is
   // unavailable. We try it anyway (it works from localhost, and if this is ever
   // served over HTTPS), then fall back to the silent-looping-video hack if the
-  // asset has been generated. Neither is guaranteed, hence the instruction.
+  // asset has been generated. Neither is guaranteed; when both miss, the host's
+  // player briefing covers it (docs/venue-check.md).
   var wakeLock = null;
   function keepAwake() {
     if (navigator.wakeLock && navigator.wakeLock.request) {
@@ -681,9 +680,9 @@
   }
   // iOS Safari needs the mp4 (it will not play VP8); Android Chrome takes
   // either. The mp4 is not committed because it needs a real ffmpeg to build —
-  // run tools/make-nosleep.sh. Without it, iPhones fall back to the printed
-  // "Auto-Lock: Never" instruction, which is why that instruction is on the
-  // join overlay rather than buried in a README.
+  // run tools/make-nosleep.sh, which is the one fix that makes iPhones behave
+  // without anyone being told anything. Without it, "Auto-Lock: Never" is a
+  // line in the host's player briefing, not clutter on the setup card.
   function videoFallback() {
     var v = $('nosleep');
     if (v.dataset.tried) return;
