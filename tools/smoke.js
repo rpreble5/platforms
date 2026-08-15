@@ -242,36 +242,44 @@ const ACC = 10; // propeller cap
 
 await phonePage.fill('#nameIn', 'Bosco');
 
-// The year gates the button, because it is the one field with no sensible
-// default — nobody should end up in a cohort they did not choose.
-assert(await phonePage.locator('#go').isDisabled(), 'the button waits for a year to be picked');
+// The setup is a 4-step wizard now: name+year, colour, extra, style. The
+// year gates the very first Next, because it is the one field with no
+// sensible default — nobody should end up in a cohort they did not choose.
+assert(await phonePage.locator('#go').isDisabled(), 'Next waits for a year to be picked');
 await phonePage.locator(`.yr[data-i="${YEAR}"]`).click();
-assert(!(await phonePage.locator('#go').isDisabled()), 'picking a year enables the button');
+assert(!(await phonePage.locator('#go').isDisabled()), 'picking a year enables Next');
 
-// The finish row offers exactly the two renderings.
-assert(
-  (await phonePage.locator('#finishes .fin').count()) === 2,
-  'the finish row offers flat and pastel'
-);
-
-// The live preview repaints with each pick — same renderer as the display.
+// The live preview persists across steps and repaints with each pick — same
+// renderer as the display.
 const prevBefore = await phonePage
   .locator('#preview')
   .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
+
+await phonePage.locator('#go').click(); // -> colour
 await phonePage.locator(`.sw[data-i="${PICK}"]`).click();
-await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
-await phonePage.locator(`.ac[data-i="${ACC}"]`).click();
-const prevAfter = await phonePage
-  .locator('#preview')
-  .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
-assert(prevBefore !== prevAfter, 'the setup-card preview repainted with the chosen look');
 assert(
   await phonePage
     .locator(`.sw[data-i="${PICK}"]`)
     .evaluate((/** @type {Element} */ el) => el.classList.contains('sel')),
   'tapping a swatch selects that colour'
 );
-await phonePage.locator('#go').click();
+await phonePage.locator('#go').click(); // -> extra
+await phonePage.locator(`.ac[data-i="${ACC}"]`).click();
+await phonePage.locator('#go').click(); // -> style
+
+// The finish step offers exactly the two renderings.
+assert(
+  (await phonePage.locator('#finishes .fin').count()) === 2,
+  'the style step offers flat and pastel'
+);
+await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
+
+const prevAfter = await phonePage
+  .locator('#preview')
+  .evaluate((/** @type {HTMLCanvasElement} */ c) => c.toDataURL());
+assert(prevBefore !== prevAfter, 'the wizard preview repainted with the chosen look');
+
+await phonePage.locator('#go').click(); // I'm ready
 await phonePage.waitForSelector('#overlay', { state: 'hidden', timeout: 5000 });
 
 // The bar shows what the SERVER settled on, not what was typed, so this has to

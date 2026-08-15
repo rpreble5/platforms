@@ -96,19 +96,27 @@
   #nosleep { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 
   /* ---------------------------------------------------------------- setup */
+  /* One decision per screen: name+year, colour, extra, style. Nothing ever
+     scrolls — more taps, less thumb gymnastics. The live preview persists in
+     the header so the bean visibly assembles as the steps go by. */
   #setup { display:none; width:100%; max-width:380px; text-align:left; }
   #setup.on { display:block; }
-  #setup h1 { text-align:center; }
+
+  #setupHead { display:grid; grid-template-columns:96px 1fr; gap:14px; align-items:end; margin-bottom:4px; }
+  #setupHead h1 { text-align:left; font-size:24px; margin:0 0 10px; }
+  #dots { display:flex; gap:7px; margin-bottom:8px; }
+  #dots i { width:9px; height:9px; border-radius:50%; background:#232a38; }
+  #dots i.on { background:#3ddc9a; }
 
   /* The live preview: the real renderer, not a mock — the same drawBean the
-     projector uses. It shares a row with name + year so the card still fits
-     a phone screen without scrolling; bottom-aligned so a year change grows
-     the bean upward from its feet, exactly like the display does. */
-  #idRow { display:grid; grid-template-columns:112px 1fr; gap:14px; align-items:end; margin-top:2px; }
-  #idRow .lbl:first-child { margin-top:8px; }
-  #idRow .yr { font-size:14px; padding:13px 0; }
+     projector uses. Bottom-aligned so a year change grows the bean upward
+     from its feet, exactly like the display does. */
   #prevWrap { text-align:center; }
-  #preview { width:104px; height:150px; display:inline-block; }
+  #preview { width:92px; height:133px; display:inline-block; }
+
+  .step { display:none; margin-top:18px; }
+  .step.on { display:block; }
+  .step .lbl:first-child { margin-top:0; }
   #prevWrap.pop #preview { animation:hatch .28s ease-out; }
   @keyframes hatch {
     0% { transform:scale(.9) translateY(4px); }
@@ -136,7 +144,7 @@
   }
   .yr.sel { color:#0b0d12; background:#e8edf5; border-color:#fff; }
 
-  #swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  #swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
 
   /* Finish buttons preview the real thing in the player's own colour: the
      saturated flat and the washed pastel, side by side. Same information the
@@ -151,8 +159,9 @@
 
   /* Accessory tiles: a mini bean wearing each option, tinted live to the
      player's colour by the same shared renderer. Pure charm — nothing here
-     is contested, so nothing ever greys out. */
-  #accs { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+     is contested, so nothing ever greys out. Four columns now that the step
+     owns the whole screen — bigger targets, still no scroll. */
+  #accs { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
   .ac {
     aspect-ratio:0.92; border-radius:12px; background:#141822;
     border:3px solid transparent; display:grid; place-items:center;
@@ -171,10 +180,17 @@
   .sw.out { opacity:.22; }
   .sw .g { color:rgba(0,0,0,.7); font-weight:900; }
   .sw .n { position:absolute; bottom:3px; right:6px; font:700 10px/1 ui-monospace,monospace; color:rgba(0,0,0,.6); }
-  #go, .sw { touch-action:manipulation; }
+  #go, #back, .sw { touch-action:manipulation; }
 
+  #nav { display:grid; grid-template-columns:96px 1fr; gap:10px; margin-top:22px; }
+  #nav.first { grid-template-columns:1fr; }
+  #nav.first #back { display:none; }
+  #back {
+    padding:18px 0; border-radius:14px; border:0;
+    font:800 16px/1 inherit; color:#8792a6; background:#141822;
+  }
   #go {
-    width:100%; margin-top:22px; padding:18px; border-radius:14px; border:0;
+    width:100%; padding:18px; border-radius:14px; border:0;
     font:800 19px/1 inherit; color:#0b0d12; background:#3ddc9a;
   }
   #go[disabled] { background:#2b3446; color:#6c7789; }
@@ -208,26 +224,35 @@
   </div>
 
   <div id="setup">
-    <h1>Who are you?</h1>
-    <div id="idRow">
+    <div id="setupHead">
       <div id="prevWrap">
         <canvas id="preview" width="208" height="300"></canvas>
       </div>
       <div>
-        <div class="lbl">Your name</div>
-        <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
-               autocapitalize="words" spellcheck="false" enterkeyhint="done">
-        <div class="lbl">Your year</div>
-        <div id="years"></div>
+        <h1 id="stepTitle">Who are you?</h1>
+        <div id="dots"><i class="on"></i><i></i><i></i><i></i></div>
       </div>
     </div>
-    <div class="lbl">Your colour</div>
-    <div id="swatches"></div>
-    <div class="lbl">Your style</div>
-    <div id="finishes"></div>
-    <div class="lbl">Your extra</div>
-    <div id="accs"></div>
-    <button id="go" disabled>Connecting…</button>
+    <div class="step on" data-step="1">
+      <div class="lbl">Your name</div>
+      <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
+             autocapitalize="words" spellcheck="false" enterkeyhint="next">
+      <div class="lbl">Your year</div>
+      <div id="years"></div>
+    </div>
+    <div class="step" data-step="2">
+      <div id="swatches"></div>
+    </div>
+    <div class="step" data-step="3">
+      <div id="accs"></div>
+    </div>
+    <div class="step" data-step="4">
+      <div id="finishes"></div>
+    </div>
+    <div id="nav" class="first">
+      <button id="back">Back</button>
+      <button id="go" disabled>Connecting…</button>
+    </div>
     <p id="setupNote">Set Auto-Lock to <b>Never</b> so your screen stays awake.</p>
   </div>
 </div>
@@ -249,6 +274,7 @@
   var elFlag = $('flagbtn'), elMsg = $('msg');
   var elSetup = $('setup'), elNameIn = $('nameIn'), elSwatches = $('swatches'), elGo = $('go');
   var elYears = $('years'), elFins = $('finishes');
+  var elBack = $('back'), elNav = $('nav'), elTitle = $('stepTitle'), elDots = $('dots');
   var elPrev = $('preview'), elPrevWrap = $('prevWrap'), elAccs = $('accs');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
@@ -813,6 +839,29 @@
     }, opts);
   }
 
+  // ------------------------------------------------------------ the wizard
+  //
+  // One decision per screen. More taps than the old single card, but no
+  // scrolling — each step fits a phone whole, and the header preview shows
+  // the bean assembling as the answers land.
+  var step = 1;
+  var STEP_TITLES = ['Who are you?', 'Pick your colour', 'Pick your extra', 'Pick your style'];
+
+  function setStep(n) {
+    step = Math.max(1, Math.min(4, n));
+    var steps = elSetup.querySelectorAll('.step');
+    for (var i = 0; i < steps.length; i++) {
+      steps[i].classList.toggle('on', Number(steps[i].dataset.step) === step);
+    }
+    for (var d = 0; d < elDots.children.length; d++) {
+      elDots.children[d].classList.toggle('on', d < step);
+    }
+    elTitle.textContent = STEP_TITLES[step - 1];
+    elNav.classList.toggle('first', step === 1);
+    if (step !== 1) elNameIn.blur();
+    paintSwatches();
+  }
+
   function paintSwatches() {
     var chosen = pickedYear >= 0;
 
@@ -835,10 +884,12 @@
     paintAccs(COLORS[pickedColor >= 0 ? pickedColor : 0].hex, FINISHES[pickedFinish].key);
     paintPreview();
 
-    // A year is the one thing with no sensible default, so it gates the button.
-    elGo.disabled = !connected || !chosen;
+    // A year is the one thing with no sensible default, so it gates the very
+    // first Next. Everything after has a fine default and Next is always live.
+    elGo.disabled = !connected || (step === 1 && !chosen);
     elGo.textContent = !connected ? 'Connecting…'
-      : !chosen ? 'Pick your year'
+      : step === 1 && !chosen ? 'Pick your year'
+      : step < 4 ? 'Next'
       : joined ? 'Save' : "I'm ready";
   }
 
@@ -846,7 +897,7 @@
     elMsg.style.display = 'none';
     elSetup.classList.add('on');
     elOverlay.classList.remove('hidden');
-    paintSwatches();
+    setStep(1);
   }
 
   function submitSetup() {
@@ -876,9 +927,23 @@
   }
 
   buildPickers();
-  elGo.addEventListener('click', function (e) { e.preventDefault(); submitSetup(); });
+  elGo.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (elGo.disabled) return;
+    if (step < 4) { setStep(step + 1); vibrate(8); }
+    else submitSetup();
+  });
+  elBack.addEventListener('click', function (e) {
+    e.preventDefault();
+    setStep(step - 1);
+    vibrate(8);
+  });
   elNameIn.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); submitSetup(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!elGo.disabled) { setStep(2); vibrate(8); }
+      else elNameIn.blur(); // year still unpicked — surface the gate
+    }
   });
   // Reopening from the top bar. Not a control-surface tap, so it must not fall
   // through to the movement zones.
