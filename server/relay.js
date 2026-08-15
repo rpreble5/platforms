@@ -91,6 +91,12 @@ export class Relay {
 
     this.wss.on('connection', (/** @type {WS} */ ws, /** @type {import('node:http').IncomingMessage} */ req) => this.#onConnection(ws, req));
 
+    // ws re-emits the HTTP server's errors (EADDRINUSE and friends) on the
+    // WebSocketServer, and an unhandled 'error' event is a process crash with
+    // a raw stack. The http server owns error reporting — see index.js — so
+    // the re-emission is deliberately absorbed here.
+    this.wss.on('error', () => {});
+
     // Staleness watchdog. Third and last layer of the dropped-release guard:
     // full mask in every packet, a 400ms phone heartbeat, and this.
     this.watchdog = setInterval(() => {

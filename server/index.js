@@ -87,6 +87,21 @@ function saveState() {
 }
 setInterval(saveState, 5000).unref();
 
+// A taken port is the most common way this fails to start (usually an older
+// `npm run dev` still running in another window) — say so, instead of dying
+// with a stack trace.
+server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('');
+    console.error(`  port ${PORT} is already in use — another server is probably still running`);
+    console.error('  (an old `npm run dev` window?). Close it, or start on another port:');
+    console.error(`    PORT=${PORT + 1} npm run dev        (Windows: set PORT=${PORT + 1} && npm run dev)`);
+    console.error('');
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, HOST, () => {
   const addr = lanAddr;
 
