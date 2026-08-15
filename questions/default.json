@@ -94,6 +94,11 @@
       "text": "Which of these are first-line for hypertension?",
       "answers": ["Lisinopril", "Hydralazine", "Amlodipine", "Clonidine"],
       "correct": [0, 2]
+    },
+    {
+      "text": "Select every country in South America",
+      "answers": ["Brazil", "Peru", "Panama", "Chile", "Mexico", "Uruguay"],
+      "correct": [0, 1, 3, 5]
     }
   ]
 }

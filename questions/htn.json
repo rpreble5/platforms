@@ -57,6 +57,66 @@
         "Guideline-recommended for resistant hypertension"
       ],
       "correct": 1
+    },
+    {
+      "text": "Select every FIRST-LINE class for uncomplicated hypertension",
+      "answers": [
+        "Thiazide diuretics",
+        "ACE inhibitors",
+        "Beta-blockers",
+        "ARBs",
+        "Alpha-blockers",
+        "Dihydropyridine CCBs"
+      ],
+      "correct": [0, 1, 3, 5]
+    },
+    {
+      "text": "Select every reason to AVOID an ACE inhibitor",
+      "answers": [
+        "Pregnancy",
+        "Bilateral RAS",
+        "Prior angioedema",
+        "Gout",
+        "Potassium 6.1 mmol/L",
+        "Asthma"
+      ],
+      "correct": [0, 1, 2, 4]
+    },
+    {
+      "text": "Select every feature that suggests SECONDARY hypertension",
+      "answers": [
+        "Onset before age 30",
+        "Resistant to 3 drugs",
+        "Unexplained hypokalemia",
+        "Family history of HTN",
+        "Abdominal bruit",
+        "White-coat effect"
+      ],
+      "correct": [0, 1, 2, 4]
+    },
+    {
+      "text": "Select every drug or agent that can RAISE blood pressure",
+      "answers": [
+        "NSAIDs",
+        "Oral contraceptives",
+        "Pseudoephedrine",
+        "Amoxicillin",
+        "Erythropoietin",
+        "Metformin"
+      ],
+      "correct": [0, 1, 2, 4]
+    },
+    {
+      "text": "Hypertensive EMERGENCY — select every acceptable IV agent",
+      "answers": [
+        "Nicardipine",
+        "Labetalol",
+        "Esmolol",
+        "Immediate-release nifedipine",
+        "Nitroprusside",
+        "Sublingual captopril"
+      ],
+      "correct": [0, 1, 2, 4]
     }
   ]
 }
