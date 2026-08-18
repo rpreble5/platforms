@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { WAYS, activeWay, setRound, setTheme, themeName, wayFor } from './themes.js';
+import { GLASS_FAMILIES, WAYS, activeWay, glassFam, setRound, setTheme, themeName, wayFor } from './themes.js';
 
 const HEX = /^#[0-9a-f]{6}$/;
 
@@ -44,4 +44,15 @@ test('unknown themes fall back to glass, the default', () => {
   assert.equal(themeName(), 'glass');
   setTheme(undefined);
   assert.equal(themeName(), 'glass');
+});
+
+test('four-colour glass aliases select their family and ordinary glass resets to dusk', () => {
+  for (const family of ['aurora', 'berry', 'ocean']) {
+    setTheme(family);
+    assert.equal(themeName(), 'glass');
+    assert.equal(glassFam().key, family);
+    assert.equal(GLASS_FAMILIES[family].blobs.length, 4);
+  }
+  setTheme('glass');
+  assert.equal(glassFam().key, 'dusk');
 });

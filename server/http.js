@@ -202,6 +202,13 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
+    // Physical input sandbox: embedded top/bottom control boxes across four
+    // floors, intentionally separate from quiz modes and scoring.
+    if (pathname === '/controls' || pathname === '/controls/') {
+      sendFile(res, path.join(root, 'client/display/control-lab.html'));
+      return;
+    }
+
     // Many gamepads on one machine, for functional testing without a room full
     // of phones. Says nothing about latency — see the note in the page itself.
     if (pathname === '/testpad' || pathname === '/testpad/') {
@@ -286,7 +293,7 @@ function readBody(req, cap) {
  * Read fresh on each call — dropping a new pack file in and reloading the
  * display is the whole workflow.
  * @param {string} root
- * @returns {Array<{file:string, name:string, questions:number, showdown:boolean}>}
+ * @returns {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom:number}>}
  */
 export function listPacks(root) {
   const dir = path.join(root, 'questions');
@@ -305,9 +312,10 @@ export function listPacks(root) {
         name: typeof j.pack === 'string' ? j.pack : file.replace(/\.json$/, ''),
         questions: Array.isArray(j.questions) ? j.questions.length : 0,
         showdown: !!j.showdown?.statements?.length,
+        controlRoom: Array.isArray(j.controlRoom?.questions) ? j.controlRoom.questions.length : 0,
       };
     } catch {
-      return { file, name: `${file} (broken)`, questions: 0, showdown: false };
+      return { file, name: `${file} (broken)`, questions: 0, showdown: false, controlRoom: 0 };
     }
   });
 }
@@ -392,6 +400,69 @@ export function loadQuestions(root, packFile = 'default.json') {
     return true;
   });
 
+  // Control Room questions are a separate pool. At game start the display
+  // assigns a distinct case to every participating team, then either
+  // interleaves those turns or runs the pool as a standalone mode.
+  /** @type {{questions:any[], perTeam:number, answerMs:number} | null} */
+  let controlRoom = null;
+  if (pack.controlRoom) {
+    const answerMs = Number.isFinite(pack.controlRoom.answerMs)
+      ? Math.max(10000, Math.min(90000, Math.round(pack.controlRoom.answerMs)))
+      : 40000;
+    const controlQuestions = (Array.isArray(pack.controlRoom.questions) ? pack.controlRoom.questions : [])
+      .filter((/** @type {any} */ q, /** @type {number} */ i) => {
+        const where = `control #${i + 1}`;
+        if (typeof q?.text !== 'string' || !Array.isArray(q.controls)) {
+          problems.push(`${where}: needs text and controls — skipped`);
+          return false;
+        }
+        if (q.controls.length < 6 || q.controls.length > 8) {
+          problems.push(`${where}: ${q.controls.length} controls, must be 6-8 — skipped`);
+          return false;
+        }
+        for (let c = 0; c < q.controls.length; c++) {
+          const control = q.controls[c];
+          const at = `${where} control ${c + 1}`;
+          if (typeof control?.label !== 'string' || !['toggle', 'number'].includes(control.kind)) {
+            problems.push(`${at}: needs a label and toggle/number kind — skipped`);
+            return false;
+          }
+          if (control.label.length > 18) problems.push(`${at}: label "${control.label}" is over 18 chars`);
+          if (control.kind === 'toggle') {
+            if (typeof control.initial !== 'boolean' || typeof control.answer !== 'boolean') {
+              problems.push(`${at}: toggle initial/answer must be boolean — skipped`);
+              return false;
+            }
+          } else {
+            const values = [control.initial, control.answer, control.min, control.max, control.step];
+            if (!values.every(Number.isFinite) || control.min > control.max || control.step <= 0) {
+              problems.push(`${at}: invalid numeric range — skipped`);
+              return false;
+            }
+            if (
+              control.initial < control.min || control.initial > control.max ||
+              control.answer < control.min || control.answer > control.max
+            ) {
+              problems.push(`${at}: initial/answer outside range — skipped`);
+              return false;
+            }
+          }
+        }
+        q.type = 'control';
+        q.answerMs = Number.isFinite(q.answerMs) ? q.answerMs : answerMs;
+        return true;
+      });
+    if (controlQuestions.length) {
+      controlRoom = {
+        questions: controlQuestions,
+        perTeam: Math.max(1, Math.min(4, Math.floor(pack.controlRoom.perTeam ?? 1))),
+        answerMs,
+      };
+    } else {
+      problems.push('controlRoom: no valid questions — block ignored');
+    }
+  }
+
   // The showdown block is optional and separate from the quiz deck — a list
   // of true/false statements for the sudden-death mode.
   /** @type {{statements: any[], answerMs?: number} | null} */
@@ -433,5 +504,6 @@ export function loadQuestions(root, packFile = 'default.json') {
     theme,
     questions,
     showdown,
+    controlRoom,
   };
 }

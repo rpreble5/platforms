@@ -101,11 +101,12 @@ export const GLASS_FAMILIES = {
   },
   ocean: {
     key: 'ocean',
-    stops: ['#0d3f66', '#127a86', '#071f3c'],
+    stops: ['#06152f', '#073b58', '#061128'],
     blobs: [
-      { x: 0.24, y: 0.26, r: 0.32, c: 'rgba(120,235,255,0.20)' },
-      { x: 0.76, y: 0.34, r: 0.3, c: 'rgba(90,255,190,0.16)' },
-      { x: 0.5, y: 0.78, r: 0.42, c: 'rgba(80,150,255,0.18)' },
+      { x: 0.08, y: 0.14, r: 0.42, c: 'rgba(40,215,255,0.23)' },
+      { x: 0.88, y: 0.1, r: 0.4, c: 'rgba(41,102,255,0.21)' },
+      { x: 0.82, y: 0.88, r: 0.46, c: 'rgba(23,225,170,0.19)' },
+      { x: 0.2, y: 0.86, r: 0.44, c: 'rgba(84,66,235,0.18)' },
     ],
     glassFill: 'rgba(255,255,255,0.13)',
     glassRim: 'rgba(255,255,255,0.45)',
@@ -114,6 +115,40 @@ export const GLASS_FAMILIES = {
     floorBody: '#081a30',
     floorTop: '#0e2a45',
     floorEdge: 'rgba(255,255,255,0.22)',
+  },
+  aurora: {
+    key: 'aurora',
+    stops: ['#090d2b', '#17204a', '#140b32'],
+    blobs: [
+      { x: 0.06, y: 0.18, r: 0.43, c: 'rgba(20,233,193,0.23)' },
+      { x: 0.88, y: 0.12, r: 0.42, c: 'rgba(73,103,255,0.24)' },
+      { x: 0.9, y: 0.9, r: 0.48, c: 'rgba(213,63,250,0.19)' },
+      { x: 0.16, y: 0.9, r: 0.46, c: 'rgba(58,128,241,0.18)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.13)',
+    glassRim: 'rgba(214,242,255,0.48)',
+    text: 'rgba(255,255,255,0.96)',
+    textDim: 'rgba(255,255,255,0.45)',
+    floorBody: '#080d29',
+    floorTop: '#131b43',
+    floorEdge: 'rgba(188,235,255,0.24)',
+  },
+  berry: {
+    key: 'berry',
+    stops: ['#210a2f', '#521638', '#170b2b'],
+    blobs: [
+      { x: 0.08, y: 0.12, r: 0.43, c: 'rgba(255,92,119,0.23)' },
+      { x: 0.9, y: 0.12, r: 0.42, c: 'rgba(255,171,71,0.20)' },
+      { x: 0.88, y: 0.9, r: 0.46, c: 'rgba(177,62,235,0.23)' },
+      { x: 0.12, y: 0.88, r: 0.45, c: 'rgba(231,45,153,0.19)' },
+    ],
+    glassFill: 'rgba(255,245,250,0.13)',
+    glassRim: 'rgba(255,226,235,0.46)',
+    text: 'rgba(255,250,252,0.97)',
+    textDim: 'rgba(255,235,240,0.46)',
+    floorBody: '#180a19',
+    floorTop: '#311328',
+    floorEdge: 'rgba(255,214,224,0.23)',
   },
   frost: {
     key: 'frost',
@@ -237,7 +272,13 @@ let way = WAYS[1]; // teal: the lobby/showdown resting colourway
 
 /** @param {string | undefined} key unknown keys fall back to glass */
 export function setTheme(key) {
+  if (key === 'aurora' || key === 'berry' || key === 'ocean') {
+    themeKey = 'glass';
+    setGlassFamily(key);
+    return;
+  }
   themeKey = THEMES.includes(/** @type {any} */ (key)) ? /** @type {string} */ (key) : 'glass';
+  if (themeKey === 'glass') setGlassFamily('dusk');
 }
 
 /** @returns {string} */

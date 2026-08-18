@@ -37,6 +37,7 @@ import { groundBelow, moveX, moveY } from './collide.js';
  * @property {boolean} connected
  * @property {number} respawns
  * @property {number} jumps
+ * @property {import('./collide.js').VerticalImpact[]} verticalImpacts impacts from this tick only
  * @property {PlayerInput} input
  */
 
@@ -65,6 +66,7 @@ export function createPlayer(id, x, y) {
     connected: true,
     respawns: 0,
     jumps: 0,
+    verticalImpacts: [],
     input: { held: 0, pressEdge: 0, releaseEdge: 0 },
   };
 }
@@ -77,6 +79,7 @@ export function createPlayer(id, x, y) {
  * @param {number} worldT world clock in ms, for findMeUntil
  */
 export function stepPlayer(p, platforms, dtMs, worldT) {
+  p.verticalImpacts = [];
   const dt = dtMs / 1000;
   const { held, pressEdge, releaseEdge } = p.input;
 

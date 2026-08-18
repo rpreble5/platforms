@@ -10,12 +10,21 @@ import { createPlayer, stepPlayer } from './player.js';
 /** @typedef {import('./player.js').Player} Player */
 
 /**
+ * @typedef {object} WorldImpact
+ * @property {number} playerId
+ * @property {string} controlId
+ * @property {'top'|'bottom'} side
+ * @property {number} speed
+ */
+
+/**
  * @typedef {object} World
  * @property {number} t ms since world creation
  * @property {number} tick
  * @property {Platform[]} platforms
  * @property {Map<number, Player>} players
  * @property {{x:number, y:number}} spawn
+ * @property {WorldImpact[]} impacts control-box impacts from the current tick
  */
 
 /**
@@ -51,6 +60,7 @@ export function createWorld(platforms = testLevel()) {
     platforms,
     players: new Map(),
     spawn: { x: WORLD_W / 2, y: WORLD_H - 260 },
+    impacts: [],
   };
 }
 
@@ -115,8 +125,23 @@ function respawn(world, p) {
 export function step(world, dtMs = STEP_MS) {
   world.t += dtMs;
   world.tick++;
+  world.impacts = [];
   for (const p of world.players.values()) {
     stepPlayer(p, world.platforms, dtMs, world.t);
+    for (const hit of p.verticalImpacts) {
+      if (!hit.platform.controlId) continue;
+      world.impacts.push({
+        playerId: p.id,
+        controlId: hit.platform.controlId,
+        side: hit.side,
+        speed: hit.speed,
+      });
+    }
     if (p.y > KILL_Y) respawn(world, p);
   }
+  world.impacts.sort((a, b) =>
+    a.controlId.localeCompare(b.controlId) ||
+    (a.side === b.side ? 0 : a.side === 'top' ? -1 : 1) ||
+    a.playerId - b.playerId
+  );
 }

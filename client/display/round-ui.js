@@ -12,7 +12,7 @@
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
-import { PHASE, answerWindow, currentQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
+import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
@@ -26,6 +26,7 @@ import { FONT, UI } from './theme.js';
  */
 export function drawSigns(cx, world, g) {
   const q = currentQuestion(g);
+  if (isControlQuestion(q)) return;
   const revealing = g.phase === PHASE.REVEAL || g.phase === PHASE.SCORE;
 
   if (q?.type === 'range') {
@@ -93,11 +94,11 @@ function fallOffset(t) {
 
 /**
  * @typedef {object} MenuView
- * @property {Array<{file:string, name:string, questions:number, showdown:boolean}>} packs
+ * @property {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom?:number}>} packs
  * @property {number} packIndex
  * @property {number} sel
  * @property {boolean} loading
- * @property {Array<'pack'|'time'|'mode'|'quiz'|'showdown'>} items
+ * @property {Array<'pack'|'time'|'mode'|'quiz'|'control'|'showdown'>} items
  * @property {number} answerMs
  * @property {'solo'|'teams'} mode
  */
@@ -168,7 +169,7 @@ function drawMenu(cx, menu, playerCount) {
     x0 + 44, y0 + 124
   );
 
-  /** @param {'pack'|'time'|'mode'|'quiz'|'showdown'} item @returns {[string, string]} */
+  /** @param {'pack'|'time'|'mode'|'quiz'|'control'|'showdown'} item @returns {[string, string]} */
   const rowText = (item) => {
     switch (item) {
       case 'pack':
@@ -177,7 +178,7 @@ function drawMenu(cx, menu, playerCount) {
           menu.loading
             ? 'loading…'
             : pack
-              ? `◂ ${pack.name} (${pack.questions} questions${pack.showdown ? ' + showdown' : ''}) ▸`
+              ? `◂ ${pack.name} (${pack.questions} questions${pack.controlRoom ? ' + control' : ''}${pack.showdown ? ' + showdown' : ''}) ▸`
               : '—',
         ];
       case 'time':
@@ -186,6 +187,8 @@ function drawMenu(cx, menu, playerCount) {
         return ['Teams', `◂ ${menu.mode === 'teams' ? 'PGY years' : 'off — solo play'} ▸`];
       case 'quiz':
         return ['Start quiz', ''];
+      case 'control':
+        return ['Start Control Room', 'teams take turns'];
       case 'showdown':
         return ['Start showdown', 'no points · last one standing'];
       default:
@@ -196,7 +199,7 @@ function drawMenu(cx, menu, playerCount) {
   let ry = y0 + 172;
   let dividerDrawn = false;
   menu.items.forEach((item, i) => {
-    const action = item === 'quiz' || item === 'showdown';
+    const action = item === 'quiz' || item === 'control' || item === 'showdown';
     if (action && settings && !dividerDrawn) {
       // One quiet line between the settings and the two ways to begin.
       cx.strokeStyle = 'rgba(255,255,255,0.14)';
@@ -267,6 +270,10 @@ function drawLobby(cx, playerCount) {
 function drawQuestion(cx, g) {
   const q = currentQuestion(g);
   if (!q) return;
+  if (isControlQuestion(q)) {
+    drawControlQuestion(cx, g, q);
+    return;
+  }
 
   const h = 150;
   cx.fillStyle = 'rgba(10,8,20,0.9)';
@@ -333,6 +340,59 @@ function drawQuestion(cx, g) {
 }
 
 /**
+ * @param {CanvasRenderingContext2D} cx
+ * @param {import('../../sim/round.js').Game} g
+ * @param {import('../../sim/round.js').Question} q
+ */
+function drawControlQuestion(cx, g, q) {
+  const h = 150;
+  const team = q.team ?? 0;
+  const cohort = COHORTS[clampCohort(team)];
+  const teamColor = ['#4aa8ff', '#b168ff', '#ffd93d'][clampCohort(team)];
+  cx.fillStyle = 'rgba(10,8,20,0.9)';
+  cx.fillRect(0, 0, WORLD_W, h);
+
+  cx.textBaseline = 'alphabetic';
+  cx.textAlign = 'center';
+  cx.fillStyle = UI.paper;
+  cx.font = fitFont(cx, q.text, WORLD_W - 360, 52, 34);
+  cx.fillText(q.text, WORLD_W / 2, 76);
+
+  cx.textAlign = 'left';
+  cx.font = `800 20px ${FONT.display}`;
+  cx.fillStyle = teamColor;
+  cx.fillText(`${cohort.label} TURN`, 40, 42);
+
+  let subline = q.context ?? '';
+  if (g.phase === PHASE.INTRO) subline = `${cohort.label} get ready - other teams watching`;
+  else if (g.phase === PHASE.LOCK) subline = 'BOARD LOCKED';
+  else if ((g.phase === PHASE.REVEAL || g.phase === PHASE.SCORE) && g.controlResult) {
+    subline = `${g.controlResult.correct}/${g.controlResult.total} correct${g.controlResult.perfect ? ' - PERFECT BOARD' : ''}`;
+  }
+  cx.textAlign = 'center';
+  cx.font = `750 22px ${FONT.display}`;
+  cx.fillStyle = g.phase === PHASE.REVEAL ? UI.gold : UI.faint;
+  cx.fillText(subline, WORLD_W / 2, 118);
+
+  const win = answerWindow(g);
+  const frac = g.phase === PHASE.ANSWER ? Math.max(0, 1 - g.phaseT / win) : g.phase === PHASE.INTRO ? 1 : 0;
+  const secsLeft = (frac * win) / 1000;
+  const barY = h - 14;
+  cx.fillStyle = 'rgba(255,255,255,0.08)';
+  cx.fillRect(0, barY, WORLD_W, 14);
+  cx.fillStyle = secsLeft <= 5 ? UI.wrong : secsLeft <= 10 ? UI.warn : teamColor;
+  cx.fillRect(0, barY, WORLD_W * frac, 14);
+
+  if (g.phase === PHASE.ANSWER && secsLeft <= 5) {
+    cx.textAlign = 'right';
+    cx.font = `800 58px ${FONT.display}`;
+    cx.fillStyle = UI.wrong;
+    cx.fillText(String(Math.ceil(secsLeft)), WORLD_W - 40, 98);
+  }
+  cx.textAlign = 'left';
+}
+
+/**
  * Year-vs-year standings, or null unless at least two years actually have
  * scored players — a solo keyboard test should never show an empty rivalry.
  * @param {import('../../sim/round.js').Game} g
@@ -343,7 +403,7 @@ function teamsFor(g, roster) {
   const teams = teamStandings(g.scores, (id) => {
     const look = roster.get(id);
     return look?.cohortSet ? clampCohort(look.cohortIndex ?? -1) : -1;
-  });
+  }, 3, g.teamBonuses);
   return teams.filter((t) => t.count > 0).length >= 2 ? teams : null;
 }
 
@@ -380,6 +440,10 @@ function drawTeamStrip(cx, teams, x, y, w) {
  * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  */
 function drawScoreboard(cx, g, roster) {
+  if (isControlQuestion(currentQuestion(g))) {
+    drawControlScoreboard(cx, g);
+    return;
+  }
   const rows = g.results.filter((r) => r.correct).slice(0, 10);
   const teams = teamsFor(g, roster);
   const w = 760;
@@ -435,6 +499,32 @@ function drawScoreboard(cx, g, roster) {
     cx.fillText(`+${r.points}`, x + w - 32, ry);
     ry += rowH;
   }
+  cx.textAlign = 'left';
+}
+
+/** @param {CanvasRenderingContext2D} cx @param {import('../../sim/round.js').Game} g */
+function drawControlScoreboard(cx, g) {
+  const result = g.controlResult;
+  if (!result) return;
+  const cohort = COHORTS[clampCohort(result.team)];
+  const teamColor = ['#4aa8ff', '#b168ff', '#ffd93d'][clampCohort(result.team)];
+  const w = 700;
+  const h = 250;
+  const x = (WORLD_W - w) / 2;
+  const y = 205;
+  panel(cx, x, y, w, h, result.perfect ? UI.gold : teamColor);
+
+  cx.textAlign = 'center';
+  cx.textBaseline = 'alphabetic';
+  cx.font = `800 38px ${FONT.display}`;
+  cx.fillStyle = teamColor;
+  cx.fillText(cohort.label, WORLD_W / 2, y + 58);
+  cx.font = `900 72px ${FONT.display}`;
+  cx.fillStyle = result.perfect ? UI.gold : UI.paper;
+  cx.fillText(`${result.correct}/${result.total}`, WORLD_W / 2, y + 140);
+  cx.font = `800 30px ${FONT.display}`;
+  cx.fillStyle = UI.faint;
+  cx.fillText(`+${result.points} team points`, WORLD_W / 2, y + 194);
   cx.textAlign = 'left';
 }
 

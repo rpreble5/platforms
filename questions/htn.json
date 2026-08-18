@@ -12,6 +12,54 @@
       { "text": "An ARB is safe in a patient with prior ACE inhibitor angioedema", "answer": false }
     ]
   },
+  "controlRoom": {
+    "perTeam": 1,
+    "answerMs": 40000,
+    "questions": [
+      {
+        "text": "AML induction - ANC 40 - Day 5 fever on cefepime",
+        "context": "Cx NGTD - HDS - no focal sx - no mold ppx",
+        "controls": [
+          { "label": "CT chest", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "Aspergillus Ag", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "Caspofungin", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "Cont. cefepime", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "Vanc", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "CVC removal", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "G-CSF", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "RVP", "kind": "toggle", "initial": false, "answer": false }
+        ]
+      },
+      {
+        "text": "AUD + malnutrition - chronic hypoNa - Na 108 to 119 in 10h",
+        "context": "Seizure resolved after 3% - brisk UOP",
+        "controls": [
+          { "label": "Cont. hypersaline", "kind": "toggle", "initial": true, "answer": false },
+          { "label": "DDAVP", "kind": "number", "initial": 0, "answer": 2, "min": 0, "max": 4, "step": 1, "unit": "mcg" },
+          { "label": "D5W", "kind": "number", "initial": 0, "answer": 10, "min": 0, "max": 20, "step": 5, "unit": "mL/kg" },
+          { "label": "Fluid restriction", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "Tolvaptan", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "NS", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "Lasix", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "Na checks", "kind": "number", "initial": 6, "answer": 2, "min": 1, "max": 8, "step": 1, "unit": "hr" }
+        ]
+      },
+      {
+        "text": "Suspected APL - WBC 7 - Plt 18 - fibrinogen 82 - INR 1.8",
+        "context": "PML-RARA pending - no active thrombosis",
+        "controls": [
+          { "label": "ATRA", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "ATO", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "Cryo", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "Platelets", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "FFP", "kind": "toggle", "initial": false, "answer": true },
+          { "label": "Heparin", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "TXA", "kind": "toggle", "initial": false, "answer": false },
+          { "label": "Fibrinogen goal", "kind": "number", "initial": 100, "answer": 150, "min": 50, "max": 200, "step": 25, "unit": "mg/dL" }
+        ]
+      }
+    ]
+  },
   "questions": [
     {
       "text": "Resistant HTN on lisinopril, amlodipine and chlorthalidone — best fourth agent?",

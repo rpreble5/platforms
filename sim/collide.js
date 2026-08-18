@@ -16,7 +16,15 @@ import { PHYS } from '../shared/tuning.js';
  * @property {number} h
  * @property {boolean} [oneWay] pass through from below and from the sides
  * @property {string} [id]
+ * @property {string} [controlId] interactive control embedded in a solid floor
  * @property {'plaque'|'flag'} [signStyle] where the answer text rides, for answer boards
+ */
+
+/**
+ * @typedef {object} VerticalImpact
+ * @property {Platform} platform
+ * @property {'top'|'bottom'} side top = landed from above; bottom = head-hit from below
+ * @property {number} speed absolute vertical speed immediately before collision
  */
 
 /**
@@ -26,6 +34,7 @@ import { PHYS } from '../shared/tuning.js';
  * @property {number} vx @property {number} vy
  * @property {boolean} onGround
  * @property {Platform | null} standingOn
+ * @property {VerticalImpact[]} [verticalImpacts] impacts created by this move
  */
 
 /**
@@ -77,6 +86,7 @@ export function moveY(b, platforms, dy) {
       // inside a solid one.
       if (prevBottom <= p.y + 1) {
         b.y = p.y - b.h;
+        b.verticalImpacts?.push({ platform: p, side: 'top', speed: Math.abs(b.vy) });
         b.vy = 0;
         b.onGround = true;
         b.standingOn = p;
@@ -103,6 +113,7 @@ export function moveY(b, platforms, dy) {
       }
 
       b.y = p.y + p.h;
+      b.verticalImpacts?.push({ platform: p, side: 'bottom', speed: Math.abs(b.vy) });
       b.vy = 0;
     }
   }

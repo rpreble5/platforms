@@ -57,7 +57,10 @@
   <button id="addBoard">+ board</button>
   <button id="addRung">+ rung</button>
   <select id="theme" title="preview theme">
-    <option value="glass" selected>glass</option>
+    <option value="glass" selected>midnight violet</option>
+    <option value="aurora">aurora blend</option>
+    <option value="berry">berry sunset</option>
+    <option value="ocean">electric lagoon</option>
     <option value="terrazzo">terrazzo</option>
   </select>
   <label class="tog"><input type="checkbox" id="crowd"> crowd (28)</label>
@@ -65,7 +68,7 @@
   <span id="status"></span>
   <span class="hint">
     drag to move · drag an edge to resize · <kbd>←→↑↓</kbd> nudge · <kbd>Del</kbd> remove ·
-    y snaps to tiers, width to the grid
+    y snaps to tiers · low answer boards lift for text clearance · width snaps to the grid
   </span>
 </header>
 
@@ -83,7 +86,7 @@
 
 <script type="module">
 import {
-  ANSWER_H, FLOOR_Y, GRID, TIER, answerId, buildArena, buildCustomArena, tierY,
+  ANSWER_H, FLOOR_Y, GRID, answerId, answerTierY, buildArena, buildCustomArena, tierOfY, tierY,
 } from '/sim/levels.js';
 import { STEP_MS, WORLD_H, WORLD_W } from '/shared/tuning.js';
 import { BTN_JUMP, BTN_LEFT, BTN_RIGHT } from '/shared/protocol.js';
@@ -120,7 +123,8 @@ let statusTimer;
 const isBoard = (p) => String(p.id).startsWith('ans');
 const isRung = (p) => String(p.id).startsWith('perch');
 const centreOf = (p) => Math.round(p.x + p.w / 2);
-const tierOf = (p) => Math.round((FLOOR_Y - p.y) / TIER);
+const tierOf = (p) => tierOfY(p.y);
+const surfaceY = (p, tier) => isBoard(p) ? answerTierY(tier) : tierY(tier);
 
 function status(text, bad = false) {
   $('status').textContent = text;
@@ -293,8 +297,10 @@ function draw() {
     cx.save();
     cx.strokeStyle = 'rgba(63,220,154,0.35)';
     cx.lineWidth = 2;
-    cx.strokeRect(selected.x - 120, selected.y - TIER - 6, selected.w + 240, 12); // climb targets
-    cx.strokeRect(selected.x - 150, selected.y - 6, selected.w + 300, 12); // flat targets
+    const tier = tierOf(selected);
+    if (tier < 4) cx.strokeRect(selected.x - 120, tierY(tier + 1) - 6, selected.w + 240, 12);
+    const flatYs = tier === 1 ? [tierY(1), answerTierY(1)] : [selected.y];
+    for (const y of flatYs) cx.strokeRect(selected.x - 150, y - 6, selected.w + 300, 12);
     cx.restore();
   }
 }
@@ -317,8 +323,8 @@ function violations() {
       if (!reached.has(String(from.id))) continue;
       for (const to of solid) {
         if (reached.has(String(to.id))) continue;
-        const climb = from.y - to.y === TIER && gap(from, to) <= 120;
-        const flat = from.y === to.y && gap(from, to) <= 150;
+        const climb = tierOf(to) === tierOf(from) + 1 && gap(from, to) <= 120;
+        const flat = tierOf(to) === tierOf(from) && gap(from, to) <= 150;
         if (climb || flat) { reached.add(String(to.id)); grew = true; }
       }
     }
@@ -332,7 +338,7 @@ function violations() {
   const boards = solid.filter(isBoard);
   for (const r of solid.filter(isRung)) {
     for (const b of boards) {
-      if (r.y - b.y !== TIER) continue;
+      if (tierOf(r) !== tierOf(b) - 1) continue;
       const ov = Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x);
       if (ov > 0) { ids.add(r.id); msgs.push(`${r.id} sits under ${b.id} — labels will cross its text`); }
     }
@@ -341,7 +347,8 @@ function violations() {
   // same-tier daylight
   const byY = new Map();
   for (const p of solid.filter((q) => q.id !== 'floor')) {
-    (byY.get(p.y) ?? byY.set(p.y, []).get(p.y)).push(p);
+    const tier = tierOf(p);
+    (byY.get(tier) ?? byY.set(tier, []).get(tier)).push(p);
   }
   for (const row of byY.values()) {
     row.sort((a, b) => a.x - b.x);
@@ -407,9 +414,11 @@ cv.addEventListener('pointermove', (e) => {
     p.x = right - p.w;
   } else {
     p.x = Math.round(pt.x - drag.dx);
-    // snap y to the nearest tier
-    let best = TIERS[0];
-    for (const y of TIERS) if (Math.abs(pt.y - y) < Math.abs(pt.y - best)) best = y;
+    // Tier-one answer boards sit one art tile above their route tier so their
+    // hanging text clears the floor crowd. Every other surface uses the grid.
+    const ys = [1, 2, 3, 4].map((tier) => surfaceY(p, tier));
+    let best = ys[0];
+    for (const y of ys) if (Math.abs(pt.y - y) < Math.abs(pt.y - best)) best = y;
     p.y = best;
   }
   renumber();
@@ -429,9 +438,9 @@ addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') { selected.x -= stepPx; e.preventDefault(); }
   else if (e.key === 'ArrowRight') { selected.x += stepPx; e.preventDefault(); }
   else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-    const i = TIERS.indexOf(selected.y);
-    const ni = Math.max(0, Math.min(TIERS.length - 1, i + (e.key === 'ArrowUp' ? 1 : -1)));
-    selected.y = TIERS[ni];
+    const tier = tierOf(selected);
+    const nextTier = Math.max(1, Math.min(4, tier + (e.key === 'ArrowUp' ? 1 : -1)));
+    selected.y = surfaceY(selected, nextTier);
     e.preventDefault();
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
     if (isBoard(selected) && plats.filter(isBoard).length <= 2) {

@@ -27,6 +27,7 @@ import {
   rangeX,
   snapToGrid,
   spawnFor,
+  tierOfY,
   tierY,
 } from './levels.js';
 import {
@@ -458,8 +459,8 @@ test('every board in the elevated layouts is climbable from the floor', () => {
           if (!reached.has(String(from.id))) continue;
           for (const to of plats) {
             if (reached.has(String(to.id))) continue;
-            const climb = from.y - to.y === TIER && gap(from, to) <= 120;
-            const flat = from.y === to.y && gap(from, to) <= 150;
+            const climb = tierOfY(to.y) === tierOfY(from.y) + 1 && gap(from, to) <= 120;
+            const flat = tierOfY(to.y) === tierOfY(from.y) && gap(from, to) <= 150;
             if (climb || flat) {
               reached.add(String(to.id));
               grew = true;
@@ -477,9 +478,10 @@ test('every board in the elevated layouts is climbable from the floor', () => {
       // needs daylight — the rung isn't a target, it's the route.
       const byTier = new Map();
       for (const p of plats.filter((q) => q.id !== 'floor')) {
-        const row = byTier.get(p.y) ?? [];
+        const tier = tierOfY(p.y);
+        const row = byTier.get(tier) ?? [];
         row.push(p);
-        byTier.set(p.y, row);
+        byTier.set(tier, row);
       }
       for (const row of byTier.values()) {
         row.sort((/** @type {any} */ a, /** @type {any} */ b) => a.x - b.x);

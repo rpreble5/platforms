@@ -121,12 +121,24 @@ export class InputBus {
    * loop, not once per frame, so a packet that lands mid-frame is consumed by
    * the very next tick rather than waiting for the next paint.
    * @param {import('../../sim/world.js').World} world
+   * @param {(id:number) => boolean} [allow] selective modes can discard spectators
    */
-  drainInto(world) {
+  drainInto(world, allow = () => true) {
     const now = performance.now();
     for (const [id, s] of this.slots) {
       const p = world.players.get(id);
       if (!p) continue;
+      if (!allow(id)) {
+        p.input.held = 0;
+        p.input.pressEdge = 0;
+        p.input.releaseEdge = 0;
+        p.jumpBuffer = 0;
+        s.held = 0;
+        s.pressEdge = 0;
+        s.releaseEdge = 0;
+        s.firstPendingAt = 0;
+        continue;
+      }
       p.input.held = s.held;
       p.input.pressEdge |= s.pressEdge;
       p.input.releaseEdge |= s.releaseEdge;

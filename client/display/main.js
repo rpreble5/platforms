@@ -25,7 +25,18 @@ import { clampCohort } from '../../shared/palette.js';
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
-import { PHASE, answerWindow, createGame, currentQuestion, respawnAll, skip, startGame, stepRound } from '../../sim/round.js';
+import {
+  PHASE,
+  answerWindow,
+  configureControlRounds,
+  createGame,
+  currentQuestion,
+  isControlQuestion,
+  respawnAll,
+  skip,
+  startGame,
+  stepRound,
+} from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
 import { setRound, setTheme } from './themes.js';
@@ -204,7 +215,8 @@ function onJson(msg) {
       switch (msg.cmd) {
         case 'next':
           if (showdown) sdSkip(showdown, world);
-          else if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) startGame(game, world);
+          else if (game.phase === PHASE.LOBBY) startConfiguredGame(false);
+          else if (game.phase === PHASE.GAME_OVER) startGame(game, world);
           else skip(game, world);
           break;
         case 'pause':
@@ -219,6 +231,7 @@ function onJson(msg) {
           break;
         case 'restart':
           if (showdown) endShowdown();
+          else if (game.phase === PHASE.LOBBY) startConfiguredGame(false);
           else startGame(game, world);
           break;
         case 'menu':
@@ -253,7 +266,7 @@ function onJson(msg) {
  * IS the lobby experience.
  */
 const menu = {
-  /** @type {Array<{file:string, name:string, questions:number, showdown:boolean}>} */
+  /** @type {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom?:number}>} */
   packs: [],
   packIndex: 0,
   // The cursor starts on "Start quiz" (row 3), so a plain Enter in the lobby
@@ -264,10 +277,11 @@ const menu = {
   mode: 'solo',
 };
 
-/** Menu rows, in display order. Showdown appears only when the pack has one. */
+/** Menu rows, in display order. Optional modes appear only when the pack has content. */
 function menuItems() {
-  /** @type {Array<'pack'|'time'|'mode'|'quiz'|'showdown'>} */
+  /** @type {Array<'pack'|'time'|'mode'|'quiz'|'control'|'showdown'>} */
   const items = ['pack', 'time', 'mode', 'quiz'];
+  if (controlSpec) items.push('control');
   if (showdownSpec) items.push('showdown');
   // Switching to a pack without a showdown can strand the cursor one row past
   // the end; pull it back rather than crash the key handler.
@@ -291,6 +305,33 @@ function applyMode() {
   game.cohortOf = cohortOf;
 }
 
+/** Teams represented by at least one connected, committed phone at game start. */
+function participatingTeams() {
+  return [...new Set(
+    [...roster.entries()]
+      .filter(([, look]) => look.connected && look.cohortSet)
+      .map(([id]) => cohortOf(id))
+      .filter((team) => team >= 0)
+  )].sort((a, b) => a - b);
+}
+
+/** @param {boolean} controlOnly */
+function startConfiguredGame(controlOnly) {
+  if (controlOnly) menu.mode = 'teams';
+  applyMode();
+  game.activeTeams = participatingTeams();
+  configureControlRounds(game, {
+    questions: controlSpec?.questions ?? [],
+    perTeam: controlOnly || game.mode === 'teams' ? controlSpec?.perTeam ?? 0 : 0,
+    only: controlOnly,
+  });
+  if (controlOnly && !game.activeTeams.length) {
+    note('Control Room needs at least one committed team');
+    return;
+  }
+  startGame(game, world);
+}
+
 function menuOpen() {
   return !showdown && game.phase === PHASE.LOBBY;
 }
@@ -307,11 +348,12 @@ async function selectPack(index) {
   try {
     const file = menu.packs[menu.packIndex].file;
     const pack = await fetch(`/api/questions?pack=${encodeURIComponent(file)}`).then((r) => r.json());
-    if (pack?.questions?.length) {
-      game = createGame(pack.questions, pack.answerMs);
+    if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
+      game = createGame(pack.questions ?? [], pack.answerMs);
       game.levelPool = levelPool;
       applyMode();
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
+      controlSpec = pack.controlRoom?.questions?.length ? pack.controlRoom : null;
       setTheme(pack.theme);
       hud.note = '';
     } else {
@@ -335,7 +377,7 @@ function cycleTime(dir) {
   lastCheckpoint = 0;
 }
 
-/** @param {'pack'|'time'|'mode'|'quiz'|'showdown'} item @param {number} dir */
+/** @param {'pack'|'time'|'mode'|'quiz'|'control'|'showdown'} item @param {number} dir */
 function menuAdjust(item, dir) {
   if (item === 'pack') void selectPack(menu.packIndex + dir);
   else if (item === 'time') cycleTime(dir);
@@ -345,11 +387,12 @@ function menuAdjust(item, dir) {
   }
 }
 
-/** @param {'pack'|'time'|'mode'|'quiz'|'showdown'} item */
+/** @param {'pack'|'time'|'mode'|'quiz'|'control'|'showdown'} item */
 function menuActivate(item) {
   if (item === 'quiz') {
-    applyMode();
-    startGame(game, world);
+    startConfiguredGame(false);
+  } else if (item === 'control') {
+    startConfiguredGame(true);
   } else if (item === 'showdown') startShowdown();
   else menuAdjust(item, 1);
 }
@@ -360,6 +403,8 @@ function menuActivate(item) {
 let showdown = null;
 /** @type {{statements: {text:string, answer:boolean}[], answerMs?: number} | null} */
 let showdownSpec = null;
+/** @type {{questions: import('../../sim/round.js').Question[], perTeam:number, answerMs?:number} | null} */
+let controlSpec = null;
 
 function startShowdown() {
   if (!showdownSpec) {
@@ -400,7 +445,7 @@ function toMenu() {
     endShowdown();
     return;
   }
-  game = createGame(game.questions, game.answerMs);
+  game = createGame(game.baseQuestions, game.answerMs);
   game.levelPool = levelPool;
   applyMode();
   world.platforms = buildArena(4);
@@ -424,6 +469,13 @@ function quizForHost() {
   if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) return null;
   const q = currentQuestion(game);
   if (!q) return null;
+  if (isControlQuestion(q)) {
+    return {
+      kind: 'control',
+      team: q.team,
+      controls: (q.controls ?? []).map((control) => ({ label: control.label, answer: control.answer, unit: control.unit ?? '' })),
+    };
+  }
   if (q.type === 'range' && q.answer) {
     return { kind: 'range', lo: q.answer[0], hi: q.answer[1], unit: q.unit ?? '' };
   }
@@ -451,7 +503,9 @@ function frame(now) {
     // discharges all at once when the next question opens. stepRound decides
     // whether the drained input actually reaches the simulation.
     bus.applyMask(LOCAL_ID, localMask);
-    bus.drainInto(world);
+    const liveQuestion = currentQuestion(game);
+    const controlTeam = isControlQuestion(liveQuestion) ? liveQuestion?.team ?? -1 : null;
+    bus.drainInto(world, (id) => controlTeam === null || cohortOf(id) === controlTeam);
     flash.observe(world);
     if (showdown) stepShowdown(showdown, world, STEP_MS);
     else stepRound(game, world, STEP_MS);
@@ -537,6 +591,8 @@ function frame(now) {
             qIndex: game.qIndex,
             qCount: game.questions.length,
             text: currentQuestion(game)?.text ?? null,
+            roundKind: isControlQuestion(currentQuestion(game)) ? 'control' : 'standard',
+            activeTeam: isControlQuestion(currentQuestion(game)) ? currentQuestion(game)?.team ?? null : null,
             paused: game.paused,
             canShowdown:
               !!showdownSpec &&
@@ -552,6 +608,7 @@ function frame(now) {
             answerLeftMs:
               game.phase === PHASE.ANSWER ? Math.max(0, answerWindow(game) - game.phaseT) : null,
             scores: Object.fromEntries(game.scores),
+            teamBonuses: Object.fromEntries(game.teamBonuses),
             quiz: quizForHost(),
           },
     });
@@ -746,11 +803,13 @@ async function init() {
 
   try {
     const pack = await fetch('/api/questions').then((r) => r.json());
-    if (pack?.questions?.length) game = createGame(pack.questions, pack.answerMs);
-    else hud.note = 'no questions loaded — check questions/default.json';
+    if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
+      game = createGame(pack.questions ?? [], pack.answerMs);
+    } else hud.note = 'no questions loaded — check questions/default.json';
     applyMode();
     await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
+    if (pack?.controlRoom?.questions?.length) controlSpec = pack.controlRoom;
     setTheme(pack?.theme);
     const packs = await fetch('/api/packs').then((r) => r.json());
     if (Array.isArray(packs) && packs.length) {

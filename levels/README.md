@@ -14,6 +14,10 @@ Format (`[centerX, tier, width]`, tiers 1–4 above the floor):
 }
 ```
 
+Tier-one answer boards render one 24px art tile above the route grid. That
+keeps their hanging text above the tallest floor characters while remaining
+an easy single jump. Rungs stay on the regular tier grid.
+
 `boards.length` is the level's answer count. During a quiz, each choice
 question picks a library level with a matching count, rotating by question
 index; a question can pin one by name with `"level": "Twin Spires"`. Counts

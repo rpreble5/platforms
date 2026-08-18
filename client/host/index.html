@@ -172,7 +172,11 @@ function render() {
   const over = state.phase === 'GAME_OVER';
   const sd = String(state.phase ?? '').startsWith('SHOWDOWN');
 
-  phaseEl.textContent = state.paused ? 'PAUSED' : state.phase ?? '–';
+  phaseEl.textContent = state.paused
+    ? 'PAUSED'
+    : state.roundKind === 'control' && state.activeTeam != null
+      ? `${state.phase} · PGY${state.activeTeam + 1}`
+      : state.phase ?? '–';
   phaseEl.className =
     state.paused ? 'paused' : state.phase === 'ANSWER' || sd ? 'answer' : '';
   qnum.textContent = !inLobby && state.qCount ? `Q${(state.qIndex ?? 0) + 1}/${state.qCount}` : '';
@@ -207,6 +211,16 @@ function render() {
     } else if (qz.kind === 'tf') {
       akey.textContent = `Answer: ${qz.answer ? 'TRUE ✓' : 'FALSE ✕'}`;
       akey.hidden = false;
+    } else if (qz.kind === 'control' && Array.isArray(qz.controls)) {
+      alist.replaceChildren(...qz.controls.map((control) => {
+        const li = document.createElement('li');
+        const answer = typeof control.answer === 'boolean'
+          ? control.answer ? 'YES' : 'NO'
+          : `${control.answer}${control.unit ? ' ' + control.unit : ''}`;
+        li.textContent = `${control.label}: ${answer}`;
+        return li;
+      }));
+      alist.hidden = false;
     }
   }
 

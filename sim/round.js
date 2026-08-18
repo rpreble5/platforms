@@ -19,6 +19,7 @@
  */
 
 import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, answerId, spawnFor } from './levels.js';
+import { buildControlArena, stepControls } from './control-boxes.js';
 import { step } from './world.js';
 
 export const PHASE = /** @type {const} */ ({
@@ -40,6 +41,9 @@ export const MAX_SPEED_BONUS = 500;
  * sloppy covered one.
  */
 export const TEAM_COVER_BONUS = 500;
+/** Cooperative Control Room scoring goes straight to the team's ledger. */
+export const CONTROL_ITEM_POINTS = 200;
+export const CONTROL_PERFECT_BONUS = 600;
 
 /** Question slides in and platforms rise. Inputs stay live throughout. */
 export const INTRO_MS = 3000;
@@ -78,7 +82,7 @@ export const DEBRIS_LIFE_MS = 1600;
  *
  * @typedef {object} Question
  * @property {string} text
- * @property {'range'} [type]
+ * @property {'range'|'control'} [type]
  * @property {string[]} [answers]
  * @property {number | number[]} [correct] one index, or several for
  *   select-all-that-apply (any correct platform scores; in teams mode a
@@ -91,6 +95,18 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {[number, number]} [answer]
  * @property {string} [unit]
  * @property {number} [answerMs]
+ * @property {string} [context] control questions only
+ * @property {Array<{
+ *   label:string,
+ *   kind:'toggle'|'number',
+ *   initial:boolean|number,
+ *   answer:boolean|number,
+ *   min?:number,
+ *   max?:number,
+ *   step?:number,
+ *   unit?:string
+ * }>} [controls]
+ * @property {number} [team] assigned cohort for a scheduled control turn
  */
 
 /**
@@ -127,6 +143,15 @@ export const DEBRIS_LIFE_MS = 1600;
  *   the display, so the sim never knows about rosters
  * @property {Map<number, boolean>} coverage per-team full-coverage verdicts
  *   from the round just scored (empty outside teams-mode select-all rounds)
+ * @property {Question[]} baseQuestions unscheduled standard deck
+ * @property {Question[]} controlPool reusable control-question pool
+ * @property {number} controlPerTeam requested turns for every active team
+ * @property {boolean} controlOnly standalone Control Room playlist
+ * @property {number[]} activeTeams frozen team set for this game
+ * @property {number} controlStartOffset rotates the first team on replay
+ * @property {Map<number, number>} teamBonuses cooperative points by team
+ * @property {import('./control-boxes.js').ControlArena | null} controlArena
+ * @property {{team:number, correct:number, total:number, points:number, perfect:boolean} | null} controlResult
  */
 
 /**
@@ -152,6 +177,15 @@ export function createGame(questions, answerMs = 12000) {
     mode: /** @type {'solo'|'teams'} */ ('solo'),
     cohortOf: () => -1,
     coverage: new Map(),
+    baseQuestions: questions.slice(),
+    controlPool: [],
+    controlPerTeam: 0,
+    controlOnly: false,
+    activeTeams: [],
+    controlStartOffset: 0,
+    teamBonuses: new Map(),
+    controlArena: null,
+    controlResult: null,
   };
 }
 
@@ -163,6 +197,70 @@ export function currentQuestion(g) {
 /** @param {Game} g @returns {number} ms allowed for the current question */
 export function answerWindow(g) {
   return currentQuestion(g)?.answerMs ?? g.answerMs;
+}
+
+/** @param {Question | null | undefined} q */
+export function isControlQuestion(q) {
+  return q?.type === 'control';
+}
+
+/**
+ * Configure the reusable Control Room pool. Scheduling waits until startGame,
+ * when the display has frozen the set of participating teams.
+ * @param {Game} g
+ * @param {{questions?:Question[], perTeam?:number, only?:boolean}} spec
+ */
+export function configureControlRounds(g, spec = {}) {
+  g.controlPool = Array.isArray(spec.questions) ? spec.questions.slice() : [];
+  g.controlPerTeam = Math.max(0, Math.floor(spec.perTeam ?? 0));
+  g.controlOnly = Boolean(spec.only);
+}
+
+/**
+ * Assign distinct cases evenly, then distribute them through the standard
+ * deck. Incomplete rounds are deliberately omitted: one team never receives
+ * an extra turn merely because a pack ran short of cases.
+ * @param {Question[]} standard
+ * @param {Question[]} pool
+ * @param {number[]} teams
+ * @param {number} perTeam
+ * @param {boolean} [only]
+ * @param {number} [startOffset]
+ * @returns {Question[]}
+ */
+export function buildQuestionSchedule(standard, pool, teams, perTeam, only = false, startOffset = 0) {
+  const active = [...new Set(teams.filter((t) => Number.isInteger(t) && t >= 0))].sort((a, b) => a - b);
+  const requested = Math.max(0, Math.floor(perTeam));
+  const fullRounds = active.length ? Math.min(requested, Math.floor(pool.length / active.length)) : 0;
+  /** @type {Question[]} */
+  const assigned = [];
+  let poolIndex = 0;
+  for (let round = 0; round < fullRounds; round++) {
+    for (let seat = 0; seat < active.length; seat++) {
+      const team = active[(seat + round + startOffset) % active.length];
+      assigned.push({ ...pool[poolIndex++], type: 'control', team });
+    }
+  }
+
+  if (only) return assigned;
+  if (!assigned.length || !standard.length) return standard.slice();
+
+  /** @type {Question[][]} */
+  const after = Array.from({ length: standard.length }, () => []);
+  assigned.forEach((q, i) => {
+    const slot = Math.min(
+      standard.length - 1,
+      Math.floor(((i + 1) * standard.length) / (assigned.length + 1))
+    );
+    after[slot].push(q);
+  });
+
+  /** @type {Question[]} */
+  const scheduled = [];
+  standard.forEach((q, i) => {
+    scheduled.push(q, ...after[i]);
+  });
+  return scheduled;
 }
 
 /**
@@ -206,8 +304,15 @@ export function targetIds(q) {
  * @param {number} dtMs
  */
 export function stepRound(g, world, dtMs) {
+  const q = currentQuestion(g);
   if (!inputsLive(g)) freezeInputs(world);
+  else if (isControlQuestion(q)) freezeInactiveControlInputs(g, world);
   step(world, dtMs);
+  if (isControlQuestion(q) && g.phase === PHASE.ANSWER && g.controlArena) {
+    const team = q?.team ?? -1;
+    const impacts = world.impacts.filter((hit) => g.cohortOf(hit.playerId) === team);
+    stepControls(g.controlArena, impacts, world.t);
+  }
   stepGame(g, world, dtMs);
 }
 
@@ -301,7 +406,7 @@ function enter(g, world, phase) {
     // outside the correct band falls away, and whoever guessed wrong falls
     // with the ground they chose to stand on.
     const q = currentQuestion(g);
-    if (q) {
+    if (q && !isControlQuestion(q)) {
       const keep = targetIds(q);
       const doomed = world.platforms.filter((p) =>
         q.type === 'range'
@@ -321,6 +426,17 @@ function enter(g, world, phase) {
  */
 export function startGame(g, world) {
   g.scores.clear();
+  for (const p of world.players.values()) g.scores.set(p.id, 0);
+  g.teamBonuses.clear();
+  g.questions = buildQuestionSchedule(
+    g.baseQuestions,
+    g.controlPool,
+    g.activeTeams,
+    g.controlPerTeam,
+    g.controlOnly,
+    g.controlStartOffset
+  );
+  if (g.activeTeams.length) g.controlStartOffset = (g.controlStartOffset + 1) % g.activeTeams.length;
   g.qIndex = -1;
   nextQuestion(g, world);
 }
@@ -338,12 +454,41 @@ export function nextQuestion(g, world) {
   g.results = [];
   g.debris = [];
   g.debrisT = 0;
-  world.platforms =
-    q.type === 'range'
-      ? buildRangeArena(/** @type {import('./levels.js').RangeQuestion} */ (q))
-      : choiceArena(g, q);
+  g.controlResult = null;
+  if (isControlQuestion(q)) {
+    g.controlArena = buildControlQuestionArena(q);
+    world.platforms = g.controlArena.platforms;
+  } else {
+    g.controlArena = null;
+    world.platforms =
+      q.type === 'range'
+        ? buildRangeArena(/** @type {import('./levels.js').RangeQuestion} */ (q))
+        : choiceArena(g, q);
+  }
   respawnAll(world);
   enter(g, world, PHASE.INTRO);
+}
+
+/** @param {Question} q @returns {import('./control-boxes.js').ControlArena} */
+function buildControlQuestionArena(q) {
+  const specs = q.controls ?? [];
+  const arena = buildControlArena(specs.length);
+  arena.controls.forEach((control, index) => {
+    const spec = specs[index];
+    if (!spec) return;
+    control.label = spec.label;
+    control.kind = spec.kind;
+    control.initial = spec.initial;
+    control.value = spec.initial;
+    control.min = spec.min;
+    control.max = spec.max;
+    control.step = spec.step;
+    control.unit = spec.unit;
+    control.lastSide = null;
+    control.lastChangedAt = -Infinity;
+    control.feedback = null;
+  });
+  return arena;
 }
 
 /**
@@ -402,6 +547,23 @@ export function freezeInputs(world) {
   }
 }
 
+/**
+ * Spectators remain in the world so roster/reconnect bookkeeping is untouched,
+ * but their controls are erased before physics and their impacts are ignored.
+ * @param {Game} g
+ * @param {import('./world.js').World} world
+ */
+export function freezeInactiveControlInputs(g, world) {
+  const team = currentQuestion(g)?.team ?? -1;
+  for (const p of world.players.values()) {
+    if (g.cohortOf(p.id) === team) continue;
+    p.input.held = 0;
+    p.input.pressEdge = 0;
+    p.input.releaseEdge = 0;
+    p.jumpBuffer = 0;
+  }
+}
+
 /** @param {import('./world.js').World} world */
 export function respawnAll(world) {
   let i = 0;
@@ -431,7 +593,7 @@ export function respawnAll(world) {
  */
 function recordArrivals(g, world, offset = 0) {
   const q = currentQuestion(g);
-  if (!q) return;
+  if (!q || isControlQuestion(q)) return;
   const targets = targetIds(q);
   for (const p of world.players.values()) {
     if (g.arrivals.has(p.id)) continue;
@@ -447,6 +609,10 @@ function recordArrivals(g, world, offset = 0) {
 function score(g, world) {
   const q = currentQuestion(g);
   if (!q) return;
+  if (isControlQuestion(q)) {
+    scoreControl(g, q);
+    return;
+  }
   const targets = targetIds(q);
   const window = answerWindow(g);
 
@@ -524,6 +690,23 @@ function score(g, world) {
   g.results = results;
 }
 
+/** @param {Game} g @param {Question} q */
+function scoreControl(g, q) {
+  const specs = q.controls ?? [];
+  const fixtures = g.controlArena?.controls ?? [];
+  let correct = 0;
+  for (let i = 0; i < specs.length; i++) {
+    if (fixtures[i]?.value === specs[i].answer) correct++;
+  }
+  const total = specs.length;
+  const perfect = total > 0 && correct === total;
+  const points = correct * CONTROL_ITEM_POINTS + (perfect ? CONTROL_PERFECT_BONUS : 0);
+  const team = q.team ?? -1;
+  if (team >= 0) g.teamBonuses.set(team, (g.teamBonuses.get(team) ?? 0) + points);
+  g.controlResult = { team, correct, total, points, perfect };
+  g.results = [];
+}
+
 /**
  * Linear decay across the answer window: arrive as it opens for the full bonus,
  * arrive as it closes for none.
@@ -549,9 +732,10 @@ export function speedBonus(arrivalMs, windowMs) {
  * @param {Map<number, number>} scores
  * @param {(id: number) => number} cohortOf
  * @param {number} [teamCount]
+ * @param {Map<number, number>} [bonuses]
  * @returns {Array<{count:number, total:number, avg:number}>}
  */
-export function teamStandings(scores, cohortOf, teamCount = 3) {
+export function teamStandings(scores, cohortOf, teamCount = 3, bonuses = new Map()) {
   const teams = Array.from({ length: teamCount }, () => ({ count: 0, total: 0, avg: 0 }));
   for (const [id, s] of scores) {
     const c = cohortOf(id);
@@ -559,7 +743,10 @@ export function teamStandings(scores, cohortOf, teamCount = 3) {
     teams[c].count++;
     teams[c].total += s;
   }
-  for (const t of teams) t.avg = t.count ? Math.round(t.total / t.count) : 0;
+  for (let i = 0; i < teams.length; i++) {
+    const t = teams[i];
+    t.avg = (t.count ? Math.round(t.total / t.count) : 0) + (bonuses.get(i) ?? 0);
+  }
   return teams;
 }
 

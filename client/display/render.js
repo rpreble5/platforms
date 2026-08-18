@@ -9,7 +9,9 @@ import { FX, RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shar
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { accessoryHidesEyes } from '../../shared/avatar.js';
 import { ANSWER_H, FLAG_H, FLAG_POLE, RANGE_ID, signBelowExtent } from '../../sim/levels.js';
+import { PHASE, currentQuestion, isControlQuestion } from '../../sim/round.js';
 import { animFor, pruneAnim } from './anim.js';
+import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns } from './round-ui.js';
@@ -69,29 +71,39 @@ function separate(items) {
  */
 export function render(cx, world, roster, game, opts) {
   drawSky(cx, world.t);
+  const question = currentQuestion(game);
+  const controlTurn = Boolean(isControlQuestion(question) && game.controlArena);
 
   // Debris behind, then the floor, then the signboards, then avatars. The
   // answer text sits in the signboard's skirt, below the landing surface, so a
   // crowd standing on a platform never covers the answer it represents.
-  drawDebris(cx, game);
-  for (const p of world.platforms) {
-    // A range round's floor comes in three pieces (plus the off-screen pit,
-    // which is never drawn); each piece is rendered exactly like the floor.
-    if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) {
-      drawFloor(cx, p);
-    } else if (p.id?.startsWith('perch')) {
-      drawPerch(cx, p);
+  if (controlTurn && question && game.controlArena) {
+    const revealing = game.phase === PHASE.REVEAL || game.phase === PHASE.SCORE;
+    drawControlStage(cx, world, game.controlArena, question, revealing);
+  } else {
+    drawDebris(cx, game);
+    for (const p of world.platforms) {
+      // A range round's floor comes in three pieces (plus the off-screen pit,
+      // which is never drawn); each piece is rendered exactly like the floor.
+      if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) {
+        drawFloor(cx, p);
+      } else if (p.id?.startsWith('perch')) {
+        drawPerch(cx, p);
+      }
     }
+    drawSigns(cx, world, game);
   }
-  drawSigns(cx, world, game);
 
-  const count = world.players.size;
+  const visiblePlayers = [...world.players.values()].filter(
+    (p) => !controlTurn || game.cohortOf(p.id) === question?.team
+  );
+  const count = visiblePlayers.length;
   const scale = avatarScale(count);
   if (FX.avatarAnim) pruneAnim(world.players);
 
   /** @type {Array<{x:number, y:number, w:number, coh:number, p:Player}>} */
   const items = [];
-  for (const p of world.players.values()) {
+  for (const p of visiblePlayers) {
     const coh = clampCohort(roster.get(p.id)?.cohortIndex ?? -1);
     items.push({ x: p.x, y: p.y, w: p.w * scale, coh, p });
   }

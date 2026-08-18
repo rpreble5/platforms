@@ -7,15 +7,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { COHORTS } from '../shared/palette.js';
+import { BTN_JUMP } from '../shared/protocol.js';
+import { PHYS, STEP_MS } from '../shared/tuning.js';
+
 import {
   ANSWER_H,
   FLOOR_Y,
+  LOW_BOARD_LIFT,
+  PLAQUE_GAP,
+  PLAQUE_H,
+  SLAB_H,
+  TIER,
   buildCustomArena,
   sanitizeLevelSpec,
   tierY,
 } from './levels.js';
 import { createGame, nextQuestion, startGame } from './round.js';
-import { createWorld } from './world.js';
+import { addPlayer, createWorld, step } from './world.js';
 
 const LEVEL = {
   name: 'Twin Spires',
@@ -77,6 +86,44 @@ test('buildCustomArena produces the standard arena shape', () => {
   const rungs = plats.filter((p) => p.id?.startsWith('perch'));
   assert.equal(rungs.length, 2);
   assert.equal(rungs[0].y, tierY(1));
+});
+
+test('tier-one answer text clears the tallest floor avatar and stays one-jump reachable', () => {
+  const spec = {
+    name: 'Low board clearance',
+    boards: [[960, 1, 480], [1500, 2, 336]],
+    rungs: [],
+  };
+  const plats = buildCustomArena(/** @type {any} */ (spec));
+  const low = /** @type {any} */ (plats.find((p) => p.id === 'ans0'));
+  assert.ok(low);
+  assert.equal(FLOOR_Y - low.y, TIER + LOW_BOARD_LIFT, 'tier one gains exactly one art tile');
+
+  const tallest = Math.max(...COHORTS.map((c) => c.height));
+  const tallestTop = FLOOR_Y - PHYS.PLAYER_H * tallest;
+  const plaqueTextMiddle = low.y + SLAB_H + PLAQUE_GAP + PLAQUE_H / 2;
+  assert.ok(
+    plaqueTextMiddle + 16 < tallestTop,
+    `plaque text at ${plaqueTextMiddle}px clears the tallest floor avatar at ${tallestTop}px`
+  );
+
+  const world = createWorld(plats);
+  const player = /** @type {any} */ (addPlayer(world, 1));
+  player.x = low.x + low.w / 2 - player.w / 2;
+  player.y = FLOOR_Y - player.h;
+  player.vx = 0;
+  player.vy = 0;
+  step(world, STEP_MS);
+  player.input.pressEdge |= BTN_JUMP;
+  let landed = false;
+  for (let i = 0; i < 240; i++) {
+    step(world, STEP_MS);
+    if (player.standingOn?.id === low.id) {
+      landed = true;
+      break;
+    }
+  }
+  assert.ok(landed, 'a plain jump from the floor lands on the lifted board');
 });
 
 /** @param {number} n @param {string} [level] */

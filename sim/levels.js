@@ -179,6 +179,28 @@ export function tierY(t) {
   return FLOOR_Y - TIER * t;
 }
 
+/**
+ * Tier-one answer plaques need one tile of extra air above the floor crowd.
+ * Their text then clears the tallest drawn avatar, while the 184px jump is
+ * still comfortably below the physics' ~220px apex. Route rungs stay on the
+ * regular tier grid so every higher climb keeps the established rhythm.
+ */
+export const LOW_BOARD_LIFT = GRID;
+
+/** @param {number} t @returns {number} y of an answer board on tier t */
+export function answerTierY(t) {
+  return tierY(t) - (t === 1 ? LOW_BOARD_LIFT : 0);
+}
+
+/**
+ * Logical tier for a platform surface, including the lifted tier-one board.
+ * @param {number} y
+ * @returns {number}
+ */
+export function tierOfY(y) {
+  return Math.round((FLOOR_Y - y) / TIER);
+}
+
 /** @typedef {'row'|'islands'|'pyramid'|'reverse-pyramid'} Layout */
 
 /**
@@ -351,10 +373,11 @@ const TIER_BOARD_W = GRID * 14;
  * [centerX, tier, width=PERCH_W] — tier-1 bases run wide where the label
  * rule allows, because the first climb is the one the whole room makes at
  * once. Answers keep deck order left to right. Placements obey two rules the reachability test enforces:
- * every board is reachable from the floor through hops that rise exactly one
- * TIER with at most a small horizontal gap, and nothing on a shared tier
- * touches. Highest surface is tier 4 (y=340) — any higher collides with the
- * question banner.
+ * every board is reachable from the floor through one logical tier per hop
+ * with at most a small horizontal gap, and nothing on a shared tier touches.
+ * Tier-one answer boards sit one art tile above their route tier so plaque text
+ * clears the floor crowd. Highest surface is tier 4 (y=340) — any higher
+ * collides with the question banner.
  *
  * @type {Record<string, Record<number, {ans: number[][], perch: number[][]}>>}
  */
@@ -407,7 +430,7 @@ export function buildTieredArena(n, layout) {
     platforms.push({
       id: answerId(i),
       x: center - w / 2,
-      y: tierY(tier),
+      y: answerTierY(tier),
       w,
       h: ANSWER_H,
       oneWay: true,
@@ -485,7 +508,7 @@ export function buildCustomArena(spec) {
     platforms.push({
       id: answerId(i),
       x: center - w / 2,
-      y: tierY(tier),
+      y: answerTierY(tier),
       w,
       h: ANSWER_H,
       oneWay: true,
