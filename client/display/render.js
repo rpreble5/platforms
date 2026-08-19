@@ -9,7 +9,7 @@ import { FX, RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shar
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { accessoryHidesEyes } from '../../shared/avatar.js';
 import { ANSWER_H, FLAG_H, FLAG_POLE, RANGE_ID, signBelowExtent } from '../../sim/levels.js';
-import { PHASE, currentQuestion, isControlQuestion } from '../../sim/round.js';
+import { PHASE, activeControlTeam, currentQuestion, isControlQuestion } from '../../sim/round.js';
 import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
@@ -94,8 +94,12 @@ export function render(cx, world, roster, game, opts) {
     drawSigns(cx, world, game);
   }
 
+  // Spectators hide only while a control turn is actually LIVE. At GAME_OVER
+  // the last control question is still "current" and its set is still drawn,
+  // but the whole room comes back for the free-run over the final standings.
+  const gatedTeam = activeControlTeam(game);
   const visiblePlayers = [...world.players.values()].filter(
-    (p) => !controlTurn || game.cohortOf(p.id) === question?.team
+    (p) => gatedTeam === null || game.cohortOf(p.id) === gatedTeam
   );
   const count = visiblePlayers.length;
   const scale = avatarScale(count);

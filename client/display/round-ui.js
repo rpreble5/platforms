@@ -10,7 +10,7 @@
  */
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
-import { COHORTS, clampCohort } from '../../shared/palette.js';
+import { COHORTS, TEAM_COLORS, clampCohort } from '../../shared/palette.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
@@ -348,7 +348,7 @@ function drawControlQuestion(cx, g, q) {
   const h = 150;
   const team = q.team ?? 0;
   const cohort = COHORTS[clampCohort(team)];
-  const teamColor = ['#4aa8ff', '#b168ff', '#ffd93d'][clampCohort(team)];
+  const teamColor = TEAM_COLORS[clampCohort(team)];
   cx.fillStyle = 'rgba(10,8,20,0.9)';
   cx.fillRect(0, 0, WORLD_W, h);
 
@@ -507,7 +507,7 @@ function drawControlScoreboard(cx, g) {
   const result = g.controlResult;
   if (!result) return;
   const cohort = COHORTS[clampCohort(result.team)];
-  const teamColor = ['#4aa8ff', '#b168ff', '#ffd93d'][clampCohort(result.team)];
+  const teamColor = TEAM_COLORS[clampCohort(result.team)];
   const w = 700;
   const h = 250;
   const x = (WORLD_W - w) / 2;

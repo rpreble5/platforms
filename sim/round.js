@@ -19,7 +19,7 @@
  */
 
 import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, answerId, spawnFor } from './levels.js';
-import { buildControlArena, stepControls } from './control-boxes.js';
+import { CONTROL_LABEL_MAX_CHARS, buildControlArena, stepControls } from './control-boxes.js';
 import { step } from './world.js';
 
 export const PHASE = /** @type {const} */ ({
@@ -205,6 +205,24 @@ export function isControlQuestion(q) {
 }
 
 /**
+ * The team whose turn is being gated RIGHT NOW, or null when nobody should
+ * be gated. This is the one place that knows a control turn is only "live"
+ * during its own phases: at GAME_OVER (and in the lobby) currentQuestion()
+ * still returns the last question, and gating off the question alone left
+ * every spectator frozen and invisible on the final-standings screen of a
+ * control-only game. All three gates — input freeze, bus drain, and the
+ * render filter — go through here.
+ * @param {Game} g
+ * @returns {number | null}
+ */
+export function activeControlTeam(g) {
+  if (g.phase === PHASE.LOBBY || g.phase === PHASE.GAME_OVER) return null;
+  const q = currentQuestion(g);
+  if (!isControlQuestion(q)) return null;
+  return q?.team ?? -1;
+}
+
+/**
  * Configure the reusable Control Room pool. Scheduling waits until startGame,
  * when the display has frozen the set of participating teams.
  * @param {Game} g
@@ -306,7 +324,7 @@ export function targetIds(q) {
 export function stepRound(g, world, dtMs) {
   const q = currentQuestion(g);
   if (!inputsLive(g)) freezeInputs(world);
-  else if (isControlQuestion(q)) freezeInactiveControlInputs(g, world);
+  else if (activeControlTeam(g) !== null) freezeInactiveControlInputs(g, world);
   step(world, dtMs);
   if (isControlQuestion(q) && g.phase === PHASE.ANSWER && g.controlArena) {
     const team = q?.team ?? -1;
@@ -476,7 +494,12 @@ function buildControlQuestionArena(q) {
   arena.controls.forEach((control, index) => {
     const spec = specs[index];
     if (!spec) return;
-    control.label = spec.label;
+    // Same cap the built-in fixtures get — a pack label must not overflow
+    // its box on the projector.
+    control.label =
+      spec.label.length <= CONTROL_LABEL_MAX_CHARS
+        ? spec.label
+        : `${spec.label.slice(0, CONTROL_LABEL_MAX_CHARS - 1).trimEnd()}…`;
     control.kind = spec.kind;
     control.initial = spec.initial;
     control.value = spec.initial;

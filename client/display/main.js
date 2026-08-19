@@ -27,7 +27,9 @@ import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildArena } from '../../sim/levels.js';
 import {
   PHASE,
+  activeControlTeam,
   answerWindow,
+  buildQuestionSchedule,
   configureControlRounds,
   createGame,
   currentQuestion,
@@ -121,6 +123,26 @@ function note(text) {
 // tune feel and verify the loop with no phone in the room.
 const LOCAL_ID = 0;
 let localMask = 0;
+
+// On by default for the dev loop; K removes it for the real party, where a
+// bean labelled "keyboard" standing in the crowd is just clutter. Purely
+// display-local — the server roster never contains id 0.
+let keyboardOn = true;
+
+function toggleKeyboardPlayer() {
+  keyboardOn = !keyboardOn;
+  if (keyboardOn) {
+    addPlayer(world, LOCAL_ID);
+    roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', finish: 'flat', connected: true });
+    note('keyboard player added — K to remove');
+  } else {
+    localMask = 0;
+    bus.forget(LOCAL_ID);
+    removePlayer(world, LOCAL_ID);
+    roster.delete(LOCAL_ID);
+    note('keyboard player removed — K to bring it back');
+  }
+}
 
 // ------------------------------------------------------------------ socket
 
@@ -325,9 +347,21 @@ function startConfiguredGame(controlOnly) {
     perTeam: controlOnly || game.mode === 'teams' ? controlSpec?.perTeam ?? 0 : 0,
     only: controlOnly,
   });
-  if (controlOnly && !game.activeTeams.length) {
-    note('Control Room needs at least one committed team');
-    return;
+  if (controlOnly) {
+    if (!game.activeTeams.length) {
+      note('Control Room needs at least one committed team');
+      return;
+    }
+    // A pool smaller than the team count schedules zero full rounds, and a
+    // zero-question game slams straight into the final-standings panel with
+    // no explanation. Refuse with the reason instead.
+    const turns = buildQuestionSchedule(
+      [], game.controlPool, game.activeTeams, game.controlPerTeam, true, 0
+    ).length;
+    if (!turns) {
+      note(`Control Room needs ${game.activeTeams.length} case${game.activeTeams.length === 1 ? '' : 's'} for ${game.activeTeams.length} team${game.activeTeams.length === 1 ? '' : 's'} — this pack has ${game.controlPool.length}`);
+      return;
+    }
   }
   startGame(game, world);
 }
@@ -502,9 +536,10 @@ function frame(now) {
     // Always drain, so nothing accumulates in the bus during a freeze and
     // discharges all at once when the next question opens. stepRound decides
     // whether the drained input actually reaches the simulation.
-    bus.applyMask(LOCAL_ID, localMask);
-    const liveQuestion = currentQuestion(game);
-    const controlTeam = isControlQuestion(liveQuestion) ? liveQuestion?.team ?? -1 : null;
+    if (keyboardOn) bus.applyMask(LOCAL_ID, localMask);
+    // Phase-aware: at GAME_OVER the last question is still "current", but
+    // nobody is gated any more — activeControlTeam knows the difference.
+    const controlTeam = showdown ? null : activeControlTeam(game);
     bus.drainInto(world, (id) => controlTeam === null || cohortOf(id) === controlTeam);
     flash.observe(world);
     if (showdown) stepShowdown(showdown, world, STEP_MS);
@@ -681,7 +716,15 @@ function onKey(e, down) {
     }
     if (k === 'r') {
       if (showdown) endShowdown();
+      // From the lobby, R must start the same game Enter would — through the
+      // configuration step, or a teams pack silently loses its Control Room
+      // turns. Mid-game it stays a bare restart of the game as configured.
+      else if (game.phase === PHASE.LOBBY) startConfiguredGame(false);
       else startGame(game, world);
+      return;
+    }
+    if (k === 'k') {
+      toggleKeyboardPlayer();
       return;
     }
     // Q for the menu. Deliberately live outside the lobby too, not just at

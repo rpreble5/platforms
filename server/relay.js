@@ -307,6 +307,7 @@ export class Relay {
         conn.role = 'host';
         this.hosts.add(conn);
         this.#send(conn, encodeJson({ type: 'HOST_STATE', state: this.hostCheckpoint }));
+        this.#send(conn, encodeJson({ type: 'ROSTER', players: this.roster.publicList() }));
         break;
       }
 
@@ -314,8 +315,25 @@ export class Relay {
         // Only an authenticated host, and only verbs the display knows. The
         // relay stays dumb: it forwards the command, the display owns the game.
         if (conn.role !== 'host') return;
-        if (!['next', 'pause', 'resume', 'restart', 'showdown', 'packnext', 'timenext'].includes(msg.cmd)) return;
+        if (!['next', 'pause', 'resume', 'restart', 'menu', 'showdown', 'packnext', 'timenext'].includes(msg.cmd)) return;
         this.#broadcastDisplays(encodeJson({ type: 'HOST_CMD', cmd: msg.cmd }));
+        break;
+      }
+
+      case 'KICK_PLAYER': {
+        // Host-only roster surgery: drop a player entirely — the ghost of
+        // someone who went home, a duplicate join, a test phone. Their live
+        // socket (if any) is told and closed; the ROSTER broadcast makes the
+        // display fold the avatar away. Not a ban: the phone can rejoin, it
+        // just starts fresh.
+        if (conn.role !== 'host') return;
+        if (!Number.isInteger(msg.playerId)) return;
+        const phone = this.phoneByPlayerId.get(msg.playerId);
+        if (phone) {
+          this.#send(phone, encodeJson({ type: 'KICK', reason: 'Removed by the host — rejoin any time.' }));
+          try { phone.ws.close(); } catch { /* already gone */ }
+        }
+        if (this.roster.remove(msg.playerId)) this.#broadcastRoster();
         break;
       }
 
@@ -401,7 +419,10 @@ export class Relay {
   }
 
   #broadcastRoster() {
-    this.#broadcastDisplays(encodeJson({ type: 'ROSTER', players: this.roster.publicList() }));
+    const frame = encodeJson({ type: 'ROSTER', players: this.roster.publicList() });
+    this.#broadcastDisplays(frame);
+    // Hosts hold the same list so the host page can offer player management.
+    for (const h of this.hosts) this.#send(h, frame);
   }
 
   /**

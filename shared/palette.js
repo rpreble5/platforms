@@ -110,6 +110,14 @@ export const FINISHES = [
 export const SLOTS_PER_COLOR = 1;
 
 /**
+ * One accent per training year, indexed like COHORTS — the colour a team's
+ * name is written in wherever the year itself is the actor (Control Room
+ * banners, team scoreboards). Kept here so a re-theme or a fourth cohort is
+ * one edit, not a hunt for inline hex triples.
+ */
+export const TEAM_COLORS = ['#4aa8ff', '#b168ff', '#ffd93d'];
+
+/**
  * Distinct claims per cohort — one per colour (the cohort's shape makes the
  * same colour distinct across years). Twelve per year covers a residency
  * class; if a thirteenth same-year player ever joins, the roster grants

@@ -446,10 +446,22 @@ export function loadQuestions(root, packFile = 'default.json') {
               problems.push(`${at}: initial/answer outside range — skipped`);
               return false;
             }
+            // The box only ever holds initial ± k*step (clamped), so an
+            // answer off that lattice can NEVER be dialled in: the item is
+            // permanently unscoreable and a perfect board impossible.
+            const steps = (control.answer - control.initial) / control.step;
+            if (Math.abs(steps - Math.round(steps)) > 1e-9) {
+              problems.push(`${at}: answer ${control.answer} is unreachable from ${control.initial} in steps of ${control.step} — skipped`);
+              return false;
+            }
           }
         }
         q.type = 'control';
-        q.answerMs = Number.isFinite(q.answerMs) ? q.answerMs : answerMs;
+        // Same clamp as the block-level window: a stray 500ms (or negative)
+        // per-question value would end a team's whole turn unplayed.
+        q.answerMs = Number.isFinite(q.answerMs)
+          ? Math.max(10000, Math.min(90000, Math.round(q.answerMs)))
+          : answerMs;
         return true;
       });
     if (controlQuestions.length) {

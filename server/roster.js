@@ -238,6 +238,21 @@ export class Roster {
   }
 
   /**
+   * Drop a player entirely — the host's kick. Unlike disconnect, the record
+   * (and its reconnect token) is gone: the colour frees up, the avatar folds
+   * away on the next ROSTER broadcast, and a rejoin starts fresh.
+   * @param {number} id
+   * @returns {boolean} whether anyone was removed
+   */
+  remove(id) {
+    const r = this.byId.get(id);
+    if (!r) return false;
+    this.byId.delete(id);
+    this.byToken.delete(r.token);
+    return true;
+  }
+
+  /**
    * @returns {boolean} whether a slot was reclaimed
    */
   #evictOldestDisconnected() {

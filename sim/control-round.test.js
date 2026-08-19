@@ -116,3 +116,53 @@ test('the locked board scores once into the active team ledger', () => {
   const [standing] = teamStandings(g.scores, () => 0, 1, g.teamBonuses);
   assert.equal(standing.avg, 8 * CONTROL_ITEM_POINTS + CONTROL_PERFECT_BONUS);
 });
+
+test('at GAME_OVER after a control-only game, nobody is gated any more', async () => {
+  const { activeControlTeam, freezeInactiveControlInputs, isControlQuestion } = await import('./round.js');
+  const { BTN_RIGHT } = await import('../shared/protocol.js');
+
+  const g = createGame([], 200);
+  g.mode = 'teams';
+  g.cohortOf = (id) => (id === 1 ? 0 : 1); // player 1 is team 0, player 2 team 1
+  g.activeTeams = [0];
+  configureControlRounds(g, { questions: [controlQuestion('A')], perTeam: 1, only: true });
+
+  const world = createWorld([]);
+  addPlayer(world, 1);
+  addPlayer(world, 2);
+  startGame(g, world);
+
+  // During the turn the spectator (team 1) is gated…
+  assert.equal(activeControlTeam(g), 0, 'team 0 owns the live turn');
+  const spectator = /** @type {any} */ (world.players.get(2));
+  spectator.input.held = BTN_RIGHT;
+  freezeInactiveControlInputs(g, world);
+  assert.equal(spectator.input.held, 0, 'spectator input erased during the turn');
+
+  // …then the deck ends. The last control question is still "current", but
+  // the game-over screen is free-run time for the whole room.
+  for (let t = 0; t < 600 && g.phase !== PHASE.GAME_OVER; t++) stepRound(g, world, 100);
+  assert.equal(g.phase, PHASE.GAME_OVER);
+  assert.ok(isControlQuestion(currentQuestion(g)), 'the control question is still current at GAME_OVER');
+  assert.equal(activeControlTeam(g), null, 'but nobody is gated');
+
+  spectator.input.held = BTN_RIGHT;
+  stepRound(g, world, 8);
+  assert.equal(spectator.input.held & BTN_RIGHT, BTN_RIGHT, 'spectator input flows at GAME_OVER');
+});
+
+test('pack control labels get the same length cap as the fixtures', async () => {
+  const { CONTROL_LABEL_MAX_CHARS } = await import('./control-boxes.js');
+  const g = createGame([], 200);
+  g.activeTeams = [0];
+  const long = controlQuestion('A');
+  /** @type {any} */ (long.controls)[0].label = 'x'.repeat(CONTROL_LABEL_MAX_CHARS + 20);
+  configureControlRounds(g, { questions: [long], perTeam: 1, only: true });
+  const world = createWorld([]);
+  startGame(g, world);
+  assert.ok(g.controlArena, 'control arena built');
+  assert.ok(
+    g.controlArena.controls[0].label.length <= CONTROL_LABEL_MAX_CHARS,
+    `label capped (${g.controlArena.controls[0].label.length} chars)`
+  );
+});

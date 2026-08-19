@@ -292,3 +292,23 @@ test('publicList exposes the look but never the token', () => {
   assert.equal(row.cohortIndex, a.cohortIndex);
   assert.equal(/** @type {any} */ (row).token, undefined);
 });
+
+test('remove() drops the record, frees the colour, and forgets the token', () => {
+  const roster = new Roster();
+  const a = /** @type {any} */ (roster.resolve(undefined, 'Kickme')).record;
+  roster.setLook(a.id, { colorIndex: 3, cohortIndex: 1 });
+
+  assert.equal(roster.remove(a.id), true);
+  assert.equal(roster.byId.has(a.id), false, 'record gone');
+  assert.equal(roster.byToken.has(a.token), false, 'reconnect token gone');
+  assert.equal(roster.remove(a.id), false, 'second remove is a no-op');
+
+  // The colour is claimable again by the same year.
+  const b = /** @type {any} */ (roster.resolve(undefined, 'Next')).record;
+  roster.setLook(b.id, { colorIndex: 3, cohortIndex: 1 });
+  assert.equal(roster.byId.get(b.id)?.colorIndex, 3, 'freed colour re-claimed');
+
+  // A rejoin with the kicked token starts fresh instead of resurrecting.
+  const c = /** @type {any} */ (roster.resolve(a.token, 'Back')).record;
+  assert.notEqual(c.id, a.id, 'kicked token does not resurrect the old id');
+});

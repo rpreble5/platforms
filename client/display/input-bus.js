@@ -129,11 +129,16 @@ export class InputBus {
       const p = world.players.get(id);
       if (!p) continue;
       if (!allow(id)) {
+        // Erase the player's tick input and CONSUME the pending edges, but
+        // keep the latched held mask: it mirrors the phone's real button
+        // state, and phones only send on change plus a slow heartbeat.
+        // Zeroing it caused a post-turn dead zone (a still-held direction
+        // ignored until the next heartbeat) and then a fabricated press edge
+        // when that heartbeat diffed against the forged zero.
         p.input.held = 0;
         p.input.pressEdge = 0;
         p.input.releaseEdge = 0;
         p.jumpBuffer = 0;
-        s.held = 0;
         s.pressEdge = 0;
         s.releaseEdge = 0;
         s.firstPendingAt = 0;

@@ -49,9 +49,11 @@ with no phone at all.
 | `S` | start the showdown (sudden-death true/false, from the lobby) |
 | `P` | pause |
 | `R` | restart from question one / abort the showdown |
+| `Q` | back to the main menu (from a running or finished game) |
 | `A` `D` / arrows | move the local test avatar |
 | space / `W` | jump |
-| `H` | per-player RTT / loss table |
+| `K` | remove / restore the keyboard test avatar (remove it for the real party) |
+| `H` | latency HUD: hidden → panel → per-player detail |
 | `T` | live physics tuning (`←→` pick, `↑↓` adjust, shift for ×5, `P` prints a paste-able block) |
 | `F` | arm the flash-test target |
 

@@ -55,6 +55,19 @@
   #menurow { display: flex; gap: 12px; }
   #menurow button { font-size: 16px; padding: 16px 12px; }
   #menu { background: #23324d; color: #9dc4ff; font-size: 17px; padding: 16px; }
+  #playersBtn { background: #1f2b3c; color: #9db4d4; font-size: 16px; padding: 14px; }
+  #plist {
+    background: #201a33; border: 1px solid #3a3157; border-radius: 16px;
+    padding: 4px 14px; margin-bottom: 12px; max-height: 38vh; overflow: auto;
+  }
+  .prow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #2c2547; }
+  .prow:last-child { border-bottom: 0; }
+  .prow .swd { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .prow .nm { font-weight: 700; }
+  .prow.off .nm { color: #7a6fa3; text-decoration: line-through; }
+  .prow .meta { color: #7a6fa3; font-size: 13px; margin-left: auto; }
+  .prow button { width: auto; margin: 0; padding: 8px 14px; font: 800 14px/1 inherit; background: #5c2320; color: #ffb08a; border-radius: 10px; }
+  #plist .none { color: #7a6fa3; font-size: 14px; padding: 12px 0; }
   #restart { background: #46213f; color: #ff9db0; font-size: 17px; padding: 16px; }
   #restart.armed { background: #a12f3d; color: #fff; }
 
@@ -90,6 +103,8 @@
 </div>
 <button id="pause">Pause</button>
 <button id="showdown" hidden>Start showdown ☠</button>
+<button id="playersBtn">Manage players</button>
+<div id="plist" hidden></div>
 <div class="spacer"></div>
 <button id="menu" hidden>Back to main menu</button>
 <button id="restart">Restart from question 1</button>
@@ -148,6 +163,10 @@ function connect() {
       dot.classList.add('on');
       state = msg.state;
       render();
+    }
+    if (msg.type === 'ROSTER') {
+      rosterList = Array.isArray(msg.players) ? msg.players : [];
+      renderPlayers();
     }
   };
 }
@@ -244,6 +263,55 @@ function render() {
 
 nextBtn.addEventListener('click', () => cmd('next'));
 menuBtn.addEventListener('click', () => cmd('menu'));
+
+// ---------------------------------------------------------------- players
+//
+// Roster surgery from the back of the room: fold away the ghost of someone
+// who went home, a duplicate join, or a test phone. DOM built with
+// textContent throughout — names are player-typed input.
+let rosterList = [];
+const playersBtn = $('playersBtn'), plist = $('plist');
+
+playersBtn.addEventListener('click', () => {
+  plist.hidden = !plist.hidden;
+  renderPlayers();
+});
+
+function renderPlayers() {
+  playersBtn.textContent = `Manage players (${rosterList.length})`;
+  if (plist.hidden) return;
+  plist.replaceChildren();
+  if (!rosterList.length) {
+    const p = document.createElement('div');
+    p.className = 'none';
+    p.textContent = 'Nobody has joined yet.';
+    plist.appendChild(p);
+    return;
+  }
+  for (const pl of rosterList) {
+    const row = document.createElement('div');
+    row.className = pl.connected ? 'prow' : 'prow off';
+    const dot = document.createElement('span');
+    dot.className = 'swd';
+    dot.style.background = pl.color || '#555';
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = pl.name || `#${pl.id}`;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = (pl.cohortSet ? `PGY${(pl.cohortIndex ?? 0) + 1}` : 'no year')
+      + (pl.connected ? '' : ' · offline');
+    const kick = document.createElement('button');
+    kick.textContent = 'Remove';
+    kick.addEventListener('click', () => {
+      if (!confirm(`Remove ${pl.name || 'player #' + pl.id}? They can rejoin, but start fresh.`)) return;
+      sendJson({ type: 'KICK_PLAYER', playerId: pl.id });
+      if (navigator.vibrate) navigator.vibrate(15);
+    });
+    row.append(dot, nm, meta, kick);
+    plist.appendChild(row);
+  }
+}
 pauseBtn.addEventListener('click', () => cmd(state?.paused ? 'resume' : 'pause'));
 showdownBtn.addEventListener('click', () => cmd('showdown'));
 packBtn.addEventListener('click', () => cmd('packnext'));

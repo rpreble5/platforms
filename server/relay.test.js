@@ -361,3 +361,47 @@ test('a connected player is never evicted to make room', { timeout: 20000 }, asy
   );
   assert.equal(rig.relay.roster.byId.size, CAP);
 });
+
+test('the host can remove a player; impostors cannot', async (t) => {
+  const rig = await boot({ hostKey: 'sesame' });
+  t.after(() => rig.close());
+
+  const display = await rig.open('display');
+  const phone = await rig.open();
+  phone.json({ type: 'HELLO', name: 'Ghost' });
+  await phone.until((f) => jsonMsgs(f).some((m) => m.type === 'WELCOME' || m.type === 'IDENTITY'));
+  const identity = jsonMsgs(phone.frames).find((m) => typeof m.playerId === 'number' || typeof m.id === 'number');
+  const playerId = identity?.playerId ?? identity?.id;
+  assert.ok(Number.isInteger(playerId), `got a player id (${JSON.stringify(identity)})`);
+
+  // A phone (non-host) asking for a kick is ignored outright.
+  const impostor = await rig.open();
+  impostor.json({ type: 'HELLO' });
+  impostor.json({ type: 'KICK_PLAYER', playerId });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(rig.relay.roster.byId.has(playerId), 'a non-host cannot remove anyone');
+
+  // The real host can.
+  const host = await rig.open();
+  host.json({ type: 'HOST_HELLO', key: 'sesame' });
+  await host.until((f) => jsonMsgs(f).some((m) => m.type === 'ROSTER'));
+  assert.ok(
+    jsonMsgs(host.frames).some((m) => m.type === 'ROSTER'),
+    'hosts receive the roster for the player list'
+  );
+
+  host.json({ type: 'KICK_PLAYER', playerId });
+  assert.ok(
+    await phone.until((f) => jsonMsgs(f).some((m) => m.type === 'KICK')),
+    'the kicked phone is told'
+  );
+  assert.ok(
+    await display.until((f) =>
+      jsonMsgs(f).some(
+        (m) => m.type === 'ROSTER' && !m.players.some((/** @type {any} */ p) => p.id === playerId)
+      )
+    ),
+    'the display gets a roster without the player'
+  );
+  assert.equal(rig.relay.roster.byId.has(playerId), false, 'the record is gone');
+});
