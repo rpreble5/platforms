@@ -17,7 +17,7 @@ import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { ANSWER_H, FLAG_H, FLAG_POLE, FLOOR_Y, PLAQUE_GAP, PLAQUE_H, SLAB_H, rangeX } from '../../sim/levels.js';
 import { SPRITES, art, drawTileBox, drawTiled, has } from './art.js';
 import { FONT, INK, SKY, STAGE, UI } from './theme.js';
-import { activeWay, drawGlassSky, drawTerrazzoSky, glassFam, glassFrost, themeName } from './themes.js';
+import { activeWay, drawFrostBlobs, drawGlassSky, drawTerrazzoSky, glassFam, glassFrost, themeName } from './themes.js';
 
 /** @typedef {import('../../sim/collide.js').Platform} Platform */
 
@@ -208,6 +208,9 @@ function drawGlassChunk(cx, x, y, w, h, r, state) {
   const frost = glassFrost(WORLD_W, WORLD_H);
   if (frost) {
     cx.drawImage(frost, 0, 0);
+    // The live half: today's blobs, at this frame's drift and hue, so the
+    // glass keeps blurring the sky it actually stands in front of.
+    drawFrostBlobs(cx, WORLD_W, WORLD_H);
     cx.fillStyle = state === 'correct' ? 'rgba(255,255,255,0.30)' : fam.glassFill;
     cx.fillRect(x, y, w, h);
   }

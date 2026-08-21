@@ -15,7 +15,7 @@ import { drawBean } from '../../shared/avatar.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
-import { glassFrost, themeName } from './themes.js';
+import { drawFrostBlobs, glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
 
 /**
@@ -681,6 +681,9 @@ export function panel(cx, x, y, w, h, edge) {
     cx.clip();
     if (frost) {
       cx.drawImage(frost, 0, 0);
+      // The live half of the frost — this frame's blobs, so the panel's
+      // window shows the same colours as the sky around it.
+      drawFrostBlobs(cx, WORLD_W, WORLD_H);
       cx.fillStyle = 'rgba(12,8,28,0.62)';
       cx.fillRect(x, y, w, h);
     }

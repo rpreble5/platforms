@@ -15,8 +15,11 @@
  *
  * Decoration is STATIC, with one deliberate exception: the glass sky
  * BREATHES — its blobs drift and glow on ~20s cycles (FX.skyBreathe), slow
- * enough to feel, too slow to watch. Everything else holds still; the
- * celebration confetti is the only confetti-shaped thing that ever moves.
+ * enough to feel, too slow to watch. The frosted panels track it: their
+ * blurred base is static but the live blobs composite into every panel clip
+ * (drawFrostBlobs), so the glass keeps "blurring" the sky it stands in
+ * front of. Everything else holds still; the celebration confetti is the
+ * only confetti-shaped thing that ever moves.
  */
 
 import { FX } from '../../shared/tuning.js';
@@ -242,6 +245,11 @@ export function skyStyle() {
  * @param {number} w @param {number} h
  */
 export function drawGlassSky(cx, w, h, t = 0) {
+  // The module sky clock: the sky is the first thing drawn each frame, so
+  // everything that composites live blobs later in the same frame (the
+  // frosted panels, via drawFrostBlobs) agrees on this t without threading
+  // a parameter through every panel call site — same pattern as setRound().
+  skyT = t;
   if (skyStyleKey === 'rich' && typeof document !== 'undefined') {
     // The expensive layers are cached WITHOUT the blobs; the blobs draw live
     // on top so they can breathe. (Order shifts them above the ribbons and
@@ -282,6 +290,8 @@ function drawClassicGlassSky(cx, w, h, t = 0) {
 /** @type {HTMLCanvasElement | null} */
 let skyCanvas = null;
 let skyKey = '';
+/** World time of the current frame's sky, recorded by drawGlassSky. */
+let skyT = 0;
 /** Fixed for now; becomes the per-question seed if round variation ships. */
 const RICH_SEED = 7;
 
@@ -472,8 +482,12 @@ function hslaOf(rgba) {
  * @param {number} w @param {number} h
  * @param {GlassFamily} f
  * @param {number} [t] world time in ms
+ * @param {{widen?: number, boost?: number}} [opts] the frost look: wider and
+ *   brighter stands in for "this blob, blurred" (see drawFrostBlobs)
  */
-function drawGlassBlobs(cx, w, h, f, t = 0) {
+function drawGlassBlobs(cx, w, h, f, t = 0, opts = {}) {
+  const widen = opts.widen ?? 1;
+  const boost = opts.boost ?? 1;
   const live = FX.skyBreathe && t > 0;
   const hueSpin = live ? (t / 60000) * 360 : 0;
   f.blobs.forEach((b, i) => {
@@ -489,9 +503,9 @@ function drawGlassBlobs(cx, w, h, f, t = 0) {
     const hue = (((c.h + hueSpin + wobble) % 360) + 360) % 360;
     const x = b.x * w + dx;
     const y = b.y * h + dy;
-    const r = b.r * w;
+    const r = b.r * w * widen;
     const rg = cx.createRadialGradient(x, y, 0, x, y, r);
-    rg.addColorStop(0, `hsla(${hue}, ${c.s}%, ${c.l}%, ${Math.min(1, c.a * glow)})`);
+    rg.addColorStop(0, `hsla(${hue}, ${c.s}%, ${c.l}%, ${Math.min(1, c.a * glow * boost)})`);
     // Fade to the same hue at zero alpha — fading to transparent black greys
     // the midfield out.
     rg.addColorStop(1, `hsla(${hue}, ${c.s}%, ${c.l}%, 0)`);
@@ -500,17 +514,37 @@ function drawGlassBlobs(cx, w, h, f, t = 0) {
   });
 }
 
+/**
+ * The live half of the frosted glass. glassFrost() is only the blurred
+ * gradient base; this draws the CURRENT frame's blobs — same drift, glow and
+ * hue as the open sky — into whatever clip the caller has set. Wider and
+ * brighter than the sky's own blobs because that is what a heavy blur does
+ * to a smooth radial gradient (spreads it) and what real frosted glass does
+ * to the lights behind it (they glow harder than the wall — the boost
+ * replaces the old cache's doubled-blob pass). Costs a few clipped gradient
+ * fills per panel; no blur runs at runtime.
+ * @param {CanvasRenderingContext2D} cx clipped to the panel being drawn
+ * @param {number} w @param {number} h world size
+ */
+export function drawFrostBlobs(cx, w, h) {
+  drawGlassBlobs(cx, w, h, glassFam(), skyT, { widen: 1.18, boost: 1.7 });
+}
+
 /** @type {HTMLCanvasElement | null} */
 let frostCanvas = null;
 let frostKey = '';
 
 /**
- * The frosted backdrop the glass panels window into. Canvas has no
- * backdrop-filter, so this fakes one properly: the sky is re-rendered with
- * the light blobs doubled up (so colour visibly bleeds through the frost),
- * then heavily blurred by the classic downscale/upscale trick — no ctx.filter
- * dependency, works in every browser. Built ONCE per family and cached;
- * per-frame cost is a clipped drawImage, which is nothing.
+ * The frosted backdrop the glass panels window into — the STATIC half only.
+ * Canvas has no backdrop-filter, so the fake comes in two layers: this is
+ * the sky WITHOUT its blobs (gradient; plus ribbons/dust/grain in the rich
+ * style), heavily blurred by the classic downscale/upscale trick — no
+ * ctx.filter dependency, works in every browser — built once per family and
+ * cached. The blobs are deliberately excluded: they breathe and hue-shift
+ * per frame, so consumers composite them live with drawFrostBlobs() after
+ * blitting this base. (A blurred smooth radial gradient is just the same
+ * gradient a little wider, so the live composite matches what a true
+ * re-blur would produce — without ever blurring at runtime.)
  * @param {number} w @param {number} h world size, from the caller so this
  *   module stays free of tuning imports
  * @returns {HTMLCanvasElement | null} null outside a DOM (tests, node)
@@ -527,13 +561,16 @@ export function glassFrost(w, h) {
   src.width = w;
   src.height = h;
   const sc = /** @type {CanvasRenderingContext2D} */ (src.getContext('2d'));
-  // t=0 on purpose: the frost is a 24x blur, where the breathe's 30px drift
-  // is invisible — re-rendering this per frame would be the one genuinely
-  // expensive way to animate the sky.
-  drawGlassSky(sc, w, h);
-  // A second pass of blobs: through real frosted glass the lights behind
-  // glow stronger than the wall does, and it makes the blur legible.
-  drawGlassBlobs(sc, w, h, f);
+  if (skyStyleKey === 'rich') {
+    drawRichGlassSky(sc, w, h, f, RICH_SEED, false);
+  } else {
+    const g = sc.createLinearGradient(0, 0, w * 0.22, h);
+    g.addColorStop(0, f.stops[0]);
+    g.addColorStop(0.55, f.stops[1]);
+    g.addColorStop(1, f.stops[2]);
+    sc.fillStyle = g;
+    sc.fillRect(0, 0, w, h);
+  }
 
   const small = document.createElement('canvas');
   small.width = Math.max(1, Math.round(w / 24));
