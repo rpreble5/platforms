@@ -123,8 +123,9 @@ export const FX = {
   // Pentatonic landing notes on the display's speakers (M mutes live,
   // N cycles the voicing). See client/display/audio.js.
   sound: true,
-  // The glass sky breathes: its light blobs drift ~30px and brighten/dim
-  // ~14% on offset 16-23s cycles. The one deliberate exception to
+  // The glass sky breathes: its light blobs drift ~30px, brighten/dim ~14%,
+  // and ride the full colour spectrum (one hue lap per minute, plus a small
+  // per-blob wobble) on offset cycles. The one deliberate exception to
   // "decoration is static" — slow enough to feel, too slow to watch.
   // Render-only; this flag is the whole off-switch.
   skyBreathe: true,

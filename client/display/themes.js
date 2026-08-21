@@ -402,11 +402,48 @@ function grainTile(rnd) {
 const TAU = Math.PI * 2;
 
 /**
+ * Blob colours parsed once per distinct rgba string — the per-frame path
+ * only does arithmetic and template strings.
+ * @type {Map<string, {h:number, s:number, l:number, a:number}>}
+ */
+const HSLA_CACHE = new Map();
+
+/** @param {string} rgba @returns {{h:number, s:number, l:number, a:number}} */
+function hslaOf(rgba) {
+  let v = HSLA_CACHE.get(rgba);
+  if (v) return v;
+  const m = rgba.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+  const r = (m ? +m[1] : 255) / 255;
+  const g = (m ? +m[2] : 255) / 255;
+  const b = (m ? +m[3] : 255) / 255;
+  const a = m && m[4] !== undefined ? +m[4] : 1;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  v = { h, s: s * 100, l: l * 100, a };
+  HSLA_CACHE.set(rgba, v);
+  return v;
+}
+
+/**
  * The big soft light blobs. With a world time they BREATHE: each drifts a
- * few dozen pixels and swells/dims a touch on offset cycles whose periods
- * share no common multiple, so the pattern never visibly repeats. t=0 (or
- * FX.skyBreathe off) is exactly the static sky — which is also what the
- * frost blur and the node tests see.
+ * few dozen pixels, swells/dims a touch, and — the colour part — its hue
+ * RIDES THE FULL RAINBOW, one lap a minute plus a small per-blob wobble, so
+ * the lights slowly wander the spectrum while the family's base gradient
+ * keeps the scene's identity anchored. All the periods are offset and share
+ * no common multiple, so the pattern never visibly repeats. t=0 (or
+ * FX.skyBreathe off) is exactly the family's own static colours — which is
+ * also what the frost blur and the node tests see.
  * @param {CanvasRenderingContext2D} cx
  * @param {number} w @param {number} h
  * @param {GlassFamily} f
@@ -414,21 +451,26 @@ const TAU = Math.PI * 2;
  */
 function drawGlassBlobs(cx, w, h, f, t = 0) {
   const live = FX.skyBreathe && t > 0;
+  const hueSpin = live ? (t / 60000) * 360 : 0;
   f.blobs.forEach((b, i) => {
     const phase = i * 2.4;
     const dx = live ? Math.sin((t / 18000) * TAU + phase) * 34 : 0;
     const dy = live ? Math.cos((t / 23000) * TAU + phase * 1.3) * 22 : 0;
-    const glow = live ? 1 + 0.14 * Math.sin((t / 16000) * TAU + phase * 0.7) : 1;
+    // Slightly brighter than rest while live, so the travelling hues carry —
+    // at the family's resting alpha the rainbow read as a rumour.
+    const glow = live ? 1.12 + 0.18 * Math.sin((t / 16000) * TAU + phase * 0.7) : 1;
+    const wobble = live ? 14 * Math.sin((t / 29000) * TAU + phase) : 0;
 
+    const c = hslaOf(b.c);
+    const hue = (((c.h + hueSpin + wobble) % 360) + 360) % 360;
     const x = b.x * w + dx;
     const y = b.y * h + dy;
     const r = b.r * w;
-    const baseAlpha = Number((b.c.match(/[\d.]+(?=\))/) ?? [0.2])[0]);
     const rg = cx.createRadialGradient(x, y, 0, x, y, r);
-    rg.addColorStop(0, withAlpha(b.c, Math.min(1, baseAlpha * glow)));
+    rg.addColorStop(0, `hsla(${hue}, ${c.s}%, ${c.l}%, ${Math.min(1, c.a * glow)})`);
     // Fade to the same hue at zero alpha — fading to transparent black greys
     // the midfield out.
-    rg.addColorStop(1, withAlpha(b.c, 0));
+    rg.addColorStop(1, `hsla(${hue}, ${c.s}%, ${c.l}%, 0)`);
     cx.fillStyle = rg;
     cx.fillRect(x - r, y - r, r * 2, r * 2);
   });
