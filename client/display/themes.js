@@ -13,9 +13,13 @@
  * projector washes the glass gradients out, packs switch with
  * `"theme": "terrazzo"`. `dusk` is the original night look, kept whole.
  *
- * Everything decorative is STATIC — the celebration confetti is the only
- * confetti-shaped thing that ever moves.
+ * Decoration is STATIC, with one deliberate exception: the glass sky
+ * BREATHES — its blobs drift and glow on ~20s cycles (FX.skyBreathe), slow
+ * enough to feel, too slow to watch. Everything else holds still; the
+ * celebration confetti is the only confetti-shaped thing that ever moves.
  */
+
+import { FX } from '../../shared/tuning.js';
 
 /**
  * @typedef {object} Way a board colourway plus its dark floor cut
@@ -213,8 +217,11 @@ export function skyStyle() {
  * @param {CanvasRenderingContext2D} cx
  * @param {number} w @param {number} h
  */
-export function drawGlassSky(cx, w, h) {
+export function drawGlassSky(cx, w, h, t = 0) {
   if (skyStyleKey === 'rich' && typeof document !== 'undefined') {
+    // The expensive layers are cached WITHOUT the blobs; the blobs draw live
+    // on top so they can breathe. (Order shifts them above the ribbons and
+    // grain — invisible at their alphas, and the price of motion.)
     const key = `${glassFamilyKey} ${w}x${h}`;
     if (!skyCanvas || skyKey !== key) {
       skyCanvas = document.createElement('canvas');
@@ -222,21 +229,22 @@ export function drawGlassSky(cx, w, h) {
       skyCanvas.height = h;
       drawRichGlassSky(
         /** @type {CanvasRenderingContext2D} */ (skyCanvas.getContext('2d')),
-        w, h, glassFam(), RICH_SEED
+        w, h, glassFam(), RICH_SEED, false
       );
       skyKey = key;
     }
     cx.drawImage(skyCanvas, 0, 0);
+    drawGlassBlobs(cx, w, h, glassFam(), t);
     return;
   }
-  drawClassicGlassSky(cx, w, h);
+  drawClassicGlassSky(cx, w, h, t);
 }
 
 /**
  * @param {CanvasRenderingContext2D} cx
- * @param {number} w @param {number} h
+ * @param {number} w @param {number} h @param {number} [t]
  */
-function drawClassicGlassSky(cx, w, h) {
+function drawClassicGlassSky(cx, w, h, t = 0) {
   const f = glassFam();
   const g = cx.createLinearGradient(0, 0, w * 0.22, h);
   g.addColorStop(0, f.stops[0]);
@@ -244,7 +252,7 @@ function drawClassicGlassSky(cx, w, h) {
   g.addColorStop(1, f.stops[2]);
   cx.fillStyle = g;
   cx.fillRect(0, 0, w, h);
-  drawGlassBlobs(cx, w, h, f);
+  drawGlassBlobs(cx, w, h, f, t);
 }
 
 /** @type {HTMLCanvasElement | null} */
@@ -283,8 +291,9 @@ function withAlpha(rgba, alpha) {
  * @param {number} w @param {number} h
  * @param {GlassFamily} f
  * @param {number} seed
+ * @param {boolean} [blobs] false when the caller draws them live (breathe)
  */
-export function drawRichGlassSky(cx, w, h, f, seed) {
+export function drawRichGlassSky(cx, w, h, f, seed, blobs = true) {
   const rnd = mulberry32(seed);
   const light = f.key === 'frost';
 
@@ -295,7 +304,7 @@ export function drawRichGlassSky(cx, w, h, f, seed) {
   g.addColorStop(1, f.stops[2]);
   cx.fillStyle = g;
   cx.fillRect(0, 0, w, h);
-  drawGlassBlobs(cx, w, h, f);
+  if (blobs) drawGlassBlobs(cx, w, h, f);
 
   // Ribbons: two or three wide bands of light sweeping the upper half. Each
   // is a bezier spine, drawn as a stack of strokes that thin and brighten
@@ -390,22 +399,39 @@ function grainTile(rnd) {
   return t;
 }
 
+const TAU = Math.PI * 2;
+
 /**
+ * The big soft light blobs. With a world time they BREATHE: each drifts a
+ * few dozen pixels and swells/dims a touch on offset cycles whose periods
+ * share no common multiple, so the pattern never visibly repeats. t=0 (or
+ * FX.skyBreathe off) is exactly the static sky — which is also what the
+ * frost blur and the node tests see.
  * @param {CanvasRenderingContext2D} cx
  * @param {number} w @param {number} h
  * @param {GlassFamily} f
+ * @param {number} [t] world time in ms
  */
-function drawGlassBlobs(cx, w, h, f) {
-  for (const b of f.blobs) {
+function drawGlassBlobs(cx, w, h, f, t = 0) {
+  const live = FX.skyBreathe && t > 0;
+  f.blobs.forEach((b, i) => {
+    const phase = i * 2.4;
+    const dx = live ? Math.sin((t / 18000) * TAU + phase) * 34 : 0;
+    const dy = live ? Math.cos((t / 23000) * TAU + phase * 1.3) * 22 : 0;
+    const glow = live ? 1 + 0.14 * Math.sin((t / 16000) * TAU + phase * 0.7) : 1;
+
+    const x = b.x * w + dx;
+    const y = b.y * h + dy;
     const r = b.r * w;
-    const rg = cx.createRadialGradient(b.x * w, b.y * h, 0, b.x * w, b.y * h, r);
-    rg.addColorStop(0, b.c);
+    const baseAlpha = Number((b.c.match(/[\d.]+(?=\))/) ?? [0.2])[0]);
+    const rg = cx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, withAlpha(b.c, Math.min(1, baseAlpha * glow)));
     // Fade to the same hue at zero alpha — fading to transparent black greys
     // the midfield out.
-    rg.addColorStop(1, b.c.replace(/[\d.]+\)$/, '0)'));
+    rg.addColorStop(1, withAlpha(b.c, 0));
     cx.fillStyle = rg;
-    cx.fillRect(b.x * w - r, b.y * h - r, r * 2, r * 2);
-  }
+    cx.fillRect(x - r, y - r, r * 2, r * 2);
+  });
 }
 
 /** @type {HTMLCanvasElement | null} */
@@ -435,6 +461,9 @@ export function glassFrost(w, h) {
   src.width = w;
   src.height = h;
   const sc = /** @type {CanvasRenderingContext2D} */ (src.getContext('2d'));
+  // t=0 on purpose: the frost is a 24x blur, where the breathe's 30px drift
+  // is invisible — re-rendering this per frame would be the one genuinely
+  // expensive way to animate the sky.
   drawGlassSky(sc, w, h);
   // A second pass of blobs: through real frosted glass the lights behind
   // glow stronger than the wall does, and it makes the blur legible.

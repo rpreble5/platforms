@@ -35,7 +35,7 @@ export function drawSky(cx, t) {
     return;
   }
   if (themeName() === 'glass') {
-    drawGlassSky(cx, WORLD_W, WORLD_H);
+    drawGlassSky(cx, WORLD_W, WORLD_H, t);
     return;
   }
   const g = cx.createLinearGradient(0, 0, 0, WORLD_H);
