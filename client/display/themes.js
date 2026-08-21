@@ -182,13 +182,61 @@ export function glassFam() {
 }
 
 /**
- * The glass sky: one smooth diagonal gradient plus a few big radial light
- * blobs. Static, like the terrazzo chips — the blobs already look blurred,
- * which is the whole trick.
+ * Sky generation style. `classic` is the shipped look — gradient + blobs.
+ * `rich` layers ribbons, bokeh dust, a vignette and film grain on top,
+ * pre-rendered once per family; it stays OFF until it earns its place on a
+ * real screen. Flip with setSkyStyle to preview.
+ * @type {'classic'|'rich'}
+ */
+let skyStyleKey = 'classic';
+
+/** @param {string | undefined} key unknown keys fall back to classic */
+export function setSkyStyle(key) {
+  skyStyleKey = key === 'rich' ? 'rich' : 'classic';
+  // Both caches bake the style in, so a flip must rebuild them.
+  skyCanvas = null;
+  frostCanvas = null;
+}
+
+/** @returns {string} */
+export function skyStyle() {
+  return skyStyleKey;
+}
+
+/**
+ * The glass sky. Classic: one smooth diagonal gradient plus a few big radial
+ * light blobs — static, like the terrazzo chips; the blobs already look
+ * blurred, which is the whole trick. Rich: the same base with abstract light
+ * ribbons, bokeh dust, a corner vignette and film grain layered on,
+ * pre-rendered once and blitted (the grain is the projector fix — noise
+ * breaks up the banding cheap projectors show on flat gradient ramps).
  * @param {CanvasRenderingContext2D} cx
  * @param {number} w @param {number} h
  */
 export function drawGlassSky(cx, w, h) {
+  if (skyStyleKey === 'rich' && typeof document !== 'undefined') {
+    const key = `${glassFamilyKey} ${w}x${h}`;
+    if (!skyCanvas || skyKey !== key) {
+      skyCanvas = document.createElement('canvas');
+      skyCanvas.width = w;
+      skyCanvas.height = h;
+      drawRichGlassSky(
+        /** @type {CanvasRenderingContext2D} */ (skyCanvas.getContext('2d')),
+        w, h, glassFam(), RICH_SEED
+      );
+      skyKey = key;
+    }
+    cx.drawImage(skyCanvas, 0, 0);
+    return;
+  }
+  drawClassicGlassSky(cx, w, h);
+}
+
+/**
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} w @param {number} h
+ */
+function drawClassicGlassSky(cx, w, h) {
   const f = glassFam();
   const g = cx.createLinearGradient(0, 0, w * 0.22, h);
   g.addColorStop(0, f.stops[0]);
@@ -197,6 +245,149 @@ export function drawGlassSky(cx, w, h) {
   cx.fillStyle = g;
   cx.fillRect(0, 0, w, h);
   drawGlassBlobs(cx, w, h, f);
+}
+
+/** @type {HTMLCanvasElement | null} */
+let skyCanvas = null;
+let skyKey = '';
+/** Fixed for now; becomes the per-question seed if round variation ships. */
+const RICH_SEED = 7;
+
+/**
+ * Deterministic PRNG (mulberry32): every scatter is replayable, so a given
+ * (family, seed) always draws the identical sky — the same rule every other
+ * "random-looking" thing in the game follows.
+ * @param {number} seed
+ * @returns {() => number} uniform [0,1)
+ */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** @param {string} rgba @param {number} alpha same colour, new alpha */
+function withAlpha(rgba, alpha) {
+  return rgba.replace(/[\d.]+\)$/, `${alpha})`);
+}
+
+/**
+ * The rich sky: classic base, then abstract layers. Everything scatters off
+ * one seeded PRNG and nothing here is a nameable shape — streaks of light,
+ * dust and grain, never scenery competing with the beans.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} w @param {number} h
+ * @param {GlassFamily} f
+ * @param {number} seed
+ */
+export function drawRichGlassSky(cx, w, h, f, seed) {
+  const rnd = mulberry32(seed);
+  const light = f.key === 'frost';
+
+  // Base: identical to classic.
+  const g = cx.createLinearGradient(0, 0, w * 0.22, h);
+  g.addColorStop(0, f.stops[0]);
+  g.addColorStop(0.55, f.stops[1]);
+  g.addColorStop(1, f.stops[2]);
+  cx.fillStyle = g;
+  cx.fillRect(0, 0, w, h);
+  drawGlassBlobs(cx, w, h, f);
+
+  // Ribbons: two or three wide bands of light sweeping the upper half. Each
+  // is a bezier spine, drawn as a stack of strokes that thin and brighten
+  // toward the core — a cheap soft-edged streak with no filter dependency.
+  const ribbons = 2 + Math.floor(rnd() * 2);
+  for (let i = 0; i < ribbons; i++) {
+    const hue = f.blobs[Math.floor(rnd() * f.blobs.length)].c;
+    const y0 = h * (0.08 + rnd() * 0.34);
+    const y1 = h * (0.06 + rnd() * 0.42);
+    const lift = h * (0.12 + rnd() * 0.3) * (rnd() < 0.5 ? -1 : 1);
+    const thick = h * (0.05 + rnd() * 0.06);
+    cx.save();
+    cx.lineCap = 'round';
+    // Many faint passes, gently narrowing: the widths overlap enough that no
+    // single stroke edge survives, so the band reads as one soft streak
+    // rather than concentric stripes.
+    for (let pass = 0; pass < 8; pass++) {
+      const t = pass / 7;
+      cx.strokeStyle = withAlpha(hue, (light ? 0.02 : 0.03) * (0.4 + 0.6 * t));
+      cx.lineWidth = thick * (1.8 - 1.45 * t);
+      cx.beginPath();
+      cx.moveTo(-w * 0.1, y0);
+      cx.bezierCurveTo(w * 0.33, y0 + lift, w * 0.66, y1 - lift, w * 1.1, y1);
+      cx.stroke();
+    }
+    cx.restore();
+  }
+
+  // Bokeh dust: two depth classes, denser toward the top so the band where
+  // the game happens stays quiet. Hue-tinted white on the dark families,
+  // gradient-ink on frost.
+  const dust = light ? 'rgba(90,110,170,' : 'rgba(255,255,255,';
+  for (let i = 0; i < 90; i++) {
+    const far = i < 62;
+    const x = rnd() * w;
+    const y = h * Math.pow(rnd(), 1.7); // bias upward
+    const r = far ? 2 + rnd() * 3 : 6 + rnd() * 8;
+    const a = (far ? 0.05 + rnd() * 0.06 : 0.035 + rnd() * 0.045) * (light ? 0.8 : 1);
+    const dg = cx.createRadialGradient(x, y, 0, x, y, r);
+    dg.addColorStop(0, `${dust}${a})`);
+    dg.addColorStop(1, `${dust}0)`);
+    cx.fillStyle = dg;
+    cx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  // Vignette: pull the corners down so the centre — where the game lives —
+  // carries the light.
+  const v = cx.createRadialGradient(w / 2, h * 0.46, h * 0.42, w / 2, h * 0.46, h * 0.98);
+  v.addColorStop(0, 'rgba(0,0,12,0)');
+  v.addColorStop(1, light ? 'rgba(30,40,80,0.12)' : 'rgba(0,0,12,0.26)');
+  cx.fillStyle = v;
+  cx.fillRect(0, 0, w, h);
+
+  // Film grain, tiled from one small noise tile. ~3% alpha is invisible as
+  // texture at viewing distance but enough to dither the gradient ramps that
+  // band on cheap projectors.
+  const tile = grainTile(rnd);
+  if (tile) {
+    cx.save();
+    // 'overlay' pushes each pixel lightly toward the noise instead of hazing
+    // everything toward grey the way a plain translucent draw would.
+    cx.globalCompositeOperation = 'overlay';
+    cx.globalAlpha = light ? 0.05 : 0.07;
+    for (let ty = 0; ty < h; ty += tile.height) {
+      for (let tx = 0; tx < w; tx += tile.width) {
+        cx.drawImage(tile, tx, ty);
+      }
+    }
+    cx.restore();
+  }
+}
+
+/**
+ * @param {() => number} rnd
+ * @returns {HTMLCanvasElement | null}
+ */
+function grainTile(rnd) {
+  if (typeof document === 'undefined') return null;
+  const t = document.createElement('canvas');
+  t.width = 128;
+  t.height = 128;
+  const tc = /** @type {CanvasRenderingContext2D} */ (t.getContext('2d'));
+  const img = tc.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.floor(rnd() * 256);
+    img.data[i] = v;
+    img.data[i + 1] = v;
+    img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  tc.putImageData(img, 0, 0);
+  return t;
 }
 
 /**
@@ -233,7 +424,10 @@ let frostKey = '';
  * @returns {HTMLCanvasElement | null} null outside a DOM (tests, node)
  */
 export function glassFrost(w, h) {
-  if (frostCanvas && frostKey === glassFamilyKey) return frostCanvas;
+  // The style is part of the key: frosted panels must blur the SAME sky the
+  // room sees, classic or rich.
+  const cacheKey = `${glassFamilyKey} ${skyStyleKey}`;
+  if (frostCanvas && frostKey === cacheKey) return frostCanvas;
   if (typeof document === 'undefined') return null;
   const f = glassFam();
 
@@ -261,7 +455,7 @@ export function glassFrost(w, h) {
   oc.drawImage(small, 0, 0, w, h);
 
   frostCanvas = out;
-  frostKey = glassFamilyKey;
+  frostKey = cacheKey;
   return out;
 }
 
