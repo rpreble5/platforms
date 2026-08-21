@@ -15,7 +15,7 @@ import { drawBean } from '../../shared/avatar.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
-import { drawFrostBlobs, glassFrost, themeName } from './themes.js';
+import { drawFrostBlobs, glassFam, glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
 
 /**
@@ -183,7 +183,9 @@ function drawMenu(cx, menu, playerCount) {
   const stripH = 84;
   const btnH = 68;
   const h = pad + packH + 2 * rowH + 16 + stripH + 18 + actions.length * (btnH + 12) + pad - 12;
-  panel(cx, x0, y0, w, h);
+  // Lighter veil than the round furniture: the lobby is where the breathing
+  // sky gets to show off, and this card's text is big enough to carry it.
+  panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
 
   const sel = menu.items[menu.sel];
   /** a brighter piece of glass behind whatever the cursor is on */
@@ -658,11 +660,26 @@ function drawFinal(cx, g, roster) {
 }
 
 /**
+ * The veil for the lobby's two display cards (setup + join). Light families
+ * push far more luminance through the frost, so they keep more veil than the
+ * dark ones — both land where the breathing sky shows through but white text
+ * still reads at projector distance.
+ * @returns {number}
+ */
+export function lobbyVeil() {
+  return glassFam().light ? 0.52 : 0.4;
+}
+
+/**
  * @param {CanvasRenderingContext2D} cx
  * @param {number} x @param {number} y @param {number} w @param {number} h
  * @param {string} [edge]
+ * @param {{veil?: number}} [opts] veil is the dark wash's alpha over the
+ *   frost (default 0.62). Dense-text panels — scoreboards, banners — need
+ *   the full veil for contrast; the lobby's big display cards use
+ *   lobbyVeil() so the breathing sky visibly bleeds through their glass.
  */
-export function panel(cx, x, y, w, h, edge) {
+export function panel(cx, x, y, w, h, edge, opts = {}) {
   if (themeName() === 'glass') {
     // Panels are cut from the same glass as the platforms: a frosted window
     // onto the sky under a dark veil (the veil is what keeps white text
@@ -684,7 +701,7 @@ export function panel(cx, x, y, w, h, edge) {
       // The live half of the frost — this frame's blobs, so the panel's
       // window shows the same colours as the sky around it.
       drawFrostBlobs(cx, WORLD_W, WORLD_H);
-      cx.fillStyle = 'rgba(12,8,28,0.62)';
+      cx.fillStyle = `rgba(12,8,28,${opts.veil ?? 0.62})`;
       cx.fillRect(x, y, w, h);
     }
     const sheen = cx.createLinearGradient(x, y, x + w * 0.6, y + h);

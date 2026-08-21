@@ -14,7 +14,7 @@ import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
-import { drawDebris, drawSigns, panel } from './round-ui.js';
+import { drawDebris, drawSigns, lobbyVeil, panel } from './round-ui.js';
 import { GLASS_CHUNK_H, drawFloor, drawPerch, drawSky } from './stage.js';
 import { FONT, UI } from './theme.js';
 
@@ -333,7 +333,9 @@ function drawJoin(cx, qr, url, count) {
   const x0 = WORLD_W - w - 40;
   const y0 = 118;
   const h = 508;
-  panel(cx, x0, y0, w, h);
+  // Same lighter veil as the setup card opposite — the QR sits on its own
+  // solid white box, so the glass around it can afford to show the sky.
+  panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
 
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
