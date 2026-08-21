@@ -46,7 +46,7 @@ test('unknown themes fall back to glass, the default', () => {
   assert.equal(themeName(), 'glass');
 });
 
-test('four-colour glass aliases select their family and ordinary glass resets to dusk', () => {
+test('four-colour glass aliases select their family and ordinary glass resets to blanc', () => {
   for (const family of ['aurora', 'berry', 'ocean']) {
     setTheme(family);
     assert.equal(themeName(), 'glass');
@@ -54,5 +54,5 @@ test('four-colour glass aliases select their family and ordinary glass resets to
     assert.equal(GLASS_FAMILIES[family].blobs.length, 4);
   }
   setTheme('glass');
-  assert.equal(glassFam().key, 'dusk');
+  assert.equal(glassFam().key, 'blanc', 'blanc is the resting family');
 });

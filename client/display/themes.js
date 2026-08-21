@@ -5,6 +5,8 @@
  * The default is `glass`: a smooth gradient field with big soft light blobs,
  * every platform a chunk of frosted glass with its answer inside, and subtle
  * reflections of the players standing on it (see GLASS_FAMILIES below).
+ * The resting family is `blanc` — near-white with four saturated blooms
+ * riding the breathe's rainbow; packs pick any other family by name.
  *
  * `terrazzo` is the light alternative — a warm off-white field with sparse
  * pastel chips, pale board faces, and the structural surfaces cut dark in the
@@ -244,11 +246,11 @@ export const GLASS_FAMILIES = {
   },
 };
 
-let glassFamilyKey = 'dusk';
+let glassFamilyKey = 'blanc';
 
-/** @param {string | undefined} key unknown keys fall back to dusk */
+/** @param {string | undefined} key unknown keys fall back to blanc */
 export function setGlassFamily(key) {
-  glassFamilyKey = key && key in GLASS_FAMILIES ? key : 'dusk';
+  glassFamilyKey = key && key in GLASS_FAMILIES ? key : 'blanc';
 }
 
 /** @returns {GlassFamily} */
@@ -446,7 +448,7 @@ export function setTheme(key) {
     return;
   }
   themeKey = THEMES.includes(/** @type {any} */ (key)) ? /** @type {string} */ (key) : 'glass';
-  if (themeKey === 'glass') setGlassFamily('dusk');
+  if (themeKey === 'glass') setGlassFamily('blanc');
 }
 
 /** @returns {string} */
