@@ -83,6 +83,8 @@ const CHIPS = [
  * @property {string} floorBody
  * @property {string} floorTop
  * @property {string} floorEdge
+ * @property {boolean} [light] a light field: ink-side text everywhere the
+ *   dark families use paper, gentler vignette/grain in the rich style
  */
 
 /** @type {Record<string, GlassFamily>} */
@@ -156,6 +158,7 @@ export const GLASS_FAMILIES = {
   },
   frost: {
     key: 'frost',
+    light: true,
     stops: ['#e6eefa', '#f3ecf6', '#c8d7ec'],
     blobs: [
       { x: 0.22, y: 0.3, r: 0.34, c: 'rgba(255,170,190,0.30)' },
@@ -169,6 +172,27 @@ export const GLASS_FAMILIES = {
     textDim: 'rgba(35,32,66,0.45)',
     floorBody: '#39406a',
     floorTop: '#4a5280',
+    floorEdge: 'rgba(255,255,255,0.35)',
+  },
+  cream: {
+    key: 'cream',
+    light: true,
+    // A warm off-white field — terrazzo's daylight temperature with the
+    // glass language, built for the breathing rainbow: the saturated blobs
+    // wash the cream like light through a window.
+    stops: ['#f8f2e5', '#f4e9d8', '#ecdfc9'],
+    blobs: [
+      { x: 0.18, y: 0.26, r: 0.36, c: 'rgba(255,145,155,0.34)' },
+      { x: 0.8, y: 0.2, r: 0.34, c: 'rgba(135,175,255,0.32)' },
+      { x: 0.58, y: 0.76, r: 0.42, c: 'rgba(255,190,105,0.30)' },
+      { x: 0.1, y: 0.84, r: 0.38, c: 'rgba(120,215,180,0.28)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.5)',
+    glassRim: 'rgba(255,255,255,0.95)',
+    text: 'rgba(64,50,40,0.95)',
+    textDim: 'rgba(64,50,40,0.45)',
+    floorBody: '#40382e',
+    floorTop: '#51473b',
     floorEdge: 'rgba(255,255,255,0.35)',
   },
 };
@@ -295,7 +319,7 @@ function withAlpha(rgba, alpha) {
  */
 export function drawRichGlassSky(cx, w, h, f, seed, blobs = true) {
   const rnd = mulberry32(seed);
-  const light = f.key === 'frost';
+  const light = Boolean(f.light);
 
   // Base: identical to classic.
   const g = cx.createLinearGradient(0, 0, w * 0.22, h);
@@ -537,7 +561,7 @@ let way = WAYS[1]; // teal: the lobby/showdown resting colourway
 
 /** @param {string | undefined} key unknown keys fall back to glass */
 export function setTheme(key) {
-  if (key === 'aurora' || key === 'berry' || key === 'ocean') {
+  if (key === 'aurora' || key === 'berry' || key === 'ocean' || key === 'frost' || key === 'cream') {
     themeKey = 'glass';
     setGlassFamily(key);
     return;

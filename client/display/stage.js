@@ -382,12 +382,14 @@ const RAIL_Y = FLOOR_Y - 210;
 export function drawNumberLine(cx, q) {
   const x0 = rangeX(q, q.min);
   const x1 = rangeX(q, q.max);
-  const terrazzo = themeName() === 'terrazzo';
+  // Ink-side on every light field: terrazzo, and the light glass families
+  // (frost, cream) — paper-coloured rails vanish on a cream sky.
+  const inky = themeName() === 'terrazzo' || (themeName() === 'glass' && Boolean(glassFam().light));
   const way = activeWay();
-  const lineColor = terrazzo ? 'rgba(23,20,42,0.18)' : 'rgba(244,241,232,0.30)';
-  const guideColor = terrazzo ? 'rgba(23,20,42,0.08)' : 'rgba(244,241,232,0.08)';
-  const numColor = terrazzo ? 'rgba(23,20,42,0.78)' : 'rgba(244,241,232,0.85)';
-  const markColor = terrazzo ? way.top : UI.paper;
+  const lineColor = inky ? 'rgba(23,20,42,0.18)' : 'rgba(244,241,232,0.30)';
+  const guideColor = inky ? 'rgba(23,20,42,0.08)' : 'rgba(244,241,232,0.08)';
+  const numColor = inky ? 'rgba(23,20,42,0.78)' : 'rgba(244,241,232,0.85)';
+  const markColor = inky ? way.top : UI.paper;
 
   cx.save();
 
@@ -444,7 +446,10 @@ export function drawNumberLine(cx, q) {
  * @param {import('../../sim/levels.js').RangeQuestion} q
  */
 export function drawRangeReveal(cx, band, q) {
-  const terrazzo = themeName() === 'terrazzo';
+  // Same ink-side rule as the number line: light glass families read like
+  // terrazzo, not like the dark ones.
+  const terrazzo =
+    themeName() === 'terrazzo' || (themeName() === 'glass' && Boolean(glassFam().light));
   const way = activeWay();
   cx.save();
   cx.fillStyle = 'rgba(255,255,255,0.20)';
