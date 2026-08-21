@@ -493,6 +493,24 @@ export function sanitizeLevelSpec(raw) {
 }
 
 /**
+ * The lobby's warm-up arena. The composed lobby screen parks its panels on
+ * the left and right edges, so every platform here lives in the open centre
+ * band (roughly x 600-1460) — players get the full playground and the UI
+ * never sits on top of a surface anyone can stand on.
+ * @returns {Platform[]}
+ */
+export function buildLobbyArena() {
+  return [
+    { id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 },
+    { id: 'perch0', x: 770 - 144, y: tierY(1), w: 288, h: ANSWER_H, oneWay: true },
+    { id: 'perch1', x: 1250 - 144, y: tierY(1), w: 288, h: ANSWER_H, oneWay: true },
+    { id: 'perch2', x: 1010 - 120, y: tierY(2), w: 240, h: ANSWER_H, oneWay: true },
+    { id: 'perch3', x: 860 - 120, y: tierY(3), w: 240, h: ANSWER_H, oneWay: true },
+    { id: 'perch4', x: 1220 - 120, y: tierY(3), w: 240, h: ANSWER_H, oneWay: true },
+  ];
+}
+
+/**
  * Build an arena from a designed level: standard floor, the boards as answer
  * platforms (in array order — ans0 is the leftmost the editor saved), the
  * rungs as perches. Same construction as every hand-placed builder above.

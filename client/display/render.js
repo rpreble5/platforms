@@ -14,9 +14,9 @@ import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
-import { drawDebris, drawSigns } from './round-ui.js';
+import { drawDebris, drawSigns, panel } from './round-ui.js';
 import { GLASS_CHUNK_H, drawFloor, drawPerch, drawSky } from './stage.js';
-import { UI } from './theme.js';
+import { FONT, UI } from './theme.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
 /** @typedef {import('../../sim/player.js').Player} Player */
@@ -326,47 +326,57 @@ function drawFindMe(cx, cxp, cyp, w, t, color) {
  * @param {number} count
  */
 function drawJoin(cx, qr, url, count) {
+  // One self-contained "get in here" card on the right edge: title, code,
+  // URL and headcount together, instead of a bare QR floating in the corner
+  // and a "Scan to join" headline half a screen away.
+  const w = 384;
+  const x0 = WORLD_W - w - 40;
+  const y0 = 118;
+  const h = 508;
+  panel(cx, x0, y0, w, h);
+
+  cx.textAlign = 'center';
+  cx.textBaseline = 'alphabetic';
+  cx.font = `800 36px ${FONT.display}`;
+  cx.fillStyle = themeName() === 'terrazzo' ? '#333a4a' : '#ffffff';
+  cx.fillText('Scan to join', x0 + w / 2, y0 + 56);
+
   const quiet = 3;
   // Size the code to a fixed on-screen box rather than a fixed module size, so
   // a longer URL (a bigger QR version) doesn't shrink it below scannable.
-  const box = 300;
+  const box = 292;
   const cell = Math.floor(box / (qr.size + quiet * 2));
   const px = (qr.size + quiet * 2) * cell;
-  const margin = 40;
-  const x = WORLD_W - px - margin;
-  const y = margin;
+  const qx = x0 + (w - px) / 2;
+  const qy = y0 + 84;
 
   cx.fillStyle = '#ffffff';
   cx.beginPath();
-  cx.roundRect(x, y, px, px, 12);
+  cx.roundRect(qx, qy, px, px, 12);
   cx.fill();
 
   cx.fillStyle = '#000000';
   for (let r = 0; r < qr.size; r++) {
     for (let c = 0; c < qr.size; c++) {
       if (qr.modules[r][c]) {
-        cx.fillRect(x + (c + quiet) * cell, y + (r + quiet) * cell, cell, cell);
+        cx.fillRect(qx + (c + quiet) * cell, qy + (r + quiet) * cell, cell, cell);
       }
     }
   }
 
-  // The URL must fit the panel: it is the fallback for anyone whose camera
-  // won't scan, and a URL running off the edge of the screen is useless.
-  const maxW = px + margin - 8;
-  let size = 30;
-  cx.textAlign = 'center';
+  // The URL must fit the card: it is the fallback for anyone whose camera
+  // won't scan, and a URL running off the edge of the card is useless.
+  const maxW = w - 32;
+  let size = 28;
   do {
     cx.font = `700 ${size}px ui-monospace, SFMono-Regular, Menlo, monospace`;
     size -= 1;
   } while (size > 13 && cx.measureText(url).width > maxW);
 
-  const cxp = Math.min(x + px / 2, WORLD_W - maxW / 2 - 8);
-  // Ink on the light theme, paper on the dark one — the URL is the fallback
-  // for anyone whose camera won't scan, so it must never blend away.
   cx.fillStyle = themeName() === 'terrazzo' ? '#333a4a' : UI.paper;
-  cx.fillText(url, cxp, y + px + 38);
+  cx.fillText(url, x0 + w / 2, qy + px + 46);
   cx.font = '500 20px ui-sans-serif, system-ui, sans-serif';
   cx.fillStyle = UI.dim;
-  cx.fillText(`${count} player${count === 1 ? '' : 's'} connected`, cxp, y + px + 68);
+  cx.fillText(`${count} player${count === 1 ? '' : 's'} connected`, x0 + w / 2, qy + px + 78);
   cx.textAlign = 'left';
 }

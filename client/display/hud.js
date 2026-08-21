@@ -107,17 +107,23 @@ export function drawHud(cx, m) {
 }
 
 /**
- * The HUD-less note: a small self-sizing pill in the HUD's spot, so "PAUSED"
- * and the mute/voicing confirmations read even with the dashboard hidden.
+ * The HUD-less note: a small self-sizing pill, top-centre — clear of the
+ * lobby's setup card on the left, the join card on the right, and every
+ * platform (the banner ceiling keeps them below y=340). "PAUSED" and the
+ * mute/voicing confirmations must read even with the dashboard hidden.
  * @param {CanvasRenderingContext2D} cx
  * @param {string} text
  */
 function drawNotePill(cx, text) {
   cx.font = `600 15px ${MONO}`;
   const w = cx.measureText(text).width + 36;
-  panel(cx, 24, 170, w, 40);
+  const x = (1920 - w) / 2;
+  panel(cx, x, 166, w, 40);
   cx.fillStyle = '#ffd93d';
-  cx.fillText(text, 42, 195);
+  const prev = cx.textAlign;
+  cx.textAlign = 'left';
+  cx.fillText(text, x + 18, 191);
+  cx.textAlign = prev;
 }
 
 /**

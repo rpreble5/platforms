@@ -24,7 +24,7 @@ import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJ
 import { clampCohort } from '../../shared/palette.js';
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
-import { FLOOR_Y, buildArena } from '../../sim/levels.js';
+import { FLOOR_Y, buildLobbyArena } from '../../sim/levels.js';
 import {
   PHASE,
   activeControlTeam,
@@ -64,7 +64,7 @@ const boot = /** @type {HTMLElement} */ (document.getElementById('boot'));
 
 // ------------------------------------------------------------------ state
 
-const world = createWorld(buildArena(4));
+const world = createWorld(buildLobbyArena());
 const bus = new InputBus();
 let game = createGame([]);
 world.spawn = { x: 1920 / 2 - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
@@ -371,6 +371,30 @@ function menuOpen() {
 }
 
 /**
+ * Everything the lobby screen draws from, computed fresh each frame: the
+ * cohort headcount makes team readiness visible BEFORE anyone presses start,
+ * and the start buttons carry their own disable reasons instead of erroring
+ * after the press.
+ * @returns {import('./round-ui.js').MenuView}
+ */
+function menuView() {
+  const cohortCounts = [0, 0, 0];
+  for (const [id, look] of roster) {
+    if (look.connected && look.cohortSet) {
+      const c = cohortOf(id);
+      if (c >= 0) cohortCounts[c]++;
+    }
+  }
+  return {
+    ...menu,
+    items: menuItems(),
+    answerMs: game.answerMs,
+    cohortCounts,
+    controlCases: controlSpec?.questions.length ?? 0,
+  };
+}
+
+/**
  * Load a pack by index into the live game. Only ever called in the lobby,
  * where scores are empty and losing the Game object costs nothing.
  * @param {number} index
@@ -457,7 +481,7 @@ function startShowdown() {
 
 function endShowdown() {
   showdown = null;
-  world.platforms = buildArena(4);
+  world.platforms = buildLobbyArena();
   respawnAll(world);
   game.phase = PHASE.LOBBY;
   game.phaseT = 0;
@@ -482,7 +506,7 @@ function toMenu() {
   game = createGame(game.baseQuestions, game.answerMs);
   game.levelPool = levelPool;
   applyMode();
-  world.platforms = buildArena(4);
+  world.platforms = buildLobbyArena();
   respawnAll(world);
   menu.sel = Math.max(0, menuItems().indexOf('quiz'));
   lastCheckpoint = 0;
@@ -581,7 +605,7 @@ function frame(now) {
   if (!showdown) drawConfetti(cx, game, world);
   flash.draw(cx);
   if (showdown) drawShowdown(cx, showdown, world, roster);
-  else drawRoundOverlay(cx, game, roster, world.players.size, menuOpen() ? { ...menu, items: menuItems(), answerMs: game.answerMs } : null);
+  else drawRoundOverlay(cx, game, roster, world.players.size, menuOpen() ? menuView() : null);
   drawHud(cx, {
     bus,
     roster,

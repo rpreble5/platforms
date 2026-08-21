@@ -11,6 +11,7 @@
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { COHORTS, TEAM_COLORS, clampCohort } from '../../shared/palette.js';
+import { drawBean } from '../../shared/avatar.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
@@ -101,6 +102,8 @@ function fallOffset(t) {
  * @property {Array<'pack'|'time'|'mode'|'quiz'|'control'|'showdown'>} items
  * @property {number} answerMs
  * @property {'solo'|'teams'} mode
+ * @property {number[]} [cohortCounts] committed + connected players per year
+ * @property {number} [controlCases] size of the pack's Control Room pool
  */
 
 /**
@@ -135,110 +138,189 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
 }
 
 /**
- * The lobby menu. An overlay panel, deliberately NOT a screen: the world runs
- * live behind it, so people warm up, find their avatar, and keep joining
- * while the host picks a pack. Setup time is play time.
+ * The game's name on the lobby masthead. A stand-in until it gets a real
+ * one — the lobby is the screen people stare at longest, so whatever word
+ * sits here is what the room will call the game.
+ */
+const WORDMARK = 'PLATFORMS';
+
+/**
+ * The lobby: a composed screen, not a dialog. Setup card on the LEFT (host
+ * business), join panel on the RIGHT (drawn with the QR in render.js), and
+ * the whole centre left open — the lobby arena's platforms live there, so
+ * the warm-up playground is never under a panel. The world runs live
+ * throughout: setup time is play time.
  * @param {CanvasRenderingContext2D} cx
  * @param {MenuView} menu
  * @param {number} playerCount
  */
 function drawMenu(cx, menu, playerCount) {
-  const joined = Math.max(0, playerCount - 1);
+  void playerCount; // the join panel owns the headcount now
   const pack = menu.packs[menu.packIndex];
-  const rowH = 66;
-  const dividerGap = 26;
-  const w = 880;
-  const settings = menu.items.filter((it) => it === 'pack' || it === 'time' || it === 'mode').length;
-  const h = 172 + menu.items.length * rowH + (settings ? dividerGap : 0) + 28;
-  // Right of the latency HUD's column, left of the QR: the one strip of sky
-  // nothing else claims.
-  const x0 = 420;
-  const y0 = 64;
-  panel(cx, x0, y0, w, h);
+  const x0 = 40;
+  const y0 = 118;
+  const w = 520;
+  const pad = 34;
 
-  cx.fillStyle = UI.paper;
-  cx.font = `800 58px ${FONT.display}`;
+  // Masthead, above the card.
   cx.textAlign = 'left';
   cx.textBaseline = 'alphabetic';
-  cx.fillText('Scan to join', x0 + 44, y0 + 80);
+  cx.font = `800 46px ${FONT.display}`;
+  cx.fillStyle = 'rgba(255,255,255,0.92)';
+  cx.fillText(WORDMARK, x0 + 4, 88);
 
-  cx.font = `600 26px ${FONT.ui}`;
-  cx.fillStyle = joined ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.45)';
-  cx.fillText(
-    joined ? `${joined} player${joined === 1 ? '' : 's'} in` : 'waiting for players…',
-    x0 + 44, y0 + 124
-  );
+  // Which start buttons are honest right now?
+  const counts = menu.cohortCounts ?? [0, 0, 0];
+  const activeTeams = counts.filter((n) => n > 0).length;
+  const controlReady = activeTeams >= 1 && (menu.controlCases ?? 0) >= activeTeams;
+  const controlReason = !activeTeams
+    ? 'needs a committed team'
+    : `needs ${activeTeams} case${activeTeams === 1 ? '' : 's'} · pack has ${menu.controlCases ?? 0}`;
 
-  /** @param {'pack'|'time'|'mode'|'quiz'|'control'|'showdown'} item @returns {[string, string]} */
-  const rowText = (item) => {
-    switch (item) {
-      case 'pack':
-        return [
-          'Pack',
-          menu.loading
-            ? 'loading…'
-            : pack
-              ? `◂ ${pack.name} (${pack.questions} questions${pack.controlRoom ? ' + control' : ''}${pack.showdown ? ' + showdown' : ''}) ▸`
-              : '—',
-        ];
-      case 'time':
-        return ['Answer time', `◂ ${Math.round(menu.answerMs / 1000)}s ▸`];
-      case 'mode':
-        return ['Teams', `◂ ${menu.mode === 'teams' ? 'PGY years' : 'off — solo play'} ▸`];
-      case 'quiz':
-        return ['Start quiz', ''];
-      case 'control':
-        return ['Start Control Room', 'teams take turns'];
-      case 'showdown':
-        return ['Start showdown', 'no points · last one standing'];
-      default:
-        return ['', ''];
-    }
+  const actions = menu.items.filter((it) => it === 'quiz' || it === 'control' || it === 'showdown');
+  const packH = 128;
+  const rowH = 54;
+  const stripH = 84;
+  const btnH = 68;
+  const h = pad + packH + 2 * rowH + 16 + stripH + 18 + actions.length * (btnH + 12) + pad - 12;
+  panel(cx, x0, y0, w, h);
+
+  const sel = menu.items[menu.sel];
+  /** a brighter piece of glass behind whatever the cursor is on */
+  const pill = (/** @type {number} */ py, /** @type {number} */ ph) => {
+    cx.fillStyle = 'rgba(255,255,255,0.10)';
+    cx.strokeStyle = 'rgba(255,255,255,0.38)';
+    cx.lineWidth = 1.5;
+    cx.beginPath();
+    cx.roundRect(x0 + 16, py, w - 32, ph, 14);
+    cx.fill();
+    cx.stroke();
   };
 
-  let ry = y0 + 172;
-  let dividerDrawn = false;
-  menu.items.forEach((item, i) => {
-    const action = item === 'quiz' || item === 'control' || item === 'showdown';
-    if (action && settings && !dividerDrawn) {
-      // One quiet line between the settings and the two ways to begin.
-      cx.strokeStyle = 'rgba(255,255,255,0.14)';
-      cx.lineWidth = 1;
-      cx.beginPath();
-      cx.moveTo(x0 + 32, ry + 8);
-      cx.lineTo(x0 + w - 32, ry + 8);
-      cx.stroke();
-      ry += dividerGap;
-      dividerDrawn = true;
-    }
+  // ---- the pack, presented rather than crammed into a row
+  let y = y0 + pad;
+  if (sel === 'pack') pill(y - 12, packH);
+  cx.font = `700 15px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.45)';
+  cx.fillText('PACK', x0 + pad, y + 8);
+  const name = menu.loading ? 'loading…' : pack ? pack.name : '—';
+  cx.font = fitFont(cx, name, w - pad * 2 - 76, 42, 22);
+  cx.fillStyle = '#ffffff';
+  cx.fillText(name, x0 + pad, y + 56);
+  if (sel === 'pack') {
+    cx.font = `800 30px ${FONT.display}`;
+    cx.fillStyle = 'rgba(255,255,255,0.75)';
+    cx.textAlign = 'right';
+    cx.fillText('◂ ▸', x0 + w - pad + 6, y + 54);
+    cx.textAlign = 'left';
+  }
+  if (pack) {
+    const bits = [`${pack.questions} questions`];
+    if (pack.controlRoom) bits.push('control room');
+    if (pack.showdown) bits.push('showdown');
+    cx.font = `600 20px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.55)';
+    cx.fillText(bits.join('  ·  '), x0 + pad, y + 92);
+  }
+  y += packH;
 
-    const selected = i === menu.sel;
-    if (selected) {
-      // The selection is a piece of brighter glass, not a colour.
-      cx.fillStyle = 'rgba(255,255,255,0.12)';
-      cx.strokeStyle = 'rgba(255,255,255,0.4)';
-      cx.lineWidth = 1.5;
-      cx.beginPath();
-      cx.roundRect(x0 + 24, ry, w - 48, rowH - 8, 15);
-      cx.fill();
-      cx.stroke();
-    }
+  // ---- the two settings
+  /** @type {Array<['time'|'mode', string, string]>} */
+  const settingRows = [
+    ['time', 'Answer time', `${Math.round(menu.answerMs / 1000)}s`],
+    ['mode', 'Teams', menu.mode === 'teams' ? 'PGY years' : 'off'],
+  ];
+  for (const [key, label, value] of settingRows) {
+    const selected = sel === key;
+    if (selected) pill(y + 2, rowH - 4);
+    const base = y + rowH / 2 + 9;
+    cx.font = `700 25px ${FONT.display}`;
+    cx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.8)';
+    cx.fillText(label, x0 + pad, base);
+    cx.textAlign = 'right';
+    cx.font = `600 24px ${FONT.ui}`;
+    cx.fillStyle = selected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
+    cx.fillText(selected ? `◂  ${value}  ▸` : value, x0 + w - pad, base);
+    cx.textAlign = 'left';
+    y += rowH;
+  }
 
-    const [label, value] = rowText(item);
-    const baseline = ry + rowH / 2 + 10;
-    cx.font = `${action ? 800 : 700} 31px ${FONT.display}`;
-    cx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.82)';
-    cx.fillText(label, x0 + 44, baseline);
+  y += 16;
 
-    if (value) {
-      cx.textAlign = 'right';
-      cx.font = `600 25px ${FONT.ui}`;
-      cx.fillStyle = selected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)';
-      cx.fillText(value, x0 + w - 44, baseline);
-      cx.textAlign = 'left';
+  // ---- who is actually in: live committed headcount per year, as beans.
+  // This is what makes the start buttons below honest — the host can SEE
+  // whether teams play makes sense before pressing anything.
+  cx.strokeStyle = 'rgba(255,255,255,0.14)';
+  cx.lineWidth = 1;
+  cx.beginPath();
+  cx.moveTo(x0 + 24, y - 8);
+  cx.lineTo(x0 + w - 24, y - 8);
+  cx.stroke();
+  const colW = (w - pad * 2) / 3;
+  const feet = y + stripH - 26;
+  for (let c = 0; c < 3; c++) {
+    const cxp = x0 + pad + colW * c + 10;
+    const bh = [30, 38, 52][c];
+    cx.save();
+    cx.translate(cxp, feet - bh);
+    drawBean(cx, TEAM_COLORS[c], 'flat', 27, bh, COHORTS[c].shape, true, 'none');
+    cx.restore();
+    cx.font = `800 26px ${FONT.display}`;
+    cx.fillStyle = counts[c] ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.3)';
+    cx.fillText(`×${counts[c]}`, cxp + 38, feet - 6);
+    cx.font = `700 14px ${FONT.ui}`;
+    cx.fillStyle = counts[c] ? TEAM_COLORS[c] : 'rgba(255,255,255,0.3)';
+    cx.fillText(COHORTS[c].label, cxp + 1, feet + 18);
+  }
+  y += stripH + 18;
+
+  // ---- the ways to begin, as real buttons. The selected one glows with the
+  // same light the correct answer gets; an unready one says WHY, up front.
+  for (const item of actions) {
+    const selected = sel === item;
+    const disabled = item === 'control' && !controlReady;
+    const label = item === 'quiz' ? 'Start quiz' : item === 'control' ? 'Start Control Room' : 'Start showdown';
+    const sub =
+      item === 'control'
+        ? disabled ? controlReason : 'teams take turns'
+        : item === 'showdown' ? 'no points · last one standing' : '';
+
+    cx.save();
+    cx.beginPath();
+    cx.roundRect(x0 + 24, y, w - 48, btnH, 16);
+    if (selected && !disabled) {
+      cx.shadowColor = 'rgba(255,255,255,0.85)';
+      cx.shadowBlur = 26;
     }
-    ry += rowH;
-  });
+    cx.fillStyle = disabled
+      ? 'rgba(255,255,255,0.04)'
+      : selected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.09)';
+    cx.fill();
+    cx.shadowColor = 'rgba(0,0,0,0)';
+    cx.strokeStyle = disabled
+      ? selected ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.12)'
+      : selected ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.28)';
+    cx.lineWidth = selected ? 2.5 : 1.5;
+    cx.stroke();
+    cx.restore();
+
+    cx.textAlign = 'center';
+    const ink = disabled ? 'rgba(255,255,255,0.35)' : selected ? '#ffffff' : 'rgba(255,255,255,0.85)';
+    if (sub) {
+      cx.font = `800 26px ${FONT.display}`;
+      cx.fillStyle = ink;
+      cx.fillText(label, x0 + w / 2, y + 32);
+      cx.font = `600 15px ${FONT.ui}`;
+      cx.fillStyle = disabled ? 'rgba(255,215,120,0.75)' : 'rgba(255,255,255,0.5)';
+      cx.fillText(sub, x0 + w / 2, y + 54);
+    } else {
+      cx.font = `800 28px ${FONT.display}`;
+      cx.fillStyle = ink;
+      cx.fillText(label, x0 + w / 2, y + btnH / 2 + 10);
+    }
+    cx.textAlign = 'left';
+    y += btnH + 12;
+  }
 }
 
 /**
@@ -580,7 +662,7 @@ function drawFinal(cx, g, roster) {
  * @param {number} x @param {number} y @param {number} w @param {number} h
  * @param {string} [edge]
  */
-function panel(cx, x, y, w, h, edge) {
+export function panel(cx, x, y, w, h, edge) {
   if (themeName() === 'glass') {
     // Panels are cut from the same glass as the platforms: a frosted window
     // onto the sky under a dark veil (the veil is what keeps white text
