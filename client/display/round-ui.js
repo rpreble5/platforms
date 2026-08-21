@@ -162,11 +162,14 @@ function drawMenu(cx, menu, playerCount) {
   const w = 520;
   const pad = 34;
 
-  // Masthead, above the card.
+  // Masthead, above the card. Ink on the light glass families — white
+  // vanishes against their near-white upper corner.
   cx.textAlign = 'left';
   cx.textBaseline = 'alphabetic';
   cx.font = `800 46px ${FONT.display}`;
-  cx.fillStyle = 'rgba(255,255,255,0.92)';
+  cx.fillStyle = themeName() === 'glass' && glassFam().light
+    ? glassFam().text
+    : 'rgba(255,255,255,0.92)';
   cx.fillText(WORDMARK, x0 + 4, 88);
 
   // Which start buttons are honest right now?
