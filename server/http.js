@@ -499,7 +499,7 @@ export function loadQuestions(root, packFile = 'default.json') {
 
   let theme = 'glass';
   if (pack.theme !== undefined) {
-    if (['terrazzo', 'dusk', 'glass', 'aurora', 'berry', 'ocean', 'frost', 'cream'].includes(pack.theme)) theme = pack.theme;
+    if (['terrazzo', 'dusk', 'glass', 'aurora', 'berry', 'ocean', 'frost', 'cream', 'noir'].includes(pack.theme)) theme = pack.theme;
     else problems.push(`theme "${pack.theme}" is unknown — using glass`);
   }
 

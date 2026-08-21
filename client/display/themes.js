@@ -177,6 +177,28 @@ export const GLASS_FAMILIES = {
     floorTop: '#4a5280',
     floorEdge: 'rgba(255,255,255,0.35)',
   },
+  noir: {
+    key: 'noir',
+    // Near-black field, colour only as glow: saturated blooms hug the edges
+    // and the bottom at alphas well above the other dark families, so the
+    // breathe's rainbow reads as neon light bleeding into a dark room while
+    // the top of the frame stays black. Modelled on the phone-wallpaper
+    // look: black up top, prism low.
+    stops: ['#020204', '#0a0c1e', '#040308'],
+    blobs: [
+      { x: 0.0, y: 0.46, r: 0.38, c: 'rgba(35,90,255,0.4)' },
+      { x: 0.04, y: 0.78, r: 0.4, c: 'rgba(0,225,160,0.42)' },
+      { x: 0.98, y: 0.52, r: 0.46, c: 'rgba(255,35,125,0.44)' },
+      { x: 0.48, y: 1.06, r: 0.52, c: 'rgba(255,165,25,0.4)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.10)',
+    glassRim: 'rgba(255,255,255,0.42)',
+    text: 'rgba(255,255,255,0.96)',
+    textDim: 'rgba(255,255,255,0.45)',
+    floorBody: '#0a0a12',
+    floorTop: '#16161f',
+    floorEdge: 'rgba(255,255,255,0.2)',
+  },
   cream: {
     key: 'cream',
     light: true,
@@ -396,7 +418,7 @@ let way = WAYS[1]; // teal: the lobby/showdown resting colourway
 
 /** @param {string | undefined} key unknown keys fall back to glass */
 export function setTheme(key) {
-  if (key === 'aurora' || key === 'berry' || key === 'ocean' || key === 'frost' || key === 'cream') {
+  if (key === 'aurora' || key === 'berry' || key === 'ocean' || key === 'frost' || key === 'cream' || key === 'noir') {
     themeKey = 'glass';
     setGlassFamily(key);
     return;
