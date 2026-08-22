@@ -63,6 +63,29 @@ on every selection, so editing one and re-picking it is the whole edit loop.
 The lobby is a live arena: players join, run and warm up underneath the menu
 while the host picks a pack and answer time.
 
+### Authoring packs with zero install: the Pack Studio
+
+Faculty don't need the repo, node, or anything installed — the **Pack
+Studio** is a static web page that builds, validates and previews packs
+entirely in the browser. It runs the SAME validation module as the game
+server and its preview is the ACTUAL game engine drawing into a canvas,
+so what an author sees is what the room gets. Nothing leaves the page
+until they export.
+
+- On the host laptop it's served at **`/builder`**.
+- For everyone else, publish it once with GitHub Pages: repo **Settings →
+  Pages → Deploy from branch → main / root**, then share
+  `https://<owner>.github.io/platforms/client/builder/`. It updates
+  whenever the branch is pushed. (Pages serves the repository as-is —
+  including `questions/*.json` answer keys. That's the same exposure as
+  the repo itself; if the repo is private, use `/builder` on a laptop
+  instead.)
+
+The workflow: build → watch the live preview → **Download pack.json** →
+send the file to the host, who drops it in `questions/` (plus any
+referenced images in `questions/images/`). Drafts autosave in the
+browser; Open/Paste round-trips existing packs for editing.
+
 ### Designing a night: the mode × type matrix
 
 A pack has three buckets, and each bucket belongs to specific modes. When you

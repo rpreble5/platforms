@@ -558,6 +558,19 @@ function drawQuestion(cx, g) {
  */
 const IMAGE_CACHE = new Map();
 
+/**
+ * Seed the image cache with a local source — the Pack Studio's preview
+ * hands question images in as object URLs, since there is no /qimg server
+ * behind a static page. A no-op for the display, which never calls it.
+ * @param {string} name the filename the question references
+ * @param {string} url  an object/data URL for the actual pixels
+ */
+export function registerPreviewImage(name, url) {
+  const img = new Image();
+  img.src = url;
+  IMAGE_CACHE.set(name, img);
+}
+
 /** @param {string} name @returns {HTMLImageElement | null} */
 function questionImage(name) {
   let img = IMAGE_CACHE.get(name);

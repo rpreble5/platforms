@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pack Studio</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #241d3c; color: #e6e0f5;
+    font: 500 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  header {
+    padding: 12px 20px; background: #1a1530; border-bottom: 1px solid #443a68;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 3;
+  }
+  h1 { font-size: 16px; margin: 0 12px 0 0; letter-spacing: .05em; color: #9ff5c9; }
+  header .spacer { flex: 1; }
+  main {
+    display: grid; grid-template-columns: 330px 1fr 500px;
+    gap: 14px; padding: 14px 20px; align-items: start;
+  }
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .card { background: #2e2650; border: 1px solid #4d4177; border-radius: 12px; padding: 14px; }
+  .card h2 {
+    margin: 0 0 10px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    color: #9a90bd; font-weight: 700;
+  }
+  label { display: block; margin: 8px 0 2px; color: #9a90bd; font-size: 12px; font-weight: 700; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; background: #1c163290; color: #e6e0f5; border: 1px solid #4d4177;
+    border-radius: 8px; padding: 7px 9px; font: inherit;
+  }
+  textarea { resize: vertical; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button {
+    background: #443a68; color: #e6e0f5; border: 1px solid #5d4f8c; border-radius: 8px;
+    padding: 7px 12px; font: 700 13px/1 inherit; cursor: pointer;
+  }
+  button:hover { background: #52468030; border-color: #7c6fb0; background-color: #524680; }
+  button.primary { background: #2fc98d22; border-color: #2fc98d; color: #9ff5c9; }
+  button.small { padding: 4px 8px; font-size: 12px; }
+  button.danger { border-color: #d64f63; color: #ffb6c1; }
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { flex: 1; opacity: .6; }
+  .tabs button.on { opacity: 1; border-color: #9ff5c9; color: #9ff5c9; }
+  #qlist { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; }
+  .qrow {
+    display: flex; gap: 8px; align-items: center; padding: 7px 9px;
+    background: #1c163290; background-color: #251e42; border: 1px solid #4d4177;
+    border-radius: 8px; cursor: pointer;
+  }
+  .qrow.on { border-color: #9ff5c9; }
+  .qrow.bad { border-color: #d64f63; }
+  .qrow .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge {
+    font: 700 10px/1 inherit; letter-spacing: .06em; padding: 3px 6px; border-radius: 6px;
+    background: #443a68; color: #cfc6ec; text-transform: uppercase; flex-shrink: 0;
+  }
+  .answers .arow { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .answers input[type=text] { flex: 1; }
+  canvas#preview {
+    width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px;
+    border: 1px solid #4d4177; display: block;
+  }
+  #problems { font: 500 12px/1.6 ui-monospace, Menlo, monospace; color: #ffb08a; white-space: pre-wrap; }
+  #problems.ok { color: #7fd8a8; }
+  .hint { color: #7a6fa3; font-size: 12px; }
+  .checkline { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .checkline input { width: auto; }
+  dialog {
+    background: #2e2650; color: #e6e0f5; border: 1px solid #5d4f8c; border-radius: 12px;
+    width: min(720px, 90vw);
+  }
+  dialog::backdrop { background: rgba(10,8,20,.7); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PACK STUDIO</h1>
+  <span class="hint">build & preview question packs · nothing leaves your browser until you export</span>
+  <span class="spacer"></span>
+  <button id="loadSample" class="small">Load sample</button>
+  <button id="openFile" class="small">Open…</button>
+  <button id="pasteJson" class="small">Paste JSON</button>
+  <button id="copyJson" class="small">Copy JSON</button>
+  <button id="download" class="primary">Download pack.json</button>
+</header>
+
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>Pack</h2>
+      <label>Name</label>
+      <input type="text" id="packName" placeholder="Cardiology night">
+      <div class="row">
+        <div>
+          <label>Theme</label>
+          <select id="packTheme"></select>
+        </div>
+        <div>
+          <label>Answer time (s)</label>
+          <input type="number" id="packAnswerMs" min="5" max="60" step="1" value="12">
+        </div>
+      </div>
+      <label>Deck order</label>
+      <select id="packOrder">
+        <option value="authored">authored — plays as listed</option>
+        <option value="suggested">suggested — warmups → ranges → select-alls → pictures → sorts</option>
+      </select>
+    </div>
+    <div class="card">
+      <h2>Buckets</h2>
+      <div class="tabs">
+        <button id="tab-deck" class="on">Deck</button>
+        <button id="tab-control">Control Room</button>
+        <button id="tab-showdown">Showdown</button>
+      </div>
+      <div id="qlist" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="addQ" class="primary">+ Add</button>
+        <button id="dupQ" class="small">Duplicate</button>
+        <button id="upQ" class="small">↑</button>
+        <button id="downQ" class="small">↓</button>
+        <button id="delQ" class="small danger">Delete</button>
+      </div>
+      <div class="hint" id="bucketHint" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" id="editor">
+      <h2 id="editorTitle">Question</h2>
+      <div id="editorBody"><span class="hint">Add a question to begin.</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>Preview — the real game, half scale</h2>
+      <canvas id="preview" width="1920" height="1080"></canvas>
+      <div class="row" style="margin-top:8px">
+        <button id="replay" class="primary">▶ Replay round</button>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        The preview runs the actual game engine: intro, countdown, reveal and
+        scoreboard play exactly as they will on the night (with no players).
+      </div>
+    </div>
+    <div class="card">
+      <h2>Problems</h2>
+      <div id="problems" class="ok">No problems — this pack loads clean.</div>
+    </div>
+  </div>
+</main>
+
+<dialog id="pasteDlg">
+  <div style="padding:16px">
+    <h2 style="margin-top:0">Paste pack JSON</h2>
+    <textarea id="pasteBox" rows="14" style="width:100%"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="pasteGo" class="primary">Import</button>
+      <button id="pasteCancel">Cancel</button>
+    </div>
+  </div>
+</dialog>
+
+<script type="module" src="./builder.js"></script>
+</body>
+</html>
