@@ -360,7 +360,12 @@ function drawPackBrowser(cx, menu) {
   const visible = Math.max(1, Math.min(10, packs.length));
   const w = 880;
   const h = 118 + visible * rowH + 46;
-  const x = (WORLD_W - w) / 2;
+  // Centered in the open band between the lobby's two cards, so neither is
+  // covered: the setup card ends at x=560 (drawMenu) and the join card
+  // starts at WORLD_W-424 (drawJoin, render.js).
+  const CARD_R = 560;
+  const JOIN_L = WORLD_W - 424;
+  const x = (CARD_R + JOIN_L) / 2 - w / 2;
   const y = Math.max(80, (WORLD_H - h) / 2 - 40);
   panel(cx, x, y, w, h, 'rgba(255,255,255,0.5)');
 
