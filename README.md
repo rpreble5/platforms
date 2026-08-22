@@ -90,14 +90,13 @@ browser; Open/Paste round-trips existing packs for editing.
 document: `#` starts a question, its answers go on the lines below, and
 everything updates live as you type. Correct answers are picked with the
 checkbox beside each line (typing `✓ ` or `* ` at the start of the line
-does the same); two checks make a select-all automatically. The full
-format:
+does the same); two checks make a select-all automatically. The
+always-there settings — pack name, theme, answer time, deck order —
+never appear in the doc: they live in the Pack panel beside it. Each
+question's type shows as a chip in the left margin, and clicking the
+chip switches the type. The full format:
 
 ```
-pack: Cardiology night        theme, answer time and order are typed
-theme: blanc                  once at the top (all optional)
-time: 12s
-
 # Which planet has the most moons?
 Jupiter
 ✓ Saturn

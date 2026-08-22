@@ -24,21 +24,24 @@ import { drawConfetti } from '../display/fx.js';
 import { drawRoundOverlay, registerPreviewImage } from '../display/round-ui.js';
 import { drawShowdown } from '../display/showdown-ui.js';
 import {
-  parseDoc, serializeDoc, toggleCheck, setVerdict, setStartsOn,
+  parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, insertTemplate, removeBlock,
 } from './pack-text.js';
 
 // ------------------------------------------------------------------ state
 
 const DOC_KEY = 'packstudio-doc';
+const META_KEY = 'packstudio-meta';
 const OLD_DRAFT_KEY = 'packstudio-draft'; // the form-era JSON draft, migrated once
 
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
 /** @type {HTMLTextAreaElement} */
 const doc = $('doc');
 
-/** The document — the single source of truth. */
+/** The document — the single source of truth for the QUESTIONS. */
 let docText = '';
+/** The always-there pack settings live in the Pack panel, never the doc. */
+let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored' };
 /** @type {ReturnType<typeof parseDoc>} */
 let parsed = parseDoc('');
 /** Block index the caret sits in (-1 = none). */
@@ -48,14 +51,25 @@ let caretLn = -1;
 /** Local image files chosen this session, filename -> object URL. */
 const localImages = new Map();
 
-/** Validate a deep clone (validatePack normalizes in place). */
+/** Validate a fresh copy (validatePack normalizes in place). */
 function validated() {
-  return validatePack(structuredClone(parsed.raw));
+  return validatePack(exportable());
 }
 
-/** The exportable pack: exactly what the text says. */
+/** The exportable pack: the Pack panel's settings plus what the text says. */
 function exportable() {
-  return structuredClone(parsed.raw);
+  const raw = structuredClone(parsed.raw);
+  /** @type {any} */
+  const out = {
+    pack: meta.pack,
+    theme: meta.theme,
+    answerMs: meta.answerMs,
+    questions: raw.questions,
+  };
+  if (meta.order === 'suggested') out.order = 'suggested';
+  if (raw.controlRoom) out.controlRoom = raw.controlRoom;
+  if (raw.showdown) out.showdown = raw.showdown;
+  return out;
 }
 
 // --------------------------------------------------------------- text I/O
@@ -193,23 +207,44 @@ function renderGutter(vproblems) {
     inner.appendChild(g);
   });
 
-  const chips = $('chipInner');
-  chips.replaceChildren();
+  // Type chips ride the head line's margin row (it carries no checkbox).
+  // For deck questions the chip IS the type toggle — a tiny select.
   for (const b of parsed.blocks) {
     if (b.bucket === 'showdown') continue; // the T/F pill says it all
-    const c = document.createElement('span');
-    c.className = 'chip' + (blockBad(b, vproblems) ? ' bad' : '');
-    c.textContent = b.bucket === 'control' ? 'case' : b.type + (b.img ? ' · pic' : '');
-    c.style.top = `${(lineTops[b.headLine] ?? 0) + 4}px`;
-    chips.appendChild(c);
+    const g = document.createElement('div');
+    g.className = 'g';
+    g.style.top = `${(lineTops[b.headLine] ?? 0) + 2}px`;
+    const bad = blockBad(b, vproblems) ? ' bad' : '';
+    if (b.bucket === 'control') {
+      const c = document.createElement('span');
+      c.className = 'chip' + bad;
+      c.textContent = 'case';
+      g.appendChild(c);
+    } else {
+      const sel = document.createElement('select');
+      sel.className = 'chip' + bad;
+      sel.title = 'question type';
+      for (const [v, label] of [['choice', b.type === 'multi' ? 'multi' : 'choice'], ['range', 'range'], ['sort', 'sort']]) {
+        const o = document.createElement('option');
+        o.value = v;
+        o.textContent = label + (b.img && v === (b.type === 'multi' ? 'choice' : b.type) ? ' 🖼' : '');
+        if ((b.type === 'multi' ? 'choice' : b.type) === v) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.onchange = () => {
+        const t = /** @type {'choice'|'range'|'sort'} */ (sel.value);
+        sel.blur(); // hand focus back so the rewrite lands on the undo stack
+        if (t !== (b.type === 'multi' ? 'choice' : b.type)) setText(setBlockType(docText, b, t));
+      };
+      g.appendChild(sel);
+    }
+    inner.appendChild(g);
   }
   syncScroll();
 }
 
 function syncScroll() {
-  const t = `translateY(${-doc.scrollTop}px)`;
-  $('gutterInner').style.transform = t;
-  $('chipInner').style.transform = t;
+  $('gutterInner').style.transform = `translateY(${-doc.scrollTop}px)`;
 }
 
 // --------------------------------------------------------------- outline
@@ -491,31 +526,30 @@ function numField(/** @type {HTMLElement} */ into, /** @type {string} */ label, 
 
 // -------------------------------------------------------------- pack card
 
-/** @param {any} pack the validated pack */
-function syncPackCard(pack) {
+function syncPackCard() {
   const set = (/** @type {string} */ id, /** @type {string} */ v) => {
     const el = $(id);
     if (document.activeElement !== el) el.value = v;
   };
-  set('packName', pack.pack);
-  set('packTheme', pack.theme);
-  set('packAnswerMs', String(Math.round(pack.answerMs / 1000)));
-  set('packOrder', parsed.raw.order === 'suggested' ? 'suggested' : 'authored');
+  set('packName', meta.pack);
+  set('packTheme', meta.theme);
+  set('packAnswerMs', String(Math.round(meta.answerMs / 1000)));
+  set('packOrder', meta.order === 'suggested' ? 'suggested' : 'authored');
 }
 
 // ------------------------------------------------------------------ refresh
 
 /** @param {{keepPanel?: boolean}} [opts] */
 function refresh(opts = {}) {
-  parsed = parseDoc(docText);
+  parsed = parseDoc(docText, { frontMatter: false });
   caretLn = document.activeElement === doc ? caretLine() : caretLn;
   caretIx = blockAt(caretLn);
-  const { pack, problems: vproblems } = validated();
+  const { problems: vproblems } = validated();
   measure();
   renderGutter(vproblems);
   renderOutline(vproblems);
   renderProblems(vproblems);
-  syncPackCard(pack);
+  syncPackCard();
   if (!opts.keepPanel) renderPanel();
   restartPreview();
   save();
@@ -589,7 +623,7 @@ function restartPreview() {
   const src = parsed.raw.questions[b.ix];
   const vetted = validatePack({ questions: src ? [structuredClone(src)] : [] });
   const q = vetted.pack.questions[0];
-  pvGame = createGame(q ? [q] : [], parsed.raw.answerMs);
+  pvGame = createGame(q ? [q] : [], meta.answerMs);
   if (q) startGame(pvGame, pvWorld);
 }
 
@@ -624,11 +658,16 @@ function frame(/** @type {number} */ now) {
 // ------------------------------------------------------------------ IO
 
 function save() {
-  try { localStorage.setItem(DOC_KEY, docText); } catch { /* full/blocked: drafts are a convenience */ }
+  try {
+    localStorage.setItem(DOC_KEY, docText);
+    localStorage.setItem(META_KEY, JSON.stringify(meta));
+  } catch { /* full/blocked: drafts are a convenience */ }
 }
 
 function loadDraft() {
   try {
+    const m = localStorage.getItem(META_KEY);
+    if (m) Object.assign(meta, JSON.parse(m));
     const raw = localStorage.getItem(DOC_KEY);
     if (raw !== null) return raw;
     // One-time migration from the form era: the old draft was pack JSON.
@@ -636,6 +675,25 @@ function loadDraft() {
     if (old) return serializeDoc(JSON.parse(old));
   } catch { /* unreadable draft: start fresh */ }
   return null;
+}
+
+/**
+ * Adopt a document wholesale (boot, Open, Paste, Load sample): any
+ * front-matter block on top is absorbed into the Pack panel and stripped,
+ * so the doc itself only ever shows questions.
+ * @param {string} t @param {{boot?: boolean}} [opts]
+ */
+function adoptDoc(t, opts = {}) {
+  const { meta: fm, text } = extractFrontMatter(t);
+  Object.assign(meta, fm);
+  if (meta.order !== 'suggested') meta.order = 'authored';
+  if (opts.boot) {
+    doc.value = text;
+    docText = text;
+    refresh();
+  } else {
+    setText(text, { caret: 0 });
+  }
 }
 
 const SAMPLE = {
@@ -679,14 +737,16 @@ function addBlock(/** @type {'deck'|'control'|'showdown'} */ bucket) {
   setText(text, { line });
 }
 
-$('packName').oninput = () => setText(setDirective(docText, null, 'pack', $('packName').value), { keepPanel: true });
+// The Pack panel edits meta directly — these settings never touch the doc.
+function metaChanged() {
+  refresh({ keepPanel: true });
+}
+$('packName').oninput = () => { meta.pack = $('packName').value; metaChanged(); };
 $('packAnswerMs').oninput = () => {
   const v = Number($('packAnswerMs').value);
-  if (Number.isFinite(v) && v > 0) setText(setDirective(docText, null, 'time', `${v}s`), { keepPanel: true });
+  if (Number.isFinite(v) && v > 0) { meta.answerMs = Math.round(v * 1000); metaChanged(); }
 };
-$('packOrder').onchange = () => {
-  setText(setDirective(docText, null, 'order', $('packOrder').value === 'suggested' ? 'suggested' : null), { keepPanel: true });
-};
+$('packOrder').onchange = () => { meta.order = $('packOrder').value === 'suggested' ? 'suggested' : 'authored'; metaChanged(); };
 const themeSel = $('packTheme');
 for (const t of PACK_THEMES) {
   const o = document.createElement('option');
@@ -694,13 +754,13 @@ for (const t of PACK_THEMES) {
   o.textContent = t;
   themeSel.appendChild(o);
 }
-themeSel.onchange = () => setText(setDirective(docText, null, 'theme', themeSel.value), { keepPanel: true });
+themeSel.onchange = () => { meta.theme = themeSel.value; metaChanged(); };
 
 $('download').onclick = () => {
   const blob = new Blob([JSON.stringify(exportable(), null, 2) + '\n'], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const safe = String(parsed.raw.pack).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pack';
+  const safe = String(meta.pack).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pack';
   a.download = `${safe}.json`;
   a.click();
 };
@@ -716,7 +776,7 @@ $('openFile').onclick = () => {
   inp.onchange = async () => {
     const f = inp.files?.[0];
     if (!f) return;
-    try { setText(serializeDoc(JSON.parse(await f.text())), { caret: 0 }); } catch { alert('Not valid JSON'); }
+    try { adoptDoc(serializeDoc(JSON.parse(await f.text()))); } catch { alert('Not valid JSON'); }
   };
   inp.click();
 };
@@ -726,14 +786,12 @@ $('pasteGo').onclick = () => {
   try {
     const next = serializeDoc(JSON.parse($('pasteBox').value));
     $('pasteDlg').close();
-    setText(next, { caret: 0 });
+    adoptDoc(next);
   } catch { alert('Not valid JSON'); }
 };
-$('loadSample').onclick = () => setText(serializeDoc(SAMPLE), { caret: 0 });
+$('loadSample').onclick = () => adoptDoc(serializeDoc(SAMPLE));
 $('replay').onclick = () => restartPreview();
 
 // boot
-doc.value = loadDraft() ?? serializeDoc(SAMPLE);
-docText = doc.value;
-refresh();
+adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
 requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });

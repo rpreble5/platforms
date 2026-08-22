@@ -88,14 +88,52 @@ const fmtSeconds = (/** @type {number} */ ms) => `${ms / 1000}s`;
  */
 
 /**
+ * Pull the pack meta (pack/theme/time/order) off the top of a document
+ * and return it alongside the stripped text. The Studio runs this at
+ * every LOAD — boot, Open, Paste, Load sample — so serialized imports
+ * and drafts from the front-matter era migrate into the Pack panel and
+ * the doc itself holds only questions.
+ * @param {string} text
+ * @returns {{ meta: {pack?:string, theme?:string, answerMs?:number, order?:string}, text: string }}
+ */
+export function extractFrontMatter(text) {
+  const lines = text.split('\n');
+  /** @type {{pack?:string, theme?:string, answerMs?:number, order?:string}} */
+  const meta = {};
+  let i = 0;
+  while (i < lines.length) {
+    const t = lines[i].trim();
+    if (!t) { i++; continue; } // leading/interleaved blanks go with the block
+    const m = /^(pack|theme|time|order)\s*:\s*(.*)$/i.exec(t);
+    if (!m) break;
+    const key = m[1].toLowerCase();
+    const v = m[2].trim();
+    if (key === 'pack') meta.pack = v;
+    else if (key === 'theme') meta.theme = v;
+    else if (key === 'order') meta.order = v;
+    else {
+      const ms = parseSeconds(v);
+      if (ms !== null) meta.answerMs = ms;
+    }
+    i++;
+  }
+  return { meta, text: lines.slice(i).join('\n') };
+}
+
+/**
  * Parse the document into the raw pack (for validatePack) plus the line
  * and block maps the Studio UI hangs its gutter, outline and panel on.
  *
+ * opts.frontMatter: pass false when the pack meta lives OUTSIDE the text
+ * (the Studio's Pack panel) — typed pack/theme/time/order lines are then
+ * flagged instead of absorbed, so nothing is silently ignored.
+ *
  * @param {string} text
+ * @param {{frontMatter?: boolean}} [opts]
  * @returns {{ raw: any, blocks: BlockInfo[], lines: LineInfo[],
  *             problems: {line:number|null, msg:string}[] }}
  */
-export function parseDoc(text) {
+export function parseDoc(text, { frontMatter = true } = {}) {
   const src = text.split('\n');
   /** @type {LineInfo[]} */
   const lines = src.map(() => ({ kind: 'blank', block: null }));
@@ -293,6 +331,11 @@ export function parseDoc(text) {
     if (section === 'front') {
       const m = /^(\w[\w-]*)\s*:\s*(.*)$/.exec(t);
       if (m && FRONT_KEYS.includes(m[1].toLowerCase())) {
+        if (!frontMatter) {
+          flag(i, 'name, theme, time and order live in the Pack panel — this line is ignored');
+          lines[i] = { kind: 'unknown', block: null };
+          continue;
+        }
         const key = m[1].toLowerCase();
         const v = m[2].trim();
         if (key === 'pack') raw.pack = v;
@@ -305,7 +348,9 @@ export function parseDoc(text) {
         }
         lines[i] = { kind: 'front', block: null };
       } else {
-        flag(i, 'before the first # question, only pack: / theme: / time: / order: lines are recognized');
+        flag(i, frontMatter
+          ? 'before the first # question, only pack: / theme: / time: / order: lines are recognized'
+          : 'this line belongs to no question — start one with #');
         lines[i] = { kind: 'unknown', block: null };
       }
       continue;

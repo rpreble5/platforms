@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validatePack } from '../../shared/pack-validate.js';
 import {
-  parseDoc, serializeDoc, toggleCheck, setVerdict, setStartsOn,
+  parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, insertTemplate, removeBlock,
 } from './pack-text.js';
 
@@ -148,6 +148,28 @@ test('front matter, sections, control parens and showdown verdicts parse', () =>
   assert.equal(lines[16].kind, 'number');
   assert.equal(lines[23].kind, 'statement');
   assert.deepEqual(validatePack(raw).problems, []);
+});
+
+test('extractFrontMatter absorbs the meta block and strips it from the doc', () => {
+  const { meta, text } = extractFrontMatter('pack: A\ntheme: noir\ntime: 9s\norder: suggested\n\n# Q?\n✓ a\nb');
+  assert.deepEqual(meta, { pack: 'A', theme: 'noir', answerMs: 9000, order: 'suggested' });
+  assert.equal(text, '# Q?\n✓ a\nb');
+
+  // no front matter: nothing absorbed, doc untouched (leading blanks aside)
+  const plain = extractFrontMatter('# Q?\na\nb');
+  assert.deepEqual(plain.meta, {});
+  assert.equal(plain.text, '# Q?\na\nb');
+
+  // a stray non-meta first line stops the scan without eating anything
+  const stray = extractFrontMatter('hello\npack: A');
+  assert.deepEqual(stray.meta, {});
+  assert.equal(stray.text, 'hello\npack: A');
+});
+
+test('parseDoc with frontMatter:false flags typed meta lines instead of absorbing', () => {
+  const { raw, problems } = parseDoc('theme: noir\n\n# Q?\n✓ a\nb', { frontMatter: false });
+  assert.equal(raw.theme, 'blanc'); // the default — the typed line was NOT absorbed
+  assert.ok(problems.some((p) => p.line === 1 && /Pack panel/.test(p.msg)));
 });
 
 test('unmarked verdicts and stray lines produce 1-based line problems', () => {
