@@ -101,6 +101,12 @@
       "correct": [0, 1, 3, 5]
     },
     {
+      "text": "How many sides does this shape have?",
+      "image": "sample-shape.png",
+      "answers": ["Five", "Six", "Seven", "Eight"],
+      "correct": 1
+    },
+    {
       "type": "sort",
       "text": "Sort each animal by class",
       "buckets": ["Mammal", "Bird", "Reptile"],

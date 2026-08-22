@@ -168,3 +168,41 @@ test('sort bucket and item counts are enforced', () => {
   );
   assert.equal(oneItem.questions.length, 0);
 });
+
+// ---------------------------------------------------------- question images
+
+/** @param {any} q @param {boolean} withFile @returns {string} */
+function rootWithImageQuestion(q, withFile) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'img-pack-'));
+  fs.mkdirSync(path.join(root, 'questions'));
+  if (withFile) {
+    fs.mkdirSync(path.join(root, 'questions', 'images'));
+    fs.writeFileSync(path.join(root, 'questions', 'images', 'ekg.png'), 'png');
+  }
+  fs.writeFileSync(
+    path.join(root, 'questions', 'test.json'),
+    JSON.stringify({ pack: 'Image test', questions: [q] })
+  );
+  return root;
+}
+
+const IMG_Q = { text: 'What rhythm is this?', image: 'ekg.png', answers: ['AF', 'VT'], correct: 1 };
+
+test('an image question keeps its image and is forced onto the row layout', () => {
+  const pack = loadQuestions(rootWithImageQuestion({ ...IMG_Q, layout: 'islands' }, true), 'test.json');
+  assert.equal(pack.questions[0].image, 'ekg.png');
+  assert.equal(pack.questions[0].layout, 'row', 'tall layouts would collide with the picture');
+});
+
+test('a traversal-shaped image name is dropped, never resolved', () => {
+  const bad = { ...IMG_Q, image: '../test.json' };
+  const pack = loadQuestions(rootWithImageQuestion(bad, true), 'test.json');
+  assert.equal(pack.questions.length, 1, 'the question still plays');
+  assert.equal(pack.questions[0].image, undefined, 'without the image');
+});
+
+test('a missing image file is dropped with a note, question kept', () => {
+  const pack = loadQuestions(rootWithImageQuestion(IMG_Q, false), 'test.json');
+  assert.equal(pack.questions.length, 1);
+  assert.equal(pack.questions[0].image, undefined);
+});

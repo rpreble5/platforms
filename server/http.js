@@ -11,7 +11,7 @@
  *    format even though the phone loads no modules.
  */
 
-import { createReadStream, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
@@ -30,6 +30,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
 };
 
@@ -145,6 +146,19 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       }
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       res.end(JSON.stringify(listLevels(root)));
+      return;
+    }
+
+    // Question images — the ONE window into questions/. The directory
+    // itself is deliberately never served (packs carry answer keys), so
+    // this route accepts a plain image basename and nothing else.
+    if (pathname.startsWith('/qimg/')) {
+      const name = decodeURIComponent(pathname.slice('/qimg/'.length));
+      if (name !== path.basename(name) || !/\.(png|jpe?g|webp|svg)$/i.test(name)) {
+        res.writeHead(403).end('forbidden');
+        return;
+      }
+      sendFile(res, path.join(root, 'questions', 'images', name));
       return;
     }
 
@@ -337,8 +351,34 @@ export function loadQuestions(root, packFile = 'default.json') {
 
   /** @type {string[]} */
   const problems = [];
+
+  /**
+   * The optional question image: a plain filename in questions/images,
+   * shown large above the platforms (served via /qimg, the only window
+   * into questions/). Bad or missing images are dropped with a note —
+   * the question still plays, just without its picture.
+   * @param {any} q @param {string} where
+   */
+  const vetImage = (q, where) => {
+    if (q.image === undefined) return;
+    if (
+      typeof q.image !== 'string' ||
+      q.image !== path.basename(q.image) ||
+      !/\.(png|jpe?g|webp|svg)$/i.test(q.image)
+    ) {
+      problems.push(`${where}: image must be a plain png/jpg/webp/svg filename — ignored`);
+      delete q.image;
+      return;
+    }
+    if (!existsSync(path.join(root, 'questions', 'images', q.image))) {
+      problems.push(`${where}: image "${q.image}" not found in questions/images — ignored`);
+      delete q.image;
+    }
+  };
+
   const questions = (pack.questions ?? []).filter((/** @type {any} */ q, /** @type {number} */ i) => {
     const where = `Q${i + 1}`;
+    if (q && typeof q === 'object') vetImage(q, where);
 
     if (q?.type === 'range') {
       if (typeof q.text !== 'string') {
@@ -422,6 +462,12 @@ export function loadQuestions(root, packFile = 'default.json') {
     ) {
       problems.push(`${where}: unknown layout "${q.layout}" — using islands`);
       delete q.layout;
+    }
+    // A picture needs the airspace: tall layouts put boards exactly where
+    // the image hangs, so image questions always play on the flat row.
+    if (q.image && q.layout !== 'row') {
+      if (q.layout !== undefined) problems.push(`${where}: image questions use the row layout — overriding "${q.layout}"`);
+      q.layout = 'row';
     }
     // `correct` is one index, or an array for select-all-that-apply: at
     // least two right (else it's a normal question) and at least one wrong

@@ -452,6 +452,65 @@ function drawQuestion(cx, g) {
     cx.fillText(isSortQuestion(q) ? 'final tally…' : "TIME'S UP", WORLD_W / 2, 130);
   }
   cx.textAlign = 'left';
+
+  // The picture hangs through intro, answering and the reveal; the SCORE
+  // panel owns that band, so it steps aside for the scoreboard.
+  if (q.image && g.phase !== PHASE.SCORE) drawQuestionImage(cx, q);
+}
+
+/**
+ * Question images, loaded once per filename. The map holds the Image even
+ * while it loads; a frame simply skips drawing until it's ready.
+ * @type {Map<string, HTMLImageElement>}
+ */
+const IMAGE_CACHE = new Map();
+
+/** @param {string} name @returns {HTMLImageElement | null} */
+function questionImage(name) {
+  let img = IMAGE_CACHE.get(name);
+  if (!img) {
+    img = new Image();
+    img.src = `/qimg/${encodeURIComponent(name)}`;
+    IMAGE_CACHE.set(name, img);
+  }
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+
+/**
+ * The question's picture — an EKG, a rash, a map — hung like a photograph
+ * in the airspace between the banner and the platforms. The loader forces
+ * image choice questions onto the row layout, so this band is always clear.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {import('../../sim/round.js').Question} q
+ */
+function drawQuestionImage(cx, q) {
+  const img = q.image ? questionImage(q.image) : null;
+  if (!img) return;
+  const maxW = 780;
+  const maxH = 420;
+  // Fit the box; tiny images may grow a little, but never into mush.
+  const s = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 2);
+  const w = Math.round(img.naturalWidth * s);
+  const h = Math.round(img.naturalHeight * s);
+  const pad = 14;
+  const x = (WORLD_W - w) / 2;
+  const y = 190;
+  cx.save();
+  // A white photographic matte on every theme: clinical images are authored
+  // against white, and the matte is what separates them from any sky.
+  cx.shadowColor = 'rgba(4,6,24,0.4)';
+  cx.shadowBlur = 30;
+  cx.shadowOffsetY = 10;
+  cx.fillStyle = '#f8f6f1';
+  cx.beginPath();
+  cx.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 16);
+  cx.fill();
+  cx.shadowColor = 'rgba(0,0,0,0)';
+  cx.drawImage(img, x, y, w, h);
+  cx.strokeStyle = 'rgba(23,20,42,0.18)';
+  cx.lineWidth = 1.5;
+  cx.strokeRect(x, y, w, h);
+  cx.restore();
 }
 
 /**

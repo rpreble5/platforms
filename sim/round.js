@@ -121,6 +121,8 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {Array<{label:string, bucket:number}>} [items] sort questions:
  *   the rapid-fire prompts, in play order
  * @property {number} [itemMs] sort questions: the per-item answer window
+ * @property {string} [image] filename in questions/images, drawn large above
+ *   the platforms (loader forces the row layout on image choice questions)
  */
 
 /**
@@ -587,6 +589,10 @@ function buildControlQuestionArena(q) {
  */
 function choiceArena(g, q) {
   const n = q.answers?.length ?? 2;
+  // A picture owns the airspace: designed levels place boards anywhere, so
+  // image questions skip the pool and always play the flat row (the loader
+  // already forces q.layout to match).
+  if (q.image) return buildArena(n, 'row');
   const fits = g.levelPool.filter((l) => l.boards.length === n);
   const named = q.level ? fits.find((l) => l.name === q.level) : null;
   const pick = named ?? (fits.length ? fits[g.qIndex % fits.length] : null);

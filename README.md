@@ -79,6 +79,13 @@ deck:
 { "type": "range", "text": "Appropriate dose of drug X?",
   "min": 0, "max": 20, "answer": [8, 10], "unit": "mg" }
 
+// Any standard question can carry a picture — an EKG, a rash, a map —
+// shown large above the platforms. Drop the file in questions/images/
+// (png/jpg/webp/svg) and name it; image choice questions always play on
+// the flat row layout so the picture has the airspace.
+{ "text": "What rhythm is this?", "image": "ekg-01.png",
+  "answers": ["Sinus", "AF", "VT", "Torsades"], "correct": 2 }
+
 // Lightning sort: 2-4 category platforms, then 2-12 rapid-fire items shown
 // one after another (itemMs each, clamped 3-15s, default 6s). Stand on the
 // right bucket at each item's mini-buzzer; the winning bucket flashes
