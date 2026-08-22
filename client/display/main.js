@@ -300,6 +300,9 @@ const menu = {
   loading: false,
   /** @type {'solo'|'teams'} */
   mode: 'solo',
+  // The deck browser: a modal list over the card, for real libraries.
+  browse: false,
+  browseSel: 0,
 };
 
 /** Menu rows, in display order. Optional modes appear only when the pack has content. */
@@ -342,6 +345,7 @@ function participatingTeams() {
 
 /** @param {boolean} controlOnly */
 function startConfiguredGame(controlOnly) {
+  menu.browse = false; // a host-page start can arrive mid-browse
   if (controlOnly) menu.mode = 'teams';
   applyMode();
   game.activeTeams = participatingTeams();
@@ -455,7 +459,11 @@ function menuActivate(item) {
   } else if (item === 'control') {
     startConfiguredGame(true);
   } else if (item === 'showdown') startShowdown();
-  else menuAdjust(item, 1);
+  else if (item === 'pack') {
+    // Left/Right still quick-cycles; Enter opens the whole library.
+    menu.browse = true;
+    menu.browseSel = menu.packIndex;
+  } else menuAdjust(item, 1);
 }
 
 // ------------------------------------------------------------------ showdown
@@ -744,6 +752,23 @@ function onKey(e, down) {
       printTuning();
       return;
     }
+    // The deck browser is modal: while it's open it owns the keyboard, so
+    // nothing underneath can start a game or toggle settings by accident.
+    if (menuOpen() && menu.browse) {
+      const clampSel = (/** @type {number} */ v) =>
+        Math.max(0, Math.min(menu.packs.length - 1, v));
+      if (k === 'arrowup') menu.browseSel = clampSel(menu.browseSel - 1);
+      else if (k === 'arrowdown') menu.browseSel = clampSel(menu.browseSel + 1);
+      else if (k === 'arrowleft') menu.browseSel = clampSel(menu.browseSel - 8);
+      else if (k === 'arrowright') menu.browseSel = clampSel(menu.browseSel + 8);
+      else if (k === 'enter') {
+        void selectPack(menu.browseSel);
+        menu.browse = false;
+      } else if (k === 'q' || k === 'escape') menu.browse = false;
+      e.preventDefault();
+      return;
+    }
+
     if (k === 'enter') {
       if (showdown) sdSkip(showdown, world);
       else if (menuOpen()) menuActivate(menuItems()[menu.sel]);

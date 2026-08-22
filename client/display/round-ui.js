@@ -111,6 +111,8 @@ function fallOffset(t) {
  * @property {'solo'|'teams'} mode
  * @property {number[]} [cohortCounts] committed + connected players per year
  * @property {number} [controlCases] size of the pack's Control Room pool
+ * @property {boolean} [browse] the deck browser is open (modal over the card)
+ * @property {number} [browseSel] browser cursor, an index into packs
  */
 
 /**
@@ -188,11 +190,11 @@ function drawMenu(cx, menu, playerCount) {
     : `needs ${activeTeams} case${activeTeams === 1 ? '' : 's'} · pack has ${menu.controlCases ?? 0}`;
 
   const actions = menu.items.filter((it) => it === 'quiz' || it === 'control' || it === 'showdown');
-  const packH = 128;
-  const rowH = 54;
-  const stripH = 84;
+  const packH = 104;
+  const rowH = 58;
+  const stripH = 88;
   const btnH = 68;
-  const h = pad + packH + 2 * rowH + 16 + stripH + 18 + actions.length * (btnH + 12) + pad - 12;
+  const h = pad + packH + 2 * rowH + 22 + stripH + 24 + actions.length * (btnH + 12) + pad - 12;
   // Lighter veil than the round furniture: the lobby is where the breathing
   // sky gets to show off, and this card's text is big enough to carry it.
   panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
@@ -209,33 +211,31 @@ function drawMenu(cx, menu, playerCount) {
     cx.stroke();
   };
 
-  // ---- the pack, presented rather than crammed into a row
+  // ---- the pack: eyebrow + bucket chips on one dim line, the name below,
+  // and the browse affordance when the cursor is here. The full library
+  // lives in the deck browser (Enter), so this block stays a summary.
   let y = y0 + pad;
   if (sel === 'pack') pill(y - 12, packH);
-  cx.font = `700 15px ${FONT.ui}`;
-  cx.fillStyle = 'rgba(255,255,255,0.45)';
-  cx.fillText('PACK', x0 + pad, y + 8);
+  const bits = pack ? [`${pack.questions} questions`] : [];
+  if (pack?.controlRoom) bits.push('control room (teams)');
+  if (pack?.showdown) bits.push('showdown');
+  const eyebrow = bits.length ? `DECK  ·  ${bits.join('  ·  ')}` : 'DECK';
+  cx.font = fitFont(cx, eyebrow, w - pad * 2 - (sel === 'pack' ? 130 : 0), 15, 11);
+  cx.fillStyle = 'rgba(255,255,255,0.5)';
+  cx.fillText(eyebrow, x0 + pad, y + 8);
   const name = menu.loading ? 'loading…' : pack ? pack.name : '—';
-  cx.font = fitFont(cx, name, w - pad * 2 - 76, 42, 22);
+  cx.font = fitFont(cx, name, w - pad * 2 - 76, 40, 22);
   cx.fillStyle = '#ffffff';
   cx.fillText(name, x0 + pad, y + 56);
   if (sel === 'pack') {
+    cx.textAlign = 'right';
+    cx.font = `700 14px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.6)';
+    cx.fillText('⏎ browse', x0 + w - pad, y + 8);
     cx.font = `800 30px ${FONT.display}`;
     cx.fillStyle = 'rgba(255,255,255,0.75)';
-    cx.textAlign = 'right';
     cx.fillText('◂ ▸', x0 + w - pad + 6, y + 54);
     cx.textAlign = 'left';
-  }
-  if (pack) {
-    // The bucket labels say their mode out loud: Control Room is a teams
-    // bucket, and a free-for-all game will simply not play it.
-    const bits = [`${pack.questions} questions`];
-    if (pack.controlRoom) bits.push('control room (teams)');
-    if (pack.showdown) bits.push('showdown');
-    const bitsLine = bits.join('  ·  ');
-    cx.font = fitFont(cx, bitsLine, w - pad * 2, 20, 13);
-    cx.fillStyle = 'rgba(255,255,255,0.55)';
-    cx.fillText(bitsLine, x0 + pad, y + 92);
   }
   y += packH;
 
@@ -260,7 +260,7 @@ function drawMenu(cx, menu, playerCount) {
     y += rowH;
   }
 
-  y += 16;
+  y += 22;
 
   // ---- who is actually in: live committed headcount per year, as beans.
   // This is what makes the start buttons below honest — the host can SEE
@@ -287,7 +287,7 @@ function drawMenu(cx, menu, playerCount) {
     cx.fillStyle = counts[c] ? TEAM_COLORS[c] : 'rgba(255,255,255,0.3)';
     cx.fillText(COHORTS[c].label, cxp + 1, feet + 18);
   }
-  y += stripH + 18;
+  y += stripH + 24;
 
   // ---- the ways to begin, as real buttons. The selected one glows with the
   // same light the correct answer gets; an unready one says WHY, up front.
@@ -342,6 +342,91 @@ function drawMenu(cx, menu, playerCount) {
     cx.textAlign = 'left';
     y += btnH + 12;
   }
+
+  if (menu.browse) drawPackBrowser(cx, menu);
+}
+
+/**
+ * The deck browser: the whole library in one windowed list, opened with
+ * Enter from the card's pack row. Scales to dozens of decks — the card
+ * itself only ever shows the chosen one.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {MenuView} menu
+ */
+function drawPackBrowser(cx, menu) {
+  const packs = menu.packs;
+  const cursor = Math.max(0, Math.min(menu.browseSel ?? 0, packs.length - 1));
+  const rowH = 52;
+  const visible = Math.max(1, Math.min(10, packs.length));
+  const w = 880;
+  const h = 118 + visible * rowH + 46;
+  const x = (WORLD_W - w) / 2;
+  const y = Math.max(80, (WORLD_H - h) / 2 - 40);
+  panel(cx, x, y, w, h, 'rgba(255,255,255,0.5)');
+
+  cx.textAlign = 'left';
+  cx.textBaseline = 'alphabetic';
+  cx.font = `800 34px ${FONT.display}`;
+  cx.fillStyle = UI.paper;
+  cx.fillText('Choose a deck', x + 36, y + 52);
+  cx.textAlign = 'right';
+  cx.font = `600 16px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.65)';
+  cx.fillText(`${packs.length} deck${packs.length === 1 ? '' : 's'}`, x + w - 36, y + 52);
+  cx.textAlign = 'left';
+
+  // The window follows the cursor, keeping two rows of lookahead.
+  let start = 0;
+  if (packs.length > visible) {
+    start = Math.max(0, Math.min(cursor - (visible - 3), packs.length - visible));
+  }
+  const above = start;
+  const below = packs.length - (start + visible);
+
+  let ry = y + 92;
+  if (above > 0) {
+    cx.font = `600 15px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.55)';
+    cx.fillText(`▲ ${above} more`, x + 36, ry - 8);
+  }
+  for (let i = start; i < start + visible && i < packs.length; i++) {
+    const p = packs[i];
+    const rowSel = i === cursor;
+    if (rowSel) {
+      cx.fillStyle = 'rgba(255,255,255,0.12)';
+      cx.strokeStyle = 'rgba(255,255,255,0.45)';
+      cx.lineWidth = 1.5;
+      cx.beginPath();
+      cx.roundRect(x + 22, ry, w - 44, rowH - 6, 12);
+      cx.fill();
+      cx.stroke();
+    }
+    const current = i === menu.packIndex;
+    cx.font = fitFont(cx, p.name, w * 0.5, 26, 16);
+    cx.fillStyle = rowSel ? '#ffffff' : 'rgba(255,255,255,0.82)';
+    cx.fillText(`${current ? '✓ ' : ''}${p.name}`, x + 40, ry + 33);
+
+    const bits = [`${p.questions} questions`];
+    if (p.controlRoom) bits.push('control (teams)');
+    if (p.showdown) bits.push('showdown');
+    cx.textAlign = 'right';
+    cx.font = `600 16px ${FONT.ui}`;
+    cx.fillStyle = rowSel ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.6)';
+    cx.fillText(bits.join(' · '), x + w - 40, ry + 32);
+    cx.textAlign = 'left';
+    ry += rowH;
+  }
+  if (below > 0) {
+    cx.font = `600 15px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.55)';
+    cx.fillText(`▼ ${below} more`, x + 36, ry + 14);
+  }
+
+  cx.textAlign = 'center';
+  cx.font = `600 17px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.6)';
+  cx.fillText('↑↓ choose · ⏎ select · Q close', x + w / 2, y + h - 20);
+  cx.textAlign = 'left';
 }
 
 /**
