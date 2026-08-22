@@ -188,13 +188,12 @@ export const GLASS_CHUNK_H = SLAB_H + PLAQUE_GAP + PLAQUE_H;
  */
 function drawGlassChunk(cx, x, y, w, h, r, state) {
   const fam = glassFam();
-  // The winning chunk must go WHITER than resting glass on every family.
-  // The old constants (0.34/0.30) were tuned against the dark families'
-  // 0.13 body — on the light families, whose resting glass is already 0.5
-  // white, they made the correct platform MORE transparent than its
-  // neighbours, so the win read as darkening. The lit veil now clears the
-  // family's own body with room to spare, and the text stays etched ink.
-  const litFill = fam.light ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.34)';
+  // The winning chunk must go WHITER than resting glass on every family —
+  // the lit veil clears the family's own body with room to spare (light
+  // families rest at 0.5 white, dark ones at 0.13), and the text keeps its
+  // usual ink: the verdict belongs to the glass, not the lettering. 0.48
+  // on the dark side is the ceiling where white 0.96 text still reads.
+  const litFill = fam.light ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.48)';
   cx.save();
   cx.beginPath();
   cx.roundRect(x, y, w, h, r);
