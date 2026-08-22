@@ -61,7 +61,7 @@ Questions live in `questions/*.json` — every file there is a selectable pack
 in the lobby menu (name it with a top-level `"pack"` field). Packs are re-read
 on every selection, so editing one and re-picking it is the whole edit loop.
 The lobby is a live arena: players join, run and warm up underneath the menu
-while the host picks a pack and answer time. Two kinds of question share a
+while the host picks a pack and answer time. Three kinds of question share a
 deck:
 
 ```jsonc
@@ -78,6 +78,17 @@ deck:
 // falls away — along with everyone standing on it.
 { "type": "range", "text": "Appropriate dose of drug X?",
   "min": 0, "max": 20, "answer": [8, 10], "unit": "mg" }
+
+// Lightning sort: 2-4 category platforms, then 2-12 rapid-fire items shown
+// one after another (itemMs each, clamped 3-15s, default 6s). Stand on the
+// right bucket at each item's mini-buzzer; the winning bucket flashes
+// between items and the arena never rebuilds — one question, a sustained
+// scramble. Each landed item pays 300 plus up to 150 for speed.
+{ "type": "sort", "text": "Sort each animal by class",
+  "buckets": ["Mammal", "Bird", "Reptile"],
+  "items": [ { "label": "Bat", "bucket": 0 }, { "label": "Penguin", "bucket": 1 },
+             { "label": "Gecko", "bucket": 2 } ],
+  "itemMs": 6000 }
 ```
 
 There is also a separate **showdown** — sudden-death true/false, floor split

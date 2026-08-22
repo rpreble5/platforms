@@ -240,6 +240,15 @@ function render() {
         return li;
       }));
       alist.hidden = false;
+    } else if (qz.kind === 'sort' && Array.isArray(qz.items)) {
+      // The whole key at once, current item marked — the host reads ahead.
+      alist.replaceChildren(...qz.items.map((it, i) => {
+        const li = document.createElement('li');
+        li.textContent = `${it.label} → ${qz.buckets?.[it.bucket] ?? it.bucket}`;
+        if (i === qz.item) li.className = 'correct';
+        return li;
+      }));
+      alist.hidden = false;
     }
   }
 

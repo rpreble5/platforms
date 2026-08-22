@@ -18,7 +18,7 @@
  * just doesn't drive the maths.
  */
 
-import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, answerId, spawnFor } from './levels.js';
+import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, buildRowArena, answerId, spawnFor } from './levels.js';
 import { CONTROL_LABEL_MAX_CHARS, buildControlArena, stepControls } from './control-boxes.js';
 import { step } from './world.js';
 
@@ -44,6 +44,15 @@ export const TEAM_COVER_BONUS = 500;
 /** Cooperative Control Room scoring goes straight to the team's ledger. */
 export const CONTROL_ITEM_POINTS = 200;
 export const CONTROL_PERFECT_BONUS = 600;
+/**
+ * Lightning sort: each item is worth less than a full question on purpose —
+ * a sort round pays out across many quick calls, and the totals should land
+ * in the same league as one standard question, not dwarf it.
+ */
+export const SORT_ITEM_POINTS = 300;
+export const SORT_ITEM_SPEED_BONUS = 150;
+/** The between-items beat: winning bucket lit, inputs dead, breath taken. */
+export const SORT_FLASH_MS = 1200;
 
 /** Question slides in and platforms rise. Inputs stay live throughout. */
 export const INTRO_MS = 3000;
@@ -82,7 +91,7 @@ export const DEBRIS_LIFE_MS = 1600;
  *
  * @typedef {object} Question
  * @property {string} text
- * @property {'range'|'control'} [type]
+ * @property {'range'|'control'|'sort'} [type]
  * @property {string[]} [answers]
  * @property {number | number[]} [correct] one index, or several for
  *   select-all-that-apply (any correct platform scores; in teams mode a
@@ -107,6 +116,11 @@ export const DEBRIS_LIFE_MS = 1600;
  *   unit?:string
  * }>} [controls]
  * @property {number} [team] assigned cohort for a scheduled control turn
+ * @property {string[]} [buckets] sort questions: the category platforms
+ *   (mirrored into `answers` by the loader so every label path is shared)
+ * @property {Array<{label:string, bucket:number}>} [items] sort questions:
+ *   the rapid-fire prompts, in play order
+ * @property {number} [itemMs] sort questions: the per-item answer window
  */
 
 /**
@@ -116,6 +130,7 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {number} points
  * @property {number} rank 1-based among correct answerers, 0 if wrong
  * @property {number} arrivalMs
+ * @property {number} [hits] sort rounds: items landed, out of q.items.length
  */
 
 /**
@@ -152,6 +167,15 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {Map<number, number>} teamBonuses cooperative points by team
  * @property {import('./control-boxes.js').ControlArena | null} controlArena
  * @property {{team:number, correct:number, total:number, points:number, perfect:boolean} | null} controlResult
+ * @property {number} itemIndex sort rounds: which item is up
+ * @property {number} itemT ms into the current item's sub-phase — its own
+ *   clock, because phaseT spans the whole ANSWER phase
+ * @property {'go'|'flash'} itemPhase sort rounds: answering, or the beat
+ *   between items with the winning bucket lit
+ * @property {Map<number, {hits:number, points:number}>} sortTally per-player
+ *   accumulation across a sort round's items
+ * @property {Map<number, boolean>} itemHits who landed the item just scored
+ *   (the display reads this at each flash for phone feedback)
  */
 
 /**
@@ -186,6 +210,11 @@ export function createGame(questions, answerMs = 12000) {
     teamBonuses: new Map(),
     controlArena: null,
     controlResult: null,
+    itemIndex: 0,
+    itemT: 0,
+    itemPhase: /** @type {'go'|'flash'} */ ('go'),
+    sortTally: new Map(),
+    itemHits: new Map(),
   };
 }
 
@@ -202,6 +231,16 @@ export function answerWindow(g) {
 /** @param {Question | null | undefined} q */
 export function isControlQuestion(q) {
   return q?.type === 'control';
+}
+
+/** @param {Question | null | undefined} q */
+export function isSortQuestion(q) {
+  return q?.type === 'sort';
+}
+
+/** @param {Question} q @returns {number} the per-item window for a sort round */
+export function sortItemMs(q) {
+  return q.itemMs ?? 6000;
 }
 
 /**
@@ -299,13 +338,19 @@ export function isMulti(q) {
 
 /**
  * The platforms that count as correct — the floor band for a range, one or
- * several signboards for choice. Everything that scores goes through this,
- * so neither the arrivals recorder nor the buzzer snapshot knows which kind
- * of round it is in, or how many right answers it has.
+ * several signboards for choice, the CURRENT item's bucket for a sort round.
+ * Everything that scores goes through this, so neither the arrivals recorder
+ * nor the buzzer snapshot knows which kind of round it is in, or how many
+ * right answers it has.
  * @param {Question} q
+ * @param {number} [itemIndex] sort rounds only: which item is being judged
  * @returns {Set<string>}
  */
-export function targetIds(q) {
+export function targetIds(q, itemIndex = 0) {
+  if (q.type === 'sort') {
+    const item = q.items?.[itemIndex];
+    return new Set(item ? [answerId(item.bucket)] : []);
+  }
   return q.type === 'range' ? new Set([RANGE_ID]) : new Set(correctIndexes(q).map(answerId));
 }
 
@@ -362,6 +407,10 @@ export function stepGame(g, world, dtMs) {
       break;
 
     case PHASE.ANSWER:
+      if (isSortQuestion(currentQuestion(g))) {
+        stepSortAnswer(g, world, dtMs);
+        break;
+      }
       recordArrivals(g, world);
       if (g.phaseT >= answerWindow(g)) enter(g, world, PHASE.LOCK);
       break;
@@ -423,8 +472,10 @@ function enter(g, world, phase) {
     // In a range round the "wrong platforms" are the floor itself: everything
     // outside the correct band falls away, and whoever guessed wrong falls
     // with the ground they chose to stand on.
+    // Sort rounds keep their arena whole: the buckets were right for SOME
+    // item each, and the summary needs them standing.
     const q = currentQuestion(g);
-    if (q && !isControlQuestion(q)) {
+    if (q && !isControlQuestion(q) && !isSortQuestion(q)) {
       const keep = targetIds(q);
       const doomed = world.platforms.filter((p) =>
         q.type === 'range'
@@ -473,6 +524,11 @@ export function nextQuestion(g, world) {
   g.debris = [];
   g.debrisT = 0;
   g.controlResult = null;
+  g.itemIndex = 0;
+  g.itemT = 0;
+  g.itemPhase = 'go';
+  g.sortTally = new Map();
+  g.itemHits = new Map();
   if (isControlQuestion(q)) {
     g.controlArena = buildControlQuestionArena(q);
     world.platforms = g.controlArena.platforms;
@@ -481,7 +537,12 @@ export function nextQuestion(g, world) {
     world.platforms =
       q.type === 'range'
         ? buildRangeArena(/** @type {import('./levels.js').RangeQuestion} */ (q))
-        : choiceArena(g, q);
+        : isSortQuestion(q)
+          ? // Sort buckets are always the plain row: it holds a whole crowd,
+            // and going around choiceArena keeps sort rounds from consuming
+            // designed levels whose board count happens to match.
+            buildRowArena(q.buckets?.length ?? 2)
+          : choiceArena(g, q);
   }
   respawnAll(world);
   enter(g, world, PHASE.INTRO);
@@ -552,6 +613,15 @@ export function skip(g, world) {
  * @returns {boolean}
  */
 export function inputsLive(g) {
+  // A sort round's between-items flash is an honest mini-lock: the item is
+  // judged, the bucket is lit, nobody repositions until the next call.
+  if (
+    g.phase === PHASE.ANSWER &&
+    g.itemPhase === 'flash' &&
+    isSortQuestion(currentQuestion(g))
+  ) {
+    return false;
+  }
   return g.phase !== PHASE.LOCK && g.phase !== PHASE.REVEAL && g.phase !== PHASE.SCORE;
 }
 
@@ -617,11 +687,83 @@ export function respawnAll(world) {
 function recordArrivals(g, world, offset = 0) {
   const q = currentQuestion(g);
   if (!q || isControlQuestion(q)) return;
-  const targets = targetIds(q);
+  const sort = isSortQuestion(q);
+  // A sort round's arrivals are relative to the current ITEM, not the phase.
+  const targets = targetIds(q, g.itemIndex);
+  const clock = sort ? g.itemT : g.phaseT;
   for (const p of world.players.values()) {
     if (g.arrivals.has(p.id)) continue;
     const id = p.standingOn?.id;
-    if (id && targets.has(id)) g.arrivals.set(p.id, offset + g.phaseT);
+    if (id && targets.has(id)) g.arrivals.set(p.id, offset + clock);
+  }
+}
+
+/**
+ * The lightning-sort item loop, running INSIDE the ANSWER phase: each item
+ * gets its own answer window ('go'), then a short lit-bucket beat with
+ * inputs dead ('flash'), then the next item drops in — the arena never
+ * rebuilds, which is what keeps the scramble continuous. After the last
+ * item the round rejoins the ordinary LOCK → REVEAL → SCORE tail.
+ * @param {Game} g
+ * @param {import('./world.js').World} world
+ * @param {number} dtMs
+ */
+function stepSortAnswer(g, world, dtMs) {
+  const q = currentQuestion(g);
+  const items = q?.items ?? [];
+  if (!q || !items.length) {
+    enter(g, world, PHASE.LOCK);
+    return;
+  }
+  g.itemT += dtMs;
+
+  if (g.itemPhase === 'go') {
+    recordArrivals(g, world);
+    if (g.itemT >= sortItemMs(q)) {
+      scoreSortItem(g, world, q);
+      g.itemPhase = 'flash';
+      g.itemT = 0;
+      freezeInputs(world);
+    }
+    return;
+  }
+
+  // 'flash': the winning bucket is lit, everyone holds still.
+  if (g.itemT >= SORT_FLASH_MS) {
+    if (g.itemIndex + 1 >= items.length) {
+      enter(g, world, PHASE.LOCK);
+      return;
+    }
+    g.itemIndex++;
+    g.itemPhase = 'go';
+    g.itemT = 0;
+    g.arrivals.clear();
+  }
+}
+
+/**
+ * Judge one sort item at its mini-buzzer. Same commitment rule as the real
+ * buzzer: mid-jump counts as the platform you launched from. Points accrue
+ * into the round tally; results are built once, at the round's end.
+ * @param {Game} g
+ * @param {import('./world.js').World} world
+ * @param {Question} q
+ */
+function scoreSortItem(g, world, q) {
+  const targets = targetIds(q, g.itemIndex);
+  const itemMs = sortItemMs(q);
+  g.itemHits = new Map();
+  for (const p of world.players.values()) {
+    const spot = (p.standingOn ?? p.lastStoodOn)?.id ?? null;
+    const hit = spot != null && targets.has(spot);
+    g.itemHits.set(p.id, hit);
+    if (!hit) continue;
+    const arrival = g.arrivals.get(p.id) ?? itemMs;
+    const frac = Math.max(0, Math.min(1, arrival / itemMs));
+    const tally = g.sortTally.get(p.id) ?? { hits: 0, points: 0 };
+    tally.hits++;
+    tally.points += SORT_ITEM_POINTS + Math.round(SORT_ITEM_SPEED_BONUS * (1 - frac));
+    g.sortTally.set(p.id, tally);
   }
 }
 
@@ -634,6 +776,10 @@ function score(g, world) {
   if (!q) return;
   if (isControlQuestion(q)) {
     scoreControl(g, q);
+    return;
+  }
+  if (isSortQuestion(q)) {
+    scoreSort(g, world);
     return;
   }
   const targets = targetIds(q);
@@ -710,6 +856,42 @@ function score(g, world) {
     g.scores.set(r.id, (g.scores.get(r.id) ?? 0) + r.points);
   }
   results.sort((a, b) => b.points - a.points || a.id - b.id);
+  g.results = results;
+}
+
+/**
+ * A sort round's results are its accumulated tally: every item was already
+ * judged at its own mini-buzzer, so nothing here looks at where anyone is
+ * standing. Rank orders by points — arrival times don't compare across
+ * items, so the photo-finish column is meaningless and `hits` carries the
+ * story instead.
+ * @param {Game} g
+ * @param {import('./world.js').World} world
+ */
+function scoreSort(g, world) {
+  /** @type {Result[]} */
+  const results = [];
+  for (const p of world.players.values()) {
+    const tally = g.sortTally.get(p.id);
+    const hits = tally?.hits ?? 0;
+    results.push({
+      id: p.id,
+      correct: hits > 0,
+      points: tally?.points ?? 0,
+      rank: 0,
+      arrivalMs: Infinity,
+      hits,
+    });
+  }
+  results.sort((a, b) => b.points - a.points || a.id - b.id);
+  results
+    .filter((r) => r.correct)
+    .forEach((r, i) => {
+      r.rank = i + 1;
+    });
+  for (const r of results) {
+    g.scores.set(r.id, (g.scores.get(r.id) ?? 0) + r.points);
+  }
   g.results = results;
 }
 

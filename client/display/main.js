@@ -34,6 +34,7 @@ import {
   createGame,
   currentQuestion,
   isControlQuestion,
+  isSortQuestion,
   respawnAll,
   skip,
   startGame,
@@ -69,6 +70,8 @@ const bus = new InputBus();
 let game = createGame([]);
 world.spawn = { x: 1920 / 2 - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
 let lastPhase = game.phase;
+/** Which sort item's flash already buzzed the phones, as `qIndex:itemIndex`. */
+let lastItemKey = '';
 const flash = new LatencyFlash();
 
 /**
@@ -537,6 +540,14 @@ function quizForHost() {
   if (q.type === 'range' && q.answer) {
     return { kind: 'range', lo: q.answer[0], hi: q.answer[1], unit: q.unit ?? '' };
   }
+  if (isSortQuestion(q)) {
+    return {
+      kind: 'sort',
+      buckets: q.buckets ?? [],
+      item: game.itemIndex,
+      items: (q.items ?? []).map((it) => ({ label: it.label, bucket: it.bucket })),
+    };
+  }
   return { kind: 'choice', answers: q.answers, correct: q.correct };
 }
 
@@ -578,7 +589,9 @@ function frame(now) {
   tickAudio(world);
 
   if (game.phase !== lastPhase) {
-    if (game.phase === PHASE.REVEAL) {
+    // A sort round's phones already buzzed per item; the summary reveal
+    // repeating the last verdict would read as a second judgement.
+    if (game.phase === PHASE.REVEAL && !isSortQuestion(currentQuestion(game))) {
       for (const r of game.results) {
         if (r.id === LOCAL_ID) continue;
         send({
@@ -592,6 +605,27 @@ function frame(now) {
     // seamless without reloading the display.
     if (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER) void refreshLevels();
     lastPhase = game.phase;
+  }
+
+  // Sort rounds: buzz each phone at each item's flash — the per-item verdict
+  // is the feedback that matters, and phase edges never see item boundaries.
+  if (
+    isSortQuestion(currentQuestion(game)) &&
+    game.phase === PHASE.ANSWER &&
+    game.itemPhase === 'flash'
+  ) {
+    const key = `${game.qIndex}:${game.itemIndex}`;
+    if (lastItemKey !== key) {
+      lastItemKey = key;
+      for (const [id, hit] of game.itemHits) {
+        if (id === LOCAL_ID) continue;
+        send({
+          type: 'FEEDBACK_REQ',
+          playerId: id,
+          code: hit ? FB_LANDED_CORRECT : FB_LANDED_WRONG,
+        });
+      }
+    }
   }
 
   // The round's board colourway: rotates per question, rests on teal in the

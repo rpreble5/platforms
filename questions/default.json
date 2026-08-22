@@ -99,6 +99,21 @@
       "text": "Select every country in South America",
       "answers": ["Brazil", "Peru", "Panama", "Chile", "Mexico", "Uruguay"],
       "correct": [0, 1, 3, 5]
+    },
+    {
+      "type": "sort",
+      "text": "Sort each animal by class",
+      "buckets": ["Mammal", "Bird", "Reptile"],
+      "items": [
+        { "label": "Bat", "bucket": 0 },
+        { "label": "Penguin", "bucket": 1 },
+        { "label": "Gecko", "bucket": 2 },
+        { "label": "Dolphin", "bucket": 0 },
+        { "label": "Ostrich", "bucket": 1 },
+        { "label": "Komodo dragon", "bucket": 2 },
+        { "label": "Platypus", "bucket": 0 }
+      ],
+      "itemMs": 6000
     }
   ]
 }

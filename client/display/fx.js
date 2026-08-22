@@ -22,7 +22,7 @@
 
 import { FX } from '../../shared/tuning.js';
 import { COLORS } from '../../shared/palette.js';
-import { PHASE, currentQuestion, targetIds } from '../../sim/round.js';
+import { PHASE, currentQuestion, isSortQuestion, targetIds } from '../../sim/round.js';
 
 /** @typedef {import('../../sim/world.js').World} World */
 /** @typedef {import('../../sim/round.js').Game} Game */
@@ -48,6 +48,8 @@ const pool = Array.from({ length: MAX_PIECES }, () => ({
 
 let lastClock = 0;
 let revealSeen = -1;
+/** Which sort item's flash has already burst, as `qIndex:itemIndex`. */
+let itemSeen = '';
 
 /**
  * Launch a burst along the top edge of a platform — the whole board pops at
@@ -100,9 +102,10 @@ export function drawConfetti(cx, game, world) {
   if (game.phase === PHASE.REVEAL && revealSeen !== game.qIndex) {
     revealSeen = game.qIndex;
     const q = currentQuestion(game);
-    if (q && game.results.some((r) => r.correct)) {
+    if (q && !isSortQuestion(q) && game.results.some((r) => r.correct)) {
       // Every correct platform gets its burst — a select-all reveal
-      // celebrates the whole covered set.
+      // celebrates the whole covered set. (A sort round already burst per
+      // item; its summary stays quiet.)
       const keep = targetIds(q);
       for (const plat of world.platforms) {
         if (plat.id && keep.has(plat.id)) burstConfetti(plat);
@@ -110,6 +113,27 @@ export function drawConfetti(cx, game, world) {
     }
   }
   if (game.phase !== PHASE.REVEAL && game.phase !== PHASE.SCORE) revealSeen = -1;
+
+  // A sort round celebrates every ITEM anyone landed: one burst on the
+  // winning bucket at each flash, keyed per item so the next call re-arms.
+  const sortQ = currentQuestion(game);
+  if (
+    sortQ &&
+    isSortQuestion(sortQ) &&
+    game.phase === PHASE.ANSWER &&
+    game.itemPhase === 'flash'
+  ) {
+    const key = `${game.qIndex}:${game.itemIndex}`;
+    if (itemSeen !== key) {
+      itemSeen = key;
+      if ([...game.itemHits.values()].some(Boolean)) {
+        const keep = targetIds(sortQ, game.itemIndex);
+        for (const plat of world.platforms) {
+          if (plat.id && keep.has(plat.id)) burstConfetti(plat);
+        }
+      }
+    }
+  }
 
   // Effects run on their own clock (they're not simulation), clamped so a
   // background-tab stall doesn't teleport every piece.

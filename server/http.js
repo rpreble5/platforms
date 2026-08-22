@@ -362,6 +362,52 @@ export function loadQuestions(root, packFile = 'default.json') {
       return true;
     }
 
+    // Lightning sort: category buckets plus a rapid-fire item list. Must
+    // branch before the choice fallback, or an unknown-typed question would
+    // be validated (and silently played) as multiple choice.
+    if (q?.type === 'sort') {
+      if (typeof q.text !== 'string') {
+        problems.push(`${where}: missing text — skipped`);
+        return false;
+      }
+      if (
+        !Array.isArray(q.buckets) ||
+        q.buckets.length < 2 ||
+        q.buckets.length > 4 ||
+        !q.buckets.every((/** @type {any} */ b) => typeof b === 'string')
+      ) {
+        problems.push(`${where}: sort needs 2-4 string buckets — skipped`);
+        return false;
+      }
+      const items = Array.isArray(q.items) ? q.items : [];
+      const itemsOk = items.every(
+        (/** @type {any} */ it) =>
+          typeof it?.label === 'string' &&
+          Number.isInteger(it?.bucket) &&
+          it.bucket >= 0 &&
+          it.bucket < q.buckets.length
+      );
+      if (items.length < 2 || items.length > 12 || !itemsOk) {
+        problems.push(`${where}: sort needs 2-12 items, each {label, bucket in range} — skipped`);
+        return false;
+      }
+      // Items get seconds, not the question's twelve: clamp like the
+      // control rounds do.
+      q.itemMs = Number.isFinite(q.itemMs)
+        ? Math.max(3000, Math.min(15000, Math.round(q.itemMs)))
+        : 6000;
+      // Buckets double as the platform sign labels, so every existing
+      // answers[] drawing path works untouched.
+      q.answers = q.buckets.slice();
+      for (const b of q.buckets) {
+        if (b.length > 24) problems.push(`${where}: bucket "${b}" is ${b.length} chars (>24 shrinks small)`);
+      }
+      for (const it of items) {
+        if (it.label.length > 24) problems.push(`${where}: item "${it.label}" is ${it.label.length} chars (>24 shrinks small)`);
+      }
+      return true;
+    }
+
     if (typeof q?.text !== 'string' || !Array.isArray(q?.answers)) {
       problems.push(`${where}: missing text or answers — skipped`);
       return false;

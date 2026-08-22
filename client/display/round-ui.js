@@ -13,7 +13,7 @@ import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { COHORTS, TEAM_COLORS, clampCohort } from '../../shared/palette.js';
 import { drawBean } from '../../shared/avatar.js';
 import { RANGE_ID } from '../../sim/levels.js';
-import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, standings, targetIds, teamStandings } from '../../sim/round.js';
+import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, isSortQuestion, sortItemMs, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { drawFrostBlobs, glassFam, glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
@@ -42,11 +42,18 @@ export function drawSigns(cx, world, g) {
     return;
   }
 
-  const keep = q ? targetIds(q) : new Set();
+  // A sort round lights its winning bucket during each between-items flash;
+  // the arena itself never crumbles.
+  const flashing =
+    isSortQuestion(q) && g.phase === PHASE.ANSWER && g.itemPhase === 'flash';
+  // ... and at the summary the buckets rest idle: the tally is the story,
+  // no single bucket was "the" answer.
+  const lit = isSortQuestion(q) ? flashing : revealing;
+  const keep = q ? targetIds(q, g.itemIndex) : new Set();
   for (const p of world.platforms) {
     if (!p.id?.startsWith('ans')) continue;
     const i = Number(p.id.slice(3));
-    const state = revealing && q && keep.has(p.id) ? 'correct' : 'idle';
+    const state = lit && q && keep.has(p.id) ? 'correct' : 'idle';
     drawSign(cx, p, { state });
     if (q) drawSignText(cx, p, q.answers?.[i] ?? '', { state });
   }
@@ -366,21 +373,42 @@ function drawQuestion(cx, g) {
   cx.fillStyle = 'rgba(10,8,20,0.9)';
   cx.fillRect(0, 0, WORLD_W, h);
 
+  // In a live sort round the ITEM is the question: the prompt shrinks to a
+  // rubric line and the current item takes the stage.
+  const sortLive = isSortQuestion(q) && g.phase === PHASE.ANSWER;
+  const item = sortLive ? q.items?.[g.itemIndex] : null;
+
   cx.textBaseline = 'alphabetic';
-  cx.fillStyle = UI.paper;
   cx.textAlign = 'center';
-  cx.font = fitFont(cx, q.text, WORLD_W - 340, 74, 34);
-  cx.fillText(q.text, WORLD_W / 2, 90);
+  if (item) {
+    cx.fillStyle = UI.dim;
+    cx.font = `700 22px ${FONT.ui}`;
+    cx.fillText(q.text, WORLD_W / 2, 38);
+    cx.fillStyle = UI.paper;
+    cx.font = fitFont(cx, item.label, WORLD_W - 480, 64, 34);
+    cx.fillText(item.label, WORLD_W / 2, 102);
+  } else {
+    cx.fillStyle = UI.paper;
+    cx.font = fitFont(cx, q.text, WORLD_W - 340, 74, 34);
+    cx.fillText(q.text, WORLD_W / 2, 90);
+  }
 
   cx.font = `700 24px ${FONT.mono}`;
   cx.fillStyle = UI.faint;
   cx.textAlign = 'left';
   cx.fillText(`Q${g.qIndex + 1}/${g.questions.length}`, 40, 90);
+  if (sortLive && q.items) {
+    cx.font = `700 20px ${FONT.mono}`;
+    cx.fillText(`item ${g.itemIndex + 1}/${q.items.length}`, 40, 120);
+  }
 
   // Timer as a full-width bar rather than digits: readable out of the corner of
-  // your eye while you're running, from anywhere in the room.
-  const win = answerWindow(g);
-  const frac = g.phase === PHASE.ANSWER ? Math.max(0, 1 - g.phaseT / win) : g.phase === PHASE.INTRO ? 1 : 0;
+  // your eye while you're running, from anywhere in the room. A sort round's
+  // bar runs on the item clock — every item is its own little countdown.
+  const win = sortLive ? sortItemMs(q) : answerWindow(g);
+  const clock = sortLive ? g.itemT : g.phaseT;
+  const answering = g.phase === PHASE.ANSWER && (!sortLive || g.itemPhase === 'go');
+  const frac = answering ? Math.max(0, 1 - clock / win) : g.phase === PHASE.INTRO ? 1 : 0;
   const secsLeft = (frac * win) / 1000;
 
   const barY = h - 14;
@@ -389,7 +417,7 @@ function drawQuestion(cx, g) {
   cx.fillStyle = secsLeft <= 3 ? UI.wrong : secsLeft <= 6 ? UI.warn : UI.correct;
   cx.fillRect(0, barY, WORLD_W * frac, 14);
 
-  if (g.phase === PHASE.ANSWER && secsLeft <= 3) {
+  if (answering && secsLeft <= 3) {
     cx.textAlign = 'right';
     cx.font = `800 58px ${FONT.display}`;
     cx.fillStyle = UI.wrong;
@@ -421,7 +449,7 @@ function drawQuestion(cx, g) {
     cx.textAlign = 'center';
     cx.font = `800 30px ${FONT.display}`;
     cx.fillStyle = UI.warn;
-    cx.fillText("TIME'S UP", WORLD_W / 2, 130);
+    cx.fillText(isSortQuestion(q) ? 'final tally…' : "TIME'S UP", WORLD_W / 2, 130);
   }
   cx.textAlign = 'left';
 }
@@ -579,7 +607,13 @@ function drawScoreboard(cx, g, roster) {
     cx.textAlign = 'right';
     cx.fillStyle = UI.faint;
     cx.font = `500 24px ${FONT.mono}`;
-    cx.fillText(`${(r.arrivalMs / 1000).toFixed(1)}s`, x + w - 180, ry);
+    // Sort rounds: arrival times don't compare across items, so the middle
+    // column carries items-landed instead of a photo-finish clock.
+    const mid =
+      r.hits !== undefined
+        ? `${r.hits}/${currentQuestion(g)?.items?.length ?? r.hits}`
+        : `${(r.arrivalMs / 1000).toFixed(1)}s`;
+    cx.fillText(mid, x + w - 180, ry);
 
     cx.fillStyle = UI.paper;
     cx.font = `800 30px ${FONT.display}`;
