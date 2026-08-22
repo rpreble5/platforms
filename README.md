@@ -81,10 +81,57 @@ until they export.
   the repo itself; if the repo is private, use `/builder` on a laptop
   instead.)
 
-The workflow: build → watch the live preview → **Download pack.json** →
+The workflow: type → watch the live preview → **Download pack.json** →
 send the file to the host, who drops it in `questions/` (plus any
 referenced images in `questions/images/`). Drafts autosave in the
 browser; Open/Paste round-trips existing packs for editing.
+
+**Authoring is typing, not clicking.** The Studio's editor is a plain
+document: `#` starts a question, its answers go on the lines below, and
+everything updates live as you type. Correct answers are picked with the
+checkbox beside each line (typing `✓ ` or `* ` at the start of the line
+does the same); two checks make a select-all automatically. The full
+format:
+
+```
+pack: Cardiology night        theme, answer time and order are typed
+theme: blanc                  once at the top (all optional)
+time: 12s
+
+# Which planet has the most moons?
+Jupiter
+✓ Saturn
+Uranus
+
+# Normal resting heart rate?
+range: 60-100 of 0-160 bpm    a range: line makes a number-line question
+
+#sort Sort each animal by class
+Mammal: Bat, Dolphin          buckets are "Name: item, item" lines
+Bird: Penguin
+
+# What does this EKG show?
+img: sample-ekg.png           attach with the panel button, or type it
+
+## Control Room               section headers open the other buckets
+
+# Post-op: set the vent
+[on] Suction ready            toggles: pick on/off beside the line
+PEEP = 8 (0-20, cmH2O)        numbers: type "PEEP = 8", tune the range
+...                           in the panel (6-8 controls per case)
+
+## Showdown
+
+true: An octopus has three hearts
+false: Sound travels faster in air than water
+```
+
+Clicks are for verdicts (checks, TRUE/FALSE, ON/OFF, question type,
+image attach); typing is for content. Every click just rewrites the
+text, so the document is always the whole truth — and the detail panel
+mirrors the fiddly parts (range numbers, control steps, pacing) as
+plain fields so nobody has to memorize syntax. Line-numbered problems
+under the preview click through to the offending line.
 
 ### Designing a night: the mode × type matrix
 

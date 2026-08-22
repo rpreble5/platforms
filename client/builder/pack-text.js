@@ -1,0 +1,699 @@
+/**
+ * The pack document: text-first authoring for the Pack Studio.
+ *
+ * The raw document string IS the pack — every Studio affordance (gutter
+ * clicks, the detail panel, add/remove buttons) works by rewriting the
+ * text, and the playable pack is always parseDoc(text).raw run through
+ * shared/pack-validate.js. There is no second model to keep in sync.
+ *
+ * Format, by example:
+ *
+ *   pack: Cardiology night        <- front matter before the first '#'
+ *   theme: blanc                     (pack / theme / time / order)
+ *   time: 12s
+ *
+ *   # Which planet has the most moons?
+ *   Jupiter
+ *   ✓ Saturn                      <- '✓' or '*' prefix marks correct;
+ *   Uranus                           two or more checks = select-all
+ *
+ *   # Normal resting heart rate?
+ *   range: 60-100 of 0-160 bpm    <- answer lo-hi of min-max [unit]
+ *
+ *   #sort Sort each animal        <- explicit type tag (sort needs one)
+ *   Mammal: Bat, Dolphin          <- bucket: item, item
+ *   Bird: Penguin
+ *   pace: 6s                      <- seconds per item
+ *
+ *   ## Control Room               <- section headers split the buckets
+ *   # Post-op: set the vent
+ *   context: The room is yours
+ *   [on] Suction ready            <- toggle: answer ON
+ *   [off] Alarms muted (starts on)
+ *   PEEP = 8 (0-20, step 1, cmH2O)
+ *
+ *   ## Showdown
+ *   true: An octopus has three hearts
+ *
+ * NO IMPORTS, no DOM — pure text in, structure out, so it runs in node
+ * tests and in the browser alike. Line numbers in problems are 1-based
+ * (for humans); every other line index in this module is 0-based.
+ */
+
+const CHECK_RE = /^[✓*]\s*/;
+const SECTION_RE = /^##\s*(.*)$/;
+const HEAD_RE = /^#(?!#)\s*(.*)$/;
+const HEAD_TAG_RE = /^#(choice|range|sort)\b\s*(.*)$/i;
+const RANGE_RE = /^range\s*:\s*(-?[\d.]+)\s*[-–]\s*(-?[\d.]+)\s+of\s+(-?[\d.]+)\s*[-–]\s*(-?[\d.]+)\s*(.*)$/i;
+const TOGGLE_RE = /^\[(on|off)\]\s*(.*)$/i;
+const STARTS_ON_RE = /\s*\(starts?\s+on\)\s*$/i;
+const NUMBER_RE = /^(.+?)\s*=\s*(-?[\d.]+)\s*(?:\((.*)\))?\s*$/;
+const STATEMENT_RE = /^(true|false)\s*:\s*(.*)$/i;
+const BUCKET_RE = /^([^:]{1,40}):\s*(.*)$/;
+const DIRECTIVE_RE = /^(img|image|layout|pace|time|context|turns)\s*:\s*(.*)$/i;
+
+/** Directive keys that make sense per location; anything else is flagged. */
+const FRONT_KEYS = ['pack', 'theme', 'time', 'order'];
+
+/** @param {string} v e.g. "12s", "12", "6.5s" @returns {number|null} ms */
+function parseSeconds(v) {
+  const m = /^(-?[\d.]+)\s*s?$/.exec(v.trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? Math.round(n * 1000) : null;
+}
+
+const fmtSeconds = (/** @type {number} */ ms) => `${ms / 1000}s`;
+
+/**
+ * @typedef {{
+ *   kind: 'blank'|'front'|'section'|'head'|'answer'|'range'|'bucket'|
+ *         'toggle'|'number'|'directive'|'statement'|'unknown',
+ *   block: number|null,
+ *   checked?: boolean,
+ *   verdict?: boolean|null,
+ *   startsOn?: boolean,
+ *   fields?: any,
+ * }} LineInfo
+ *
+ * @typedef {{
+ *   bucket: 'deck'|'control'|'showdown',
+ *   ix: number,
+ *   type: 'choice'|'multi'|'range'|'sort'|'case'|'statement',
+ *   text: string,
+ *   headLine: number, startLine: number, endLine: number,
+ *   img: string|null,
+ *   directives: Record<string, {line:number, value:string}>,
+ * }} BlockInfo
+ */
+
+/**
+ * Parse the document into the raw pack (for validatePack) plus the line
+ * and block maps the Studio UI hangs its gutter, outline and panel on.
+ *
+ * @param {string} text
+ * @returns {{ raw: any, blocks: BlockInfo[], lines: LineInfo[],
+ *             problems: {line:number|null, msg:string}[] }}
+ */
+export function parseDoc(text) {
+  const src = text.split('\n');
+  /** @type {LineInfo[]} */
+  const lines = src.map(() => ({ kind: 'blank', block: null }));
+  /** @type {BlockInfo[]} */
+  const blocks = [];
+  /** @type {{line:number|null, msg:string}[]} */
+  const problems = [];
+
+  /** @type {any} */
+  const raw = { pack: 'New pack', theme: 'blanc', answerMs: 12000, questions: [] };
+  /** @type {any} */
+  const control = { perTeam: 1, answerMs: 40000, questions: [] };
+  /** @type {any} */
+  const showdown = { answerMs: 6000, statements: [] };
+
+  /** @type {'front'|'deck'|'control'|'showdown'} */
+  let section = 'front';
+
+  // Current deck/control block accumulator.
+  /** @type {any} */
+  let cur = null;
+
+  const flag = (/** @type {number} */ i, /** @type {string} */ msg) =>
+    problems.push({ line: i + 1, msg });
+
+  function finishBlock() {
+    if (!cur) return;
+    const b = cur;
+    cur = null;
+    if (b.bucket === 'deck') finishDeck(b);
+    else finishControl(b);
+  }
+
+  /** @param {any} b */
+  function finishDeck(b) {
+    /** @type {any} */
+    const q = { text: b.text };
+    if (b.directives.img) q.image = b.directives.img.value;
+    if (b.directives.layout) q.layout = b.directives.layout.value;
+    let type = b.tag ?? null;
+
+    if (!type && b.rangeLine !== undefined) type = 'range';
+    if (type === 'sort') {
+      q.type = 'sort';
+      /** @type {string[]} */
+      const buckets = [];
+      /** @type {{label:string, bucket:number}[]} */
+      const items = [];
+      for (const bl of b.bucketLines) {
+        const bi = buckets.length;
+        buckets.push(bl.name);
+        for (const label of bl.items) items.push({ label, bucket: bi });
+        lines[bl.line] = { kind: 'bucket', block: blocks.length };
+      }
+      q.buckets = buckets;
+      q.items = items;
+      if (b.directives.pace) {
+        const ms = parseSeconds(b.directives.pace.value);
+        if (ms === null) flag(b.directives.pace.line, `pace "${b.directives.pace.value}" is not a number of seconds`);
+        else q.itemMs = ms;
+      }
+      for (const a of b.answers) {
+        flag(a.line, 'sort blocks list buckets as "Bucket: item, item" — this line was ignored');
+        lines[a.line] = { kind: 'unknown', block: blocks.length };
+      }
+      if (b.rangeLine !== undefined) flag(b.rangeLine, 'a range: line in a sort block was ignored');
+    } else if (type === 'range') {
+      q.type = 'range';
+      if (b.rangeLine === undefined) {
+        flag(b.headLine, 'range question needs a "range: LO-HI of MIN-MAX [unit]" line');
+      } else {
+        Object.assign(q, b.range);
+        lines[b.rangeLine] = { kind: 'range', block: blocks.length, fields: { ...b.range } };
+      }
+      for (const a of b.answers) {
+        flag(a.line, 'range questions have no answer list — this line was ignored');
+        lines[a.line] = { kind: 'unknown', block: blocks.length };
+      }
+      if (b.directives.pace) flag(b.directives.pace.line, 'pace applies to sort questions only');
+    } else {
+      // choice / select-all
+      type = 'choice';
+      q.answers = b.answers.map((/** @type {any} */ a) => a.label);
+      const checked = b.answers
+        .map((/** @type {any} */ a, /** @type {number} */ i) => (a.checked ? i : -1))
+        .filter((/** @type {number} */ i) => i >= 0);
+      if (checked.length === 0 && b.answers.length) {
+        flag(b.headLine, 'click the check on the correct answer (or type "✓ " / "* " before it)');
+      }
+      q.correct = checked.length >= 2 ? checked : checked[0];
+      if (checked.length >= 2) type = 'multi';
+      for (const a of b.answers) {
+        lines[a.line] = { kind: 'answer', block: blocks.length, checked: !!a.checked };
+      }
+      if (b.rangeLine !== undefined && b.tag === 'choice') flag(b.rangeLine, 'a range: line in a choice block was ignored');
+      if (b.directives.pace) flag(b.directives.pace.line, 'pace applies to sort questions only');
+    }
+    if (b.directives.time) flag(b.directives.time.line, 'time is set for the whole deck in the front matter (time: 12s)');
+    if (b.directives.context) flag(b.directives.context.line, 'context is a Control Room setting');
+
+    blocks.push({
+      bucket: 'deck', ix: raw.questions.length, type: /** @type {any} */ (type),
+      text: b.text, headLine: b.headLine, startLine: b.startLine, endLine: b.endLine,
+      img: q.image ?? null, directives: b.directives,
+    });
+    lines[b.headLine] = { kind: 'head', block: blocks.length - 1 };
+    for (const [, d] of Object.entries(b.directives)) {
+      if (lines[d.line].kind === 'blank') lines[d.line] = { kind: 'directive', block: blocks.length - 1 };
+    }
+    raw.questions.push(q);
+  }
+
+  /** @param {any} b */
+  function finishControl(b) {
+    /** @type {any} */
+    const q = { text: b.text, controls: b.controls.map((/** @type {any} */ c) => c.control) };
+    if (b.directives.context) q.context = b.directives.context.value;
+    if (b.directives.time) {
+      const ms = parseSeconds(b.directives.time.value);
+      if (ms === null) flag(b.directives.time.line, `time "${b.directives.time.value}" is not a number of seconds`);
+      else q.answerMs = ms;
+    }
+    if (b.directives.img) flag(b.directives.img.line, 'pictures are a standard-deck feature');
+    blocks.push({
+      bucket: 'control', ix: control.questions.length, type: 'case',
+      text: b.text, headLine: b.headLine, startLine: b.startLine, endLine: b.endLine,
+      img: null, directives: b.directives,
+    });
+    lines[b.headLine] = { kind: 'head', block: blocks.length - 1 };
+    for (const c of b.controls) {
+      lines[c.line] = {
+        kind: c.kind, block: blocks.length - 1,
+        verdict: c.verdict, startsOn: c.control.initial === true,
+        fields: c.kind === 'number' ? { ...c.control } : undefined,
+      };
+      if (c.kind === 'toggle' && c.verdict === null) {
+        flag(c.line, `click ON or OFF for "${c.control.label}" (or type [on] / [off] before it)`);
+      }
+    }
+    for (const [, d] of Object.entries(b.directives)) {
+      if (lines[d.line].kind === 'blank') lines[d.line] = { kind: 'directive', block: blocks.length - 1 };
+    }
+    control.questions.push(q);
+  }
+
+  for (let i = 0; i < src.length; i++) {
+    const line = src[i].trimEnd();
+    const t = line.trim();
+    if (!t) continue;
+
+    // ---- section headers
+    const sec = SECTION_RE.exec(t);
+    if (sec) {
+      finishBlock();
+      const name = sec[1].trim().toLowerCase();
+      if (name === 'control room' || name === 'control') section = 'control';
+      else if (name === 'showdown') section = 'showdown';
+      else if (name === 'deck' || name === 'questions') section = 'deck';
+      else {
+        flag(i, `unknown section "## ${sec[1].trim()}" — use ## Control Room or ## Showdown`);
+        lines[i] = { kind: 'unknown', block: null };
+        continue;
+      }
+      lines[i] = { kind: 'section', block: null };
+      continue;
+    }
+
+    // ---- block heads (deck + control sections)
+    const isHead = HEAD_RE.test(t) || HEAD_TAG_RE.test(t);
+    if (isHead) {
+      if (section === 'front') section = 'deck';
+      if (section === 'showdown') {
+        flag(i, 'showdown entries are plain statements — no # needed');
+        lines[i] = { kind: 'unknown', block: null };
+        continue;
+      }
+      finishBlock();
+      const tag = HEAD_TAG_RE.exec(t);
+      cur = {
+        bucket: section,
+        tag: tag ? tag[1].toLowerCase() : null,
+        text: (tag ? tag[2] : /** @type {RegExpExecArray} */ (HEAD_RE.exec(t))[1]).trim(),
+        headLine: i, startLine: i, endLine: i,
+        directives: {}, answers: [], bucketLines: [], controls: [],
+        rangeLine: undefined, range: undefined,
+      };
+      if (cur.tag && section === 'control') {
+        flag(i, `#${cur.tag} is a deck tag — control cases are plain # lines`);
+        cur.tag = null;
+      }
+      continue;
+    }
+
+    // ---- front matter
+    if (section === 'front') {
+      const m = /^(\w[\w-]*)\s*:\s*(.*)$/.exec(t);
+      if (m && FRONT_KEYS.includes(m[1].toLowerCase())) {
+        const key = m[1].toLowerCase();
+        const v = m[2].trim();
+        if (key === 'pack') raw.pack = v;
+        else if (key === 'theme') raw.theme = v;
+        else if (key === 'order') raw.order = v;
+        else {
+          const ms = parseSeconds(v);
+          if (ms === null) flag(i, `time "${v}" is not a number of seconds (try: time: 12s)`);
+          else raw.answerMs = ms;
+        }
+        lines[i] = { kind: 'front', block: null };
+      } else {
+        flag(i, 'before the first # question, only pack: / theme: / time: / order: lines are recognized');
+        lines[i] = { kind: 'unknown', block: null };
+      }
+      continue;
+    }
+
+    // ---- showdown statements + section-level directives
+    if (section === 'showdown') {
+      const d = DIRECTIVE_RE.exec(t);
+      if (d && d[1].toLowerCase() === 'time') {
+        const ms = parseSeconds(d[2]);
+        if (ms === null) flag(i, `time "${d[2]}" is not a number of seconds`);
+        else showdown.answerMs = ms;
+        lines[i] = { kind: 'directive', block: null };
+        continue;
+      }
+      const st = STATEMENT_RE.exec(t);
+      const verdict = st ? st[1].toLowerCase() === 'true' : null;
+      const textPart = st ? st[2].trim() : t;
+      blocks.push({
+        bucket: 'showdown', ix: showdown.statements.length, type: 'statement',
+        text: textPart, headLine: i, startLine: i, endLine: i, img: null, directives: {},
+      });
+      lines[i] = { kind: 'statement', block: blocks.length - 1, verdict };
+      if (verdict === null) flag(i, 'click TRUE or FALSE for this statement (or start the line with true: / false:)');
+      showdown.statements.push({ text: textPart, answer: verdict ?? undefined });
+      continue;
+    }
+
+    // ---- inside a deck/control block (or section preamble)
+    if (!cur) {
+      // Control-section preamble: time/turns before the first case.
+      if (section === 'control') {
+        const d = DIRECTIVE_RE.exec(t);
+        if (d && d[1].toLowerCase() === 'time') {
+          const ms = parseSeconds(d[2]);
+          if (ms === null) flag(i, `time "${d[2]}" is not a number of seconds`);
+          else control.answerMs = ms;
+          lines[i] = { kind: 'directive', block: null };
+          continue;
+        }
+        if (d && d[1].toLowerCase() === 'turns') {
+          const n = Number(d[2]);
+          if (Number.isFinite(n)) control.perTeam = n;
+          else flag(i, `turns "${d[2]}" is not a number`);
+          lines[i] = { kind: 'directive', block: null };
+          continue;
+        }
+      }
+      flag(i, 'this line belongs to no question — start one with #');
+      lines[i] = { kind: 'unknown', block: null };
+      continue;
+    }
+
+    cur.endLine = i;
+
+    // Directives are a fixed keyword set, so answers containing ':' stay answers.
+    const d = DIRECTIVE_RE.exec(t);
+    if (d) {
+      const key = d[1].toLowerCase() === 'image' ? 'img' : d[1].toLowerCase();
+      if (key === 'turns') { flag(i, 'turns is a Control Room section setting — put it right under ## Control Room'); lines[i] = { kind: 'unknown', block: null }; continue; }
+      cur.directives[key] = { line: i, value: d[2].trim() };
+      continue; // line kind assigned when the block finishes
+    }
+
+    if (cur.bucket === 'deck') {
+      const r = RANGE_RE.exec(t);
+      if (r) {
+        cur.rangeLine = i;
+        cur.range = {
+          answer: [Number(r[1]), Number(r[2])],
+          min: Number(r[3]), max: Number(r[4]),
+          ...(r[5].trim() ? { unit: r[5].trim() } : {}),
+        };
+        continue;
+      }
+      if (cur.tag === 'sort') {
+        const bm = BUCKET_RE.exec(t);
+        if (bm) {
+          cur.bucketLines.push({
+            line: i, name: bm[1].trim(),
+            items: bm[2].split(',').map((s) => s.trim()).filter(Boolean),
+          });
+          continue;
+        }
+      }
+      const checked = CHECK_RE.test(t);
+      cur.answers.push({ line: i, checked, label: t.replace(CHECK_RE, '').trim() });
+      continue;
+    }
+
+    // control case body: toggles and numbers
+    const tg = TOGGLE_RE.exec(t);
+    const rest = tg ? tg[2] : t;
+    const nm = tg ? null : NUMBER_RE.exec(t);
+    if (nm) {
+      const label = nm[1].trim();
+      const answer = Number(nm[2]);
+      /** @type {any} */
+      const c = { label, kind: 'number', answer, step: 1, unit: '' };
+      c.min = Math.min(0, Math.floor(answer));
+      c.max = Math.max(10, Math.ceil(answer * 2));
+      c.initial = c.min;
+      for (const tok of (nm[3] ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+        const range = /^(-?[\d.]+)\s*[-–]\s*(-?[\d.]+)$/.exec(tok);
+        const step = /^step\s+(-?[\d.]+)$/i.exec(tok);
+        const start = /^start\s+(-?[\d.]+)$/i.exec(tok);
+        if (range) { c.min = Number(range[1]); c.max = Number(range[2]); if (c.initial < c.min || c.initial > c.max) c.initial = c.min; }
+        else if (step) c.step = Number(step[1]);
+        else if (start) c.initial = Number(start[1]);
+        else c.unit = tok;
+      }
+      cur.controls.push({ line: i, kind: 'number', verdict: undefined, control: c });
+      continue;
+    }
+    const startsOn = STARTS_ON_RE.test(rest);
+    const label = rest.replace(STARTS_ON_RE, '').trim();
+    cur.controls.push({
+      line: i, kind: 'toggle',
+      verdict: tg ? tg[1].toLowerCase() === 'on' : null,
+      control: { label, kind: 'toggle', initial: startsOn, answer: tg ? tg[1].toLowerCase() === 'on' : undefined },
+    });
+  }
+  finishBlock();
+
+  if (control.questions.length) raw.controlRoom = control;
+  if (showdown.statements.length) raw.showdown = showdown;
+  return { raw, blocks, lines, problems };
+}
+
+// --------------------------------------------------------------- serialize
+
+/**
+ * Render pack JSON as a document — used for JSON import, Load sample, and
+ * migrating the old form-era localStorage draft. Tolerant of raw imports.
+ * @param {any} p @returns {string}
+ */
+export function serializeDoc(p) {
+  /** @type {string[]} */
+  const out = [];
+  out.push(`pack: ${typeof p?.pack === 'string' ? p.pack : 'New pack'}`);
+  out.push(`theme: ${typeof p?.theme === 'string' ? p.theme : 'blanc'}`);
+  out.push(`time: ${fmtSeconds(Number.isFinite(p?.answerMs) ? p.answerMs : 12000)}`);
+  if (p?.order === 'suggested') out.push('order: suggested');
+  out.push('');
+
+  for (const q of Array.isArray(p?.questions) ? p.questions : []) {
+    if (q?.type === 'sort') {
+      out.push(`#sort ${q.text ?? ''}`);
+      if (q.image) out.push(`img: ${q.image}`);
+      const buckets = Array.isArray(q.buckets) ? q.buckets : [];
+      buckets.forEach((/** @type {string} */ b, /** @type {number} */ bi) => {
+        const items = (Array.isArray(q.items) ? q.items : [])
+          .filter((/** @type {any} */ it) => it.bucket === bi)
+          .map((/** @type {any} */ it) => it.label);
+        out.push(`${b}: ${items.join(', ')}`);
+      });
+      if (Number.isFinite(q.itemMs) && q.itemMs !== 6000) out.push(`pace: ${fmtSeconds(q.itemMs)}`);
+    } else if (q?.type === 'range') {
+      out.push(`# ${q.text ?? ''}`);
+      if (q.image) out.push(`img: ${q.image}`);
+      const [lo, hi] = Array.isArray(q.answer) ? q.answer : [0, 0];
+      out.push(`range: ${lo}-${hi} of ${q.min}-${q.max}${q.unit ? ` ${q.unit}` : ''}`);
+    } else {
+      out.push(`# ${q?.text ?? ''}`);
+      if (q?.image) out.push(`img: ${q.image}`);
+      if (q?.layout && q.layout !== 'islands' && !(q.image && q.layout === 'row')) out.push(`layout: ${q.layout}`);
+      const correct = new Set(Array.isArray(q?.correct) ? q.correct : [q?.correct]);
+      (Array.isArray(q?.answers) ? q.answers : []).forEach((/** @type {any} */ a, /** @type {number} */ ai) => {
+        out.push(`${correct.has(ai) ? '✓ ' : ''}${a}`);
+      });
+    }
+    out.push('');
+  }
+
+  const cq = p?.controlRoom?.questions;
+  if (Array.isArray(cq) && cq.length) {
+    out.push('## Control Room');
+    const blockMs = Number.isFinite(p.controlRoom.answerMs) ? p.controlRoom.answerMs : 40000;
+    if (Number.isFinite(p.controlRoom.perTeam) && p.controlRoom.perTeam !== 1) out.push(`turns: ${p.controlRoom.perTeam}`);
+    if (blockMs !== 40000) out.push(`time: ${fmtSeconds(blockMs)}`);
+    out.push('');
+    for (const q of cq) {
+      out.push(`# ${q?.text ?? ''}`);
+      if (q?.context) out.push(`context: ${q.context}`);
+      if (Number.isFinite(q?.answerMs) && q.answerMs !== blockMs) out.push(`time: ${fmtSeconds(q.answerMs)}`);
+      for (const c of Array.isArray(q?.controls) ? q.controls : []) {
+        if (c?.kind === 'number') out.push(numberLine(c));
+        else out.push(`[${c?.answer ? 'on' : 'off'}] ${c?.label ?? ''}${c?.initial ? ' (starts on)' : ''}`);
+      }
+      out.push('');
+    }
+  }
+
+  const st = p?.showdown?.statements;
+  if (Array.isArray(st) && st.length) {
+    out.push('## Showdown');
+    if (Number.isFinite(p.showdown.answerMs) && p.showdown.answerMs !== 6000) out.push(`time: ${fmtSeconds(p.showdown.answerMs)}`);
+    out.push('');
+    for (const s of st) out.push(`${s?.answer === false ? 'false' : 'true'}: ${s?.text ?? ''}`);
+    out.push('');
+  }
+
+  while (out.length && out[out.length - 1] === '') out.pop();
+  return out.join('\n') + '\n';
+}
+
+/** Canonical text for a number control line. @param {any} c */
+function numberLine(c) {
+  const parts = [`${c.min}-${c.max}`];
+  if (Number.isFinite(c.step) && c.step !== 1) parts.push(`step ${c.step}`);
+  if (Number.isFinite(c.initial) && c.initial !== 0) parts.push(`start ${c.initial}`);
+  if (c.unit) parts.push(String(c.unit));
+  return `${c.label} = ${c.answer} (${parts.join(', ')})`;
+}
+
+// ---------------------------------------------------------- text surgery
+// Every helper returns NEW text; the caller re-parses. Line indexes are
+// 0-based, straight from parseDoc's lines array.
+
+/** @param {string} text @param {number} i */
+export function toggleCheck(text, i) {
+  const lines = text.split('\n');
+  const t = lines[i] ?? '';
+  lines[i] = CHECK_RE.test(t.trim())
+    ? t.replace(/^(\s*)[✓*]\s*/, '$1')
+    : t.replace(/^(\s*)/, '$1✓ ');
+  return lines.join('\n');
+}
+
+/**
+ * Set the verdict a gutter pill controls: TRUE/FALSE on a showdown
+ * statement, ON/OFF on a control toggle.
+ * @param {string} text @param {number} i
+ * @param {'statement'|'toggle'} kind @param {boolean} value
+ */
+export function setVerdict(text, i, kind, value) {
+  const lines = text.split('\n');
+  const t = (lines[i] ?? '').trim();
+  if (kind === 'statement') {
+    lines[i] = `${value ? 'true' : 'false'}: ${t.replace(STATEMENT_RE, '$2').trim()}`;
+  } else {
+    lines[i] = `[${value ? 'on' : 'off'}] ${t.replace(TOGGLE_RE, '$2').trim()}`;
+  }
+  return lines.join('\n');
+}
+
+/** Add/remove the "(starts on)" suffix on a control toggle line. */
+export function setStartsOn(/** @type {string} */ text, /** @type {number} */ i, /** @type {boolean} */ on) {
+  const lines = text.split('\n');
+  const t = (lines[i] ?? '').replace(STARTS_ON_RE, '');
+  lines[i] = on ? `${t} (starts on)` : t;
+  return lines.join('\n');
+}
+
+/**
+ * Rewrite a structured line from panel fields.
+ * kind 'range': {lo, hi, min, max, unit} — the range: line.
+ * kind 'number': {label, answer, min, max, step, initial, unit}.
+ * @param {string} text @param {number} i
+ * @param {'range'|'number'} kind @param {any} f
+ */
+export function setLineFields(text, i, kind, f) {
+  const lines = text.split('\n');
+  lines[i] = kind === 'range'
+    ? `range: ${f.lo}-${f.hi} of ${f.min}-${f.max}${f.unit ? ` ${f.unit}` : ''}`
+    : numberLine(f);
+  return lines.join('\n');
+}
+
+/**
+ * Set/replace/remove a directive line. block = a BlockInfo, or null for
+ * the front matter. value null removes the line.
+ * @param {string} text @param {import('./pack-text.js').BlockInfo|null} block
+ * @param {string} key @param {string|null} value
+ */
+export function setDirective(text, block, key, value) {
+  const lines = text.split('\n');
+  const re = new RegExp(`^\\s*(${key === 'img' ? 'img|image' : key})\\s*:`, 'i');
+  const from = block ? block.startLine : 0;
+  const to = block ? block.endLine : frontMatterEnd(lines);
+  let found = -1;
+  for (let i = from; i <= to && i < lines.length; i++) {
+    if (re.test(lines[i])) { found = i; break; }
+  }
+  if (value === null) {
+    if (found >= 0) lines.splice(found, 1);
+  } else if (found >= 0) {
+    lines[found] = `${key}: ${value}`;
+  } else if (block) {
+    lines.splice(block.headLine + 1, 0, `${key}: ${value}`);
+  } else {
+    lines.splice(to + 1, 0, `${key}: ${value}`);
+  }
+  return lines.join('\n');
+}
+
+/** Last line index of the front matter region (before any #/##/content). */
+function frontMatterEnd(/** @type {string[]} */ lines) {
+  let last = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    if (t.startsWith('#')) break;
+    if (!/^(pack|theme|time|order)\s*:/i.test(t)) break;
+    last = i;
+  }
+  return last;
+}
+
+/**
+ * Change a deck block's type: rewrites the # tag and re-templates the body
+ * lines that don't translate, keeping the question text and any image.
+ * @param {string} text @param {import('./pack-text.js').BlockInfo} block
+ * @param {'choice'|'range'|'sort'} type
+ */
+export function setBlockType(text, block, type) {
+  const lines = text.split('\n');
+  const head = type === 'sort' ? `#sort ${block.text}` : `# ${block.text}`;
+  const body = type === 'range' ? ['range: 40-60 of 0-100']
+    : type === 'sort' ? ['Bucket A: Item 1', 'Bucket B: Item 2']
+    : ['✓ Answer 1', 'Answer 2', 'Answer 3'];
+  const img = block.img ? [`img: ${block.img}`] : [];
+  lines.splice(block.startLine, block.endLine - block.startLine + 1, head, ...img, ...body);
+  return lines.join('\n');
+}
+
+const TEMPLATES = {
+  deck: '# New question?\n✓ Answer 1\nAnswer 2\nAnswer 3',
+  control: '# New case: set the controls\n'
+    + Array.from({ length: 6 }, (_, i) => `[${i % 2 ? 'off' : 'on'}] Control ${i + 1}`).join('\n'),
+  showdown: 'true: A true statement',
+};
+
+/**
+ * Append a fresh block to a bucket's section, creating the ## header when
+ * the section doesn't exist yet. Returns the new text and the line index
+ * of the inserted block's first line (for focusing).
+ * @param {string} text @param {ReturnType<typeof parseDoc>} parsed
+ * @param {'deck'|'control'|'showdown'} bucket
+ * @returns {{text: string, line: number}}
+ */
+export function insertTemplate(text, parsed, bucket) {
+  const lines = text.split('\n');
+  const sectionBlocks = parsed.blocks.filter((b) => b.bucket === bucket);
+
+  /** @type {number} insertion point (line index to splice at) */
+  let at;
+  /** @type {string[]} */
+  let prefix = [];
+  if (sectionBlocks.length) {
+    at = sectionBlocks[sectionBlocks.length - 1].endLine + 1;
+  } else if (bucket === 'deck') {
+    // after front matter, before any ## section
+    const firstSection = parsed.lines.findIndex((l) => l.kind === 'section');
+    at = firstSection >= 0 ? firstSection : lines.length;
+  } else {
+    const sectionAt = (/** @type {RegExp} */ re) =>
+      parsed.lines.findIndex((l, i) => l.kind === 'section' && re.test(lines[i].trim()));
+    const existing = sectionAt(bucket === 'control' ? /^##\s*control/i : /^##\s*showdown/i);
+    if (existing >= 0) {
+      // The section header exists but holds no blocks yet: insert right
+      // after it, skipping blanks and section-level directives.
+      at = existing + 1;
+      while (at < lines.length && (!lines[at].trim() || parsed.lines[at]?.kind === 'directive')) at++;
+    } else {
+      // A new Control Room section must come BEFORE an existing Showdown
+      // section; a new Showdown section goes at the very end.
+      const sd = bucket === 'control' ? sectionAt(/^##\s*showdown/i) : -1;
+      at = sd >= 0 ? sd : lines.length;
+      const header = bucket === 'control' ? '## Control Room' : '## Showdown';
+      prefix = (lines[at - 1] ?? '').trim() ? ['', header, ''] : [header, ''];
+    }
+  }
+
+  const body = TEMPLATES[bucket].split('\n');
+  if (!prefix.length && (lines[at - 1] ?? '').trim()) prefix = [''];
+  lines.splice(at, 0, ...prefix, ...body, '');
+  return { text: lines.join('\n'), line: at + prefix.length };
+}
+
+/**
+ * Remove a block (and the blank line that followed it, if doubling up).
+ * @param {string} text @param {import('./pack-text.js').BlockInfo} block
+ */
+export function removeBlock(text, block) {
+  const lines = text.split('\n');
+  let end = block.endLine;
+  if (end + 1 < lines.length && !lines[end + 1].trim()) end++;
+  lines.splice(block.startLine, end - block.startLine + 1);
+  return lines.join('\n');
+}

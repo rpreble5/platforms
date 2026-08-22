@@ -33,41 +33,80 @@
     width: 100%; background: #1c163290; color: #e6e0f5; border: 1px solid #4d4177;
     border-radius: 8px; padding: 7px 9px; font: inherit;
   }
-  textarea { resize: vertical; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
   button {
     background: #443a68; color: #e6e0f5; border: 1px solid #5d4f8c; border-radius: 8px;
     padding: 7px 12px; font: 700 13px/1 inherit; cursor: pointer;
   }
-  button:hover { background: #52468030; border-color: #7c6fb0; background-color: #524680; }
+  button:hover { border-color: #7c6fb0; background-color: #524680; }
   button.primary { background: #2fc98d22; border-color: #2fc98d; color: #9ff5c9; }
   button.small { padding: 4px 8px; font-size: 12px; }
   button.danger { border-color: #d64f63; color: #ffb6c1; }
-  .tabs { display: flex; gap: 6px; }
-  .tabs button { flex: 1; opacity: .6; }
-  .tabs button.on { opacity: 1; border-color: #9ff5c9; color: #9ff5c9; }
-  #qlist { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; }
+
+  /* ---- the doc ---- */
+  #docwrap { display: flex; position: relative; }
+  #gutter {
+    width: 52px; flex-shrink: 0; position: relative; overflow: hidden;
+    border-right: 1px solid #3a3160;
+  }
+  #gutterInner { position: absolute; inset: 0 0 auto 0; }
+  #gutterInner .g {
+    position: absolute; left: 4px; display: flex; gap: 2px; align-items: center;
+  }
+  #gutterInner button {
+    padding: 1px 5px; font-size: 11px; line-height: 1.4; border-radius: 6px;
+    background: #241d3c; border-color: #4d4177; color: #7a6fa3;
+  }
+  #gutterInner button.on { border-color: #2fc98d; color: #9ff5c9; background: #2fc98d18; }
+  #gutterInner button.off { border-color: #d6a24f; color: #ffd9a3; background: #d6a24f18; }
+  #editorArea { position: relative; flex: 1; min-width: 0; }
+  textarea#doc {
+    display: block; width: 100%; height: 74vh; resize: vertical;
+    background: transparent; border: 0; border-radius: 0; outline: none;
+    font: 500 14px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 12px 84px 40vh 12px;
+    white-space: pre-wrap; overflow-wrap: break-word; overflow-y: auto;
+  }
+  #mirror {
+    position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none;
+    font: 500 14px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 12px 84px 40vh 12px; white-space: pre-wrap; overflow-wrap: break-word;
+  }
+  #mirror div { min-height: 1.9em; }
+  #chipRail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  #chipInner { position: absolute; inset: 0 0 auto 0; }
+  .chip {
+    position: absolute; right: 8px;
+    font: 700 10px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .06em;
+    padding: 4px 7px; border-radius: 6px; text-transform: uppercase;
+    background: #443a68; color: #cfc6ec;
+  }
+  .chip.bad { background: #d64f6333; color: #ffb6c1; }
+
+  /* ---- outline ---- */
+  #outline { display: flex; flex-direction: column; gap: 5px; max-height: 30vh; overflow: auto; }
   .qrow {
-    display: flex; gap: 8px; align-items: center; padding: 7px 9px;
-    background: #1c163290; background-color: #251e42; border: 1px solid #4d4177;
-    border-radius: 8px; cursor: pointer;
+    display: flex; gap: 8px; align-items: center; padding: 6px 9px;
+    background: #251e42; border: 1px solid #4d4177; border-radius: 8px; cursor: pointer;
   }
   .qrow.on { border-color: #9ff5c9; }
   .qrow.bad { border-color: #d64f63; }
-  .qrow .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qrow .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .qrow.section { background: transparent; border-color: transparent; cursor: default;
+    text-transform: uppercase; font-size: 11px; letter-spacing: .1em; color: #9a90bd; padding: 4px 2px 0; }
   .badge {
     font: 700 10px/1 inherit; letter-spacing: .06em; padding: 3px 6px; border-radius: 6px;
     background: #443a68; color: #cfc6ec; text-transform: uppercase; flex-shrink: 0;
   }
-  .answers .arow { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
-  .answers input[type=text] { flex: 1; }
   canvas#preview {
     width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px;
     border: 1px solid #4d4177; display: block;
   }
   #problems { font: 500 12px/1.6 ui-monospace, Menlo, monospace; color: #ffb08a; white-space: pre-wrap; }
   #problems.ok { color: #7fd8a8; }
+  #problems .jump { cursor: pointer; text-decoration: underline dotted; }
+  #problems .jump:hover { color: #ffd9a3; }
   .hint { color: #7a6fa3; font-size: 12px; }
   .checkline { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .checkline input { width: auto; }
@@ -82,7 +121,7 @@
 
 <header>
   <h1>PACK STUDIO</h1>
-  <span class="hint">build & preview question packs · nothing leaves your browser until you export</span>
+  <span class="hint">type the pack as a document · nothing leaves your browser until you export</span>
   <span class="spacer"></span>
   <button id="loadSample" class="small">Load sample</button>
   <button id="openFile" class="small">Open…</button>
@@ -114,28 +153,37 @@
       </select>
     </div>
     <div class="card">
-      <h2>Buckets</h2>
-      <div class="tabs">
-        <button id="tab-deck" class="on">Deck</button>
-        <button id="tab-control">Control Room</button>
-        <button id="tab-showdown">Showdown</button>
+      <h2>Outline</h2>
+      <div id="outline"></div>
+      <div class="row" style="margin-top:8px; flex-wrap:wrap">
+        <button id="addQ" class="primary small">+ Question</button>
+        <button id="addC" class="small">+ Control case</button>
+        <button id="addS" class="small">+ Showdown</button>
       </div>
-      <div id="qlist" style="margin-top:10px"></div>
-      <div class="row" style="margin-top:8px">
-        <button id="addQ" class="primary">+ Add</button>
-        <button id="dupQ" class="small">Duplicate</button>
-        <button id="upQ" class="small">↑</button>
-        <button id="downQ" class="small">↓</button>
-        <button id="delQ" class="small danger">Delete</button>
-      </div>
-      <div class="hint" id="bucketHint" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="detail">
+      <h2 id="detailTitle">Details</h2>
+      <div id="detailBody"><span class="hint">Click into a question in the doc.</span></div>
     </div>
   </div>
 
   <div class="col">
-    <div class="card" id="editor">
-      <h2 id="editorTitle">Question</h2>
-      <div id="editorBody"><span class="hint">Add a question to begin.</span></div>
+    <div class="card" style="padding:0 0 6px">
+      <h2 style="padding:14px 14px 0">The doc — # starts a question, answers go on their own lines</h2>
+      <div id="docwrap">
+        <div id="gutter"><div id="gutterInner"></div></div>
+        <div id="editorArea">
+          <textarea id="doc" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+          <div id="chipRail"><div id="chipInner"></div></div>
+          <div id="mirror" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="hint" style="padding:6px 14px 8px">
+        Click the box beside an answer to mark it correct (or type “✓ ” / “* ” yourself) ·
+        two marks = select-all · <code>range: 60-100 of 0-160 bpm</code> ·
+        <code>#sort</code> then <code>Bucket: item, item</code> lines ·
+        <code>## Control Room</code> and <code>## Showdown</code> open those sections
+      </div>
     </div>
   </div>
 
@@ -147,8 +195,9 @@
         <button id="replay" class="primary">▶ Replay round</button>
       </div>
       <div class="hint" style="margin-top:6px">
-        The preview runs the actual game engine: intro, countdown, reveal and
-        scoreboard play exactly as they will on the night (with no players).
+        The preview plays the question your cursor is in, on the actual game
+        engine: intro, countdown, reveal and scoreboard run exactly as they
+        will on the night (with no players).
       </div>
     </div>
     <div class="card">

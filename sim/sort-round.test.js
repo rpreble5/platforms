@@ -144,6 +144,18 @@ test('inputs die for the flash and come back for the next item', () => {
   assert.equal(inputsLive(game), true, 'live again for the next item');
 });
 
+test('items shuffle at round start without losing any', () => {
+  const { world, game } = rig();
+  startGame(game, world);
+  const items = /** @type {any[]} */ (/** @type {any} */ (game.questions[0]).items);
+  assert.equal(items.length, 3);
+  assert.deepEqual(items.map((it) => it.label).sort(), ['Bat', 'Gecko', 'Penguin']);
+  const pairing = { Bat: 0, Penguin: 1, Gecko: 2 };
+  for (const it of items) {
+    assert.equal(it.bucket, pairing[/** @type {'Bat'|'Penguin'|'Gecko'} */ (it.label)], 'each item kept its bucket');
+  }
+});
+
 test('targetIds follows the item index', () => {
   const q = sortQuestion();
   assert.deepEqual([...targetIds(q, 0)], [answerId(0)]);

@@ -534,6 +534,14 @@ export function nextQuestion(g, world) {
   g.itemPhase = 'go';
   g.sortTally = new Map();
   g.itemHits = new Map();
+  // Sort items play shuffled: authored (or doc-format bucket-grouped) order
+  // would let the room predict the next bucket and camp on it.
+  if (isSortQuestion(q) && Array.isArray(q.items)) {
+    for (let i = q.items.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [q.items[i], q.items[j]] = [q.items[j], q.items[i]];
+    }
+  }
   if (isControlQuestion(q)) {
     g.controlArena = buildControlQuestionArena(q);
     world.platforms = g.controlArena.platforms;

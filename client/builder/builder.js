@@ -1,10 +1,12 @@
 /**
- * The Pack Studio: zero-install pack authoring for faculty.
+ * The Pack Studio: text-first pack authoring for faculty.
  *
- * Everything runs in the browser. Validation is the SAME module the game
- * server uses (shared/pack-validate.js), and the preview is the ACTUAL game
- * engine drawing into a canvas — what faculty see is what the room gets.
- * Nothing leaves this page until Download/Copy; drafts autosave locally.
+ * The document IS the pack. Everything on this page — the gutter checks,
+ * the detail panel, the add buttons — works by rewriting the text in the
+ * middle column; the playable pack is always parseDoc(text) run through
+ * the same shared/pack-validate.js the game server uses, and the preview
+ * is the ACTUAL game engine drawing into a canvas. Nothing leaves this
+ * page until Download/Copy; the raw text autosaves locally.
  *
  * All imports are RELATIVE so the page works from any base path: the game
  * server serves it at /builder, and GitHub Pages serves it straight from
@@ -21,212 +23,298 @@ import { render } from '../display/render.js';
 import { drawConfetti } from '../display/fx.js';
 import { drawRoundOverlay, registerPreviewImage } from '../display/round-ui.js';
 import { drawShowdown } from '../display/showdown-ui.js';
+import {
+  parseDoc, serializeDoc, toggleCheck, setVerdict, setStartsOn,
+  setLineFields, setDirective, setBlockType, insertTemplate, removeBlock,
+} from './pack-text.js';
 
 // ------------------------------------------------------------------ state
 
-const DRAFT_KEY = 'packstudio-draft';
+const DOC_KEY = 'packstudio-doc';
+const OLD_DRAFT_KEY = 'packstudio-draft'; // the form-era JSON draft, migrated once
 
-/** The authored model — plain pack JSON, exactly what export writes. */
-/** @type {any} */
-let model = {
-  pack: 'New pack',
-  theme: 'blanc',
-  answerMs: 12000,
-  order: 'authored',
-  questions: [],
-  controlRoom: { perTeam: 1, answerMs: 40000, questions: [] },
-  showdown: { answerMs: 6000, statements: [] },
-};
+const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
+/** @type {HTMLTextAreaElement} */
+const doc = $('doc');
 
-/** @type {'deck'|'control'|'showdown'} */
-let tab = 'deck';
-/** Selected index per bucket. */
-const selIx = { deck: -1, control: -1, showdown: -1 };
+/** The document — the single source of truth. */
+let docText = '';
+/** @type {ReturnType<typeof parseDoc>} */
+let parsed = parseDoc('');
+/** Block index the caret sits in (-1 = none). */
+let caretIx = -1;
+/** Caret line (0-based), for line-scoped panel fields. */
+let caretLn = -1;
 /** Local image files chosen this session, filename -> object URL. */
 const localImages = new Map();
 
-const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
-
-/** @returns {any[]} */
-function bucketList() {
-  return tab === 'deck' ? model.questions
-    : tab === 'control' ? model.controlRoom.questions
-    : model.showdown.statements;
-}
-
-// ------------------------------------------------------------ new items
-
-/** @returns {any} */
-function newDeckQuestion(/** @type {string} */ kind) {
-  if (kind === 'range') {
-    return { type: 'range', text: 'New range question?', min: 0, max: 100, answer: [40, 60], unit: '' };
-  }
-  if (kind === 'sort') {
-    return {
-      type: 'sort', text: 'Sort each item', buckets: ['Bucket A', 'Bucket B'],
-      items: [{ label: 'Item 1', bucket: 0 }, { label: 'Item 2', bucket: 1 }], itemMs: 6000,
-    };
-  }
-  return { text: 'New question?', answers: ['Answer 1', 'Answer 2', 'Answer 3'], correct: 0 };
-}
-
-function newControlCase() {
-  return {
-    text: 'New case: set the controls',
-    context: '',
-    controls: Array.from({ length: 6 }, (_, i) => ({
-      label: `Control ${i + 1}`, kind: 'toggle', initial: false, answer: i % 2 === 0,
-    })),
-  };
-}
-
-const newStatement = () => ({ text: 'A true statement', answer: true });
-
-// ------------------------------------------------------------ validation
-
 /** Validate a deep clone (validatePack normalizes in place). */
 function validated() {
-  return validatePack(structuredClone(exportable()));
+  return validatePack(structuredClone(parsed.raw));
 }
 
-/** The exportable pack: authored model minus empty optional buckets. */
+/** The exportable pack: exactly what the text says. */
 function exportable() {
-  /** @type {any} */
-  const out = {
-    pack: model.pack,
-    theme: model.theme,
-    answerMs: model.answerMs,
-    questions: structuredClone(model.questions),
-  };
-  if (model.order !== 'authored') out.order = model.order;
-  if (model.controlRoom.questions.length) out.controlRoom = structuredClone(model.controlRoom);
-  if (model.showdown.statements.length) out.showdown = structuredClone(model.showdown);
-  return out;
+  return structuredClone(parsed.raw);
 }
 
-function refreshProblems() {
-  const { problems } = validated();
-  const el = $('problems');
-  if (!problems.length) {
-    el.className = 'ok';
-    el.textContent = 'No problems — this pack loads clean.';
-  } else {
-    el.className = '';
-    el.textContent = problems.join('\n');
+// --------------------------------------------------------------- text I/O
+
+/**
+ * Replace the document text. Uses execCommand so the textarea's undo
+ * history survives gutter clicks (falls back to plain assignment). Panel
+ * inputs keep their focus: the undo-preserving path needs the textarea
+ * focused, so it only runs when no other field is being typed in.
+ * @param {string} next
+ * @param {{caret?: number, line?: number, keepPanel?: boolean}} [opts]
+ */
+function setText(next, opts = {}) {
+  if (next !== doc.value) {
+    const active = /** @type {any} */ (document.activeElement);
+    const fieldFocused = active && active !== doc &&
+      ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName);
+    const scroll = doc.scrollTop;
+    let done = false;
+    if (!fieldFocused) {
+      const cur = doc.value;
+      let s = 0;
+      while (s < cur.length && s < next.length && cur[s] === next[s]) s++;
+      let e = 0;
+      while (e < cur.length - s && e < next.length - s && cur[cur.length - 1 - e] === next[next.length - 1 - e]) e++;
+      doc.focus();
+      doc.setSelectionRange(s, cur.length - e);
+      const ins = next.slice(s, next.length - e);
+      try {
+        done = ins
+          ? document.execCommand('insertText', false, ins)
+          : document.execCommand('delete');
+      } catch { done = false; }
+      if (done && doc.value !== next) done = false;
+    }
+    if (!done) doc.value = next;
+    doc.scrollTop = scroll;
+  }
+  docText = doc.value;
+  if (opts.caret !== undefined) doc.setSelectionRange(opts.caret, opts.caret);
+  if (opts.line !== undefined) caretToLine(opts.line);
+  refresh({ keepPanel: !!opts.keepPanel });
+}
+
+/** Move the caret to the start of a line and scroll it into view. */
+function caretToLine(/** @type {number} */ line) {
+  const upTo = docText.split('\n').slice(0, line).join('\n');
+  const pos = line === 0 ? 0 : upTo.length + 1;
+  doc.focus();
+  doc.setSelectionRange(pos, pos);
+  const y = lineTops[line] ?? 0;
+  if (y < doc.scrollTop + 20 || y > doc.scrollTop + doc.clientHeight - 60) {
+    doc.scrollTop = Math.max(0, y - doc.clientHeight * 0.3);
   }
 }
 
-// ------------------------------------------------------------------ list UI
+function caretLine() {
+  return docText.slice(0, doc.selectionStart).split('\n').length - 1;
+}
 
-function refreshList() {
-  const list = bucketList();
-  const holder = $('qlist');
+function blockAt(/** @type {number} */ line) {
+  return parsed.blocks.findIndex((b) => line >= b.startLine && line <= b.endLine);
+}
+
+// ----------------------------------------------------------- measurement
+// The mirror reproduces the textarea's wrapping (same font, width and
+// padding, one block div per line), so each line's y survives soft wraps.
+
+/** @type {number[]} */
+let lineTops = [];
+/** @type {number[]} */
+let lineHeights = [];
+
+function measure() {
+  const mirror = $('mirror');
+  mirror.style.width = `${doc.clientWidth}px`;
+  mirror.replaceChildren();
+  const srcLines = docText.split('\n');
+  for (const l of srcLines) {
+    const d = document.createElement('div');
+    d.textContent = l || ' ';
+    mirror.appendChild(d);
+  }
+  lineTops = [];
+  lineHeights = [];
+  for (const child of mirror.children) {
+    lineTops.push(/** @type {HTMLElement} */ (child).offsetTop);
+    lineHeights.push(/** @type {HTMLElement} */ (child).offsetHeight);
+  }
+}
+
+// ---------------------------------------------------------------- gutter
+
+/** Which validate problems hit a block, by its bucket-local prefix. */
+function blockWhere(/** @type {import('./pack-text.js').BlockInfo} */ b) {
+  return b.bucket === 'deck' ? `Q${b.ix + 1}` : b.bucket === 'control' ? `control #${b.ix + 1}` : `showdown #${b.ix + 1}`;
+}
+
+/** @param {string[]} vproblems */
+function blockBad(/** @type {import('./pack-text.js').BlockInfo} */ b, vproblems) {
+  const where = blockWhere(b);
+  return vproblems.some((m) => m.startsWith(`${where}:`) || m.startsWith(`${where} `))
+    || parsed.problems.some((p) => p.line !== null && p.line - 1 >= b.startLine && p.line - 1 <= b.endLine);
+}
+
+/** @param {string[]} vproblems */
+function renderGutter(vproblems) {
+  const inner = $('gutterInner');
+  inner.replaceChildren();
+  $('gutter').style.height = `${doc.clientHeight}px`;
+
+  parsed.lines.forEach((l, i) => {
+    if (!['answer', 'statement', 'toggle'].includes(l.kind)) return;
+    const g = document.createElement('div');
+    g.className = 'g';
+    g.style.top = `${(lineTops[i] ?? 0) + 2}px`;
+    const mk = (/** @type {string} */ label, /** @type {string} */ cls, /** @type {() => void} */ fn) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      if (cls) b.className = cls;
+      b.tabIndex = -1;
+      b.onmousedown = (ev) => ev.preventDefault(); // keep textarea focus
+      b.onclick = fn;
+      g.appendChild(b);
+    };
+    if (l.kind === 'answer') {
+      mk(l.checked ? '✓' : '☐', l.checked ? 'on' : '', () => setText(toggleCheck(docText, i)));
+    } else if (l.kind === 'statement') {
+      mk('T', l.verdict === true ? 'on' : '', () => setText(setVerdict(docText, i, 'statement', true)));
+      mk('F', l.verdict === false ? 'off' : '', () => setText(setVerdict(docText, i, 'statement', false)));
+    } else {
+      mk('on', l.verdict === true ? 'on' : '', () => setText(setVerdict(docText, i, 'toggle', true)));
+      mk('off', l.verdict === false ? 'off' : '', () => setText(setVerdict(docText, i, 'toggle', false)));
+    }
+    inner.appendChild(g);
+  });
+
+  const chips = $('chipInner');
+  chips.replaceChildren();
+  for (const b of parsed.blocks) {
+    if (b.bucket === 'showdown') continue; // the T/F pill says it all
+    const c = document.createElement('span');
+    c.className = 'chip' + (blockBad(b, vproblems) ? ' bad' : '');
+    c.textContent = b.bucket === 'control' ? 'case' : b.type + (b.img ? ' · pic' : '');
+    c.style.top = `${(lineTops[b.headLine] ?? 0) + 4}px`;
+    chips.appendChild(c);
+  }
+  syncScroll();
+}
+
+function syncScroll() {
+  const t = `translateY(${-doc.scrollTop}px)`;
+  $('gutterInner').style.transform = t;
+  $('chipInner').style.transform = t;
+}
+
+// --------------------------------------------------------------- outline
+
+/** @param {string[]} vproblems */
+function renderOutline(vproblems) {
+  const holder = $('outline');
   holder.replaceChildren();
-  const { problems } = validated();
-  list.forEach((/** @type {any} */ q, /** @type {number} */ i) => {
+  /** @type {string|null} */
+  let lastBucket = null;
+  for (const [bi, b] of parsed.blocks.entries()) {
+    if (b.bucket !== lastBucket) {
+      lastBucket = b.bucket;
+      const s = document.createElement('div');
+      s.className = 'qrow section';
+      s.textContent = b.bucket === 'deck' ? 'Deck' : b.bucket === 'control' ? 'Control Room' : 'Showdown';
+      holder.appendChild(s);
+    }
     const row = document.createElement('div');
-    row.className = 'qrow' + (i === selIx[tab] ? ' on' : '');
-    const where = tab === 'deck' ? `Q${i + 1}` : tab === 'control' ? `control #${i + 1}` : `showdown #${i + 1}`;
-    if (problems.some((m) => m.startsWith(where + ':') || m.startsWith(where + ' '))) row.classList.add('bad');
+    row.className = 'qrow' + (bi === caretIx ? ' on' : '') + (blockBad(b, vproblems) ? ' bad' : '');
     const badge = document.createElement('span');
     badge.className = 'badge';
-    badge.textContent = tab !== 'deck' ? (tab === 'control' ? 'case' : 't/f')
-      : q.type === 'range' ? 'range'
-      : q.type === 'sort' ? 'sort'
-      : Array.isArray(q.correct) ? 'multi'
-      : q.image ? 'pic' : 'choice';
+    badge.textContent = b.bucket === 'control' ? 'case' : b.bucket === 'showdown' ? 't/f' : b.type;
     const t = document.createElement('span');
     t.className = 't';
-    t.textContent = q.text || '(untitled)';
+    t.textContent = b.text || '(untitled)';
     row.append(badge, t);
-    row.onclick = () => { selIx[tab] = i; refreshAll(); };
+    row.onclick = () => { caretToLine(b.headLine); refresh({ keepPanel: false }); };
     holder.appendChild(row);
-  });
-  $('bucketHint').textContent =
-    tab === 'deck' ? 'Plays in free-for-all AND teams. Types: choice, select-all, range, sort — any with a picture.'
-    : tab === 'control' ? 'Teams only: cases play as team turns between questions, or as the standalone Control Room.'
-    : 'The finale mode: true/false, no points, last one standing.';
+  }
+  if (!parsed.blocks.length) {
+    const s = document.createElement('span');
+    s.className = 'hint';
+    s.textContent = 'Type # and a question in the doc, or use the buttons below.';
+    holder.appendChild(s);
+  }
 }
 
-// ------------------------------------------------------------------ editor
+// -------------------------------------------------------------- problems
 
-function refreshEditor() {
-  const list = bucketList();
-  const q = list[selIx[tab]];
-  const body = $('editorBody');
+/** @param {string[]} vproblems */
+function renderProblems(vproblems) {
+  const el = $('problems');
+  el.replaceChildren();
+  if (!parsed.problems.length && !vproblems.length) {
+    el.className = 'ok';
+    el.textContent = 'No problems — this pack loads clean.';
+    return;
+  }
+  el.className = '';
+  for (const p of parsed.problems) {
+    const d = document.createElement('div');
+    if (p.line !== null) {
+      const a = document.createElement('span');
+      a.className = 'jump';
+      a.textContent = `line ${p.line}`;
+      const ln = p.line - 1;
+      a.onclick = () => { caretToLine(ln); refresh({ keepPanel: false }); };
+      d.append(a, `: ${p.msg}`);
+    } else {
+      d.textContent = p.msg;
+    }
+    el.appendChild(d);
+  }
+  for (const m of vproblems) {
+    const d = document.createElement('div');
+    d.textContent = m;
+    el.appendChild(d);
+  }
+}
+
+// ------------------------------------------------------------ detail panel
+
+function renderPanel() {
+  const body = $('detailBody');
   body.replaceChildren();
-  if (!q) {
-    $('editorTitle').textContent = 'Question';
-    body.innerHTML = '<span class="hint">Add or select an item on the left.</span>';
+  const b = parsed.blocks[caretIx];
+  if (!b) {
+    $('detailTitle').textContent = 'Details';
+    body.innerHTML = '<span class="hint">Click into a question in the doc.</span>';
     return;
   }
-  $('editorTitle').textContent =
-    tab === 'deck' ? 'Deck question' : tab === 'control' ? 'Control Room case' : 'Showdown statement';
+  $('detailTitle').textContent =
+    b.bucket === 'deck' ? 'Deck question' : b.bucket === 'control' ? 'Control Room case' : 'Showdown statement';
 
-  const text = field(body, 'Text', q.text ?? '', (v) => { q.text = v; });
-  text.focus?.();
-
-  if (tab === 'showdown') {
-    check(body, 'Statement is TRUE', q.answer === true, (v) => { q.answer = v; });
-    return;
-  }
-
-  if (tab === 'control') {
-    field(body, 'Context (subtitle for the room)', q.context ?? '', (v) => { q.context = v; });
-    numField(body, 'Turn length (seconds, 10-90)', (q.answerMs ?? model.controlRoom.answerMs) / 1000, (v) => { q.answerMs = Math.round(v * 1000); });
-    const h = document.createElement('label');
-    h.textContent = `Controls (${q.controls.length}) — 6 to 8 required`;
+  if (b.bucket === 'showdown') {
+    const h = document.createElement('div');
+    h.className = 'hint';
+    h.textContent = 'Mark it with the T / F buttons beside the line.';
     body.appendChild(h);
-    q.controls.forEach((/** @type {any} */ c, /** @type {number} */ ci) => {
-      const box = document.createElement('div');
-      box.className = 'card';
-      box.style.padding = '10px';
-      box.style.marginBottom = '8px';
-      inlineField(box, 'Label', c.label, (v) => { c.label = v; });
-      const kindSel = document.createElement('select');
-      for (const k of ['toggle', 'number']) {
-        const o = document.createElement('option');
-        o.value = k; o.textContent = k; if (c.kind === k) o.selected = true;
-        kindSel.appendChild(o);
-      }
-      kindSel.onchange = () => {
-        c.kind = kindSel.value;
-        if (c.kind === 'number' && !Number.isFinite(c.min)) {
-          Object.assign(c, { initial: 0, answer: 2, min: 0, max: 10, step: 1, unit: '' });
-        }
-        if (c.kind === 'toggle') { c.initial = false; c.answer = true; }
-        refreshAll();
-      };
-      box.appendChild(kindSel);
-      if (c.kind === 'toggle') {
-        check(box, 'Starts ON', c.initial === true, (v) => { c.initial = v; });
-        check(box, 'Correct answer is ON', c.answer === true, (v) => { c.answer = v; });
-      } else {
-        const grid = document.createElement('div');
-        grid.className = 'row';
-        box.appendChild(grid);
-        for (const key of ['initial', 'answer', 'min', 'max', 'step']) {
-          const cell = document.createElement('div');
-          grid.appendChild(cell);
-          numField(cell, key, c[key] ?? 0, (v) => { c[key] = v; });
-        }
-        inlineField(box, 'Unit', c.unit ?? '', (v) => { c.unit = v; });
-      }
-      const del = document.createElement('button');
-      del.className = 'small danger';
-      del.textContent = 'Remove control';
-      del.onclick = () => { q.controls.splice(ci, 1); refreshAll(); };
-      box.appendChild(del);
-      body.appendChild(box);
+    dangerDelete(body, b, 'Delete statement');
+    return;
+  }
+
+  if (b.bucket === 'control') {
+    numField(body, 'Turn length (seconds, 10-90)', directiveSeconds(b, 'time', 40), (v) => {
+      setText(setDirective(docText, b, 'time', `${v}s`), { keepPanel: true });
     });
-    const add = document.createElement('button');
-    add.className = 'small';
-    add.textContent = '+ Add control';
-    add.onclick = () => {
-      q.controls.push({ label: `Control ${q.controls.length + 1}`, kind: 'toggle', initial: false, answer: true });
-      refreshAll();
-    };
-    body.appendChild(add);
+    renderLineFields(body, b);
+    const h = document.createElement('div');
+    h.className = 'hint';
+    h.style.marginTop = '8px';
+    h.textContent = 'Each line is a control: mark toggles on/off beside the line; type "Label = 8" for a number control and set its range here.';
+    body.appendChild(h);
+    dangerDelete(body, b, 'Delete case');
     return;
   }
 
@@ -234,131 +322,43 @@ function refreshEditor() {
   const typeSel = document.createElement('select');
   for (const [v, label] of [['choice', 'multiple choice'], ['range', 'range (number line)'], ['sort', 'lightning sort']]) {
     const o = document.createElement('option');
-    o.value = v; o.textContent = label;
-    if ((q.type ?? 'choice') === v) o.selected = true;
+    o.value = v;
+    o.textContent = label;
+    if ((b.type === 'multi' ? 'choice' : b.type) === v) o.selected = true;
     typeSel.appendChild(o);
   }
   const tl = document.createElement('label');
   tl.textContent = 'Type';
   body.append(tl, typeSel);
   typeSel.onchange = () => {
-    const fresh = newDeckQuestion(typeSel.value === 'choice' ? 'choice' : typeSel.value);
-    fresh.text = q.text;
-    if (q.image) fresh.image = q.image;
-    list[selIx[tab]] = fresh;
-    refreshAll();
+    const t = /** @type {'choice'|'range'|'sort'} */ (typeSel.value);
+    if (t !== (b.type === 'multi' ? 'choice' : b.type)) setText(setBlockType(docText, b, t));
   };
 
-  if (q.type === 'range') {
-    const grid = document.createElement('div');
-    grid.className = 'row';
-    body.appendChild(grid);
-    const cells = [];
-    for (const key of ['min', 'max']) {
-      const cell = document.createElement('div');
-      grid.appendChild(cell); cells.push(cell);
-      numField(cell, key, q[key], (v) => { q[key] = v; });
-    }
-    const grid2 = document.createElement('div');
-    grid2.className = 'row';
-    body.appendChild(grid2);
-    const lo = document.createElement('div'); const hi = document.createElement('div'); const un = document.createElement('div');
-    grid2.append(lo, hi, un);
-    numField(lo, 'answer low', q.answer?.[0] ?? 0, (v) => { q.answer = [v, q.answer?.[1] ?? v]; });
-    numField(hi, 'answer high', q.answer?.[1] ?? 0, (v) => { q.answer = [q.answer?.[0] ?? v, v]; });
-    inlineField(un, 'Unit', q.unit ?? '', (v) => { q.unit = v; });
-  } else if (q.type === 'sort') {
-    listEditor(body, 'Buckets (2-4)', q.buckets, () => 'New bucket', (arr) => { q.buckets = arr; });
-    const h = document.createElement('label');
-    h.textContent = `Items (${q.items.length}) — 2 to 12, each lands on a bucket`;
-    body.appendChild(h);
-    q.items.forEach((/** @type {any} */ it, /** @type {number} */ ii) => {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'arow answers';
-      const inp = document.createElement('input');
-      inp.type = 'text'; inp.value = it.label;
-      inp.oninput = () => { it.label = inp.value; softRefresh(); };
-      const bsel = document.createElement('select');
-      q.buckets.forEach((/** @type {string} */ b, /** @type {number} */ bi) => {
-        const o = document.createElement('option');
-        o.value = String(bi); o.textContent = b || `bucket ${bi + 1}`;
-        if (it.bucket === bi) o.selected = true;
-        bsel.appendChild(o);
-      });
-      bsel.onchange = () => { it.bucket = Number(bsel.value); softRefresh(); };
-      const del = document.createElement('button');
-      del.className = 'small danger'; del.textContent = '✕';
-      del.onclick = () => { q.items.splice(ii, 1); refreshAll(); };
-      rowEl.append(inp, bsel, del);
-      body.appendChild(rowEl);
-    });
-    const add = document.createElement('button');
-    add.className = 'small'; add.textContent = '+ Add item';
-    add.onclick = () => { q.items.push({ label: `Item ${q.items.length + 1}`, bucket: 0 }); refreshAll(); };
-    body.appendChild(add);
-    numField(body, 'Seconds per item (3-15)', (q.itemMs ?? 6000) / 1000, (v) => { q.itemMs = Math.round(v * 1000); });
-  } else {
-    // choice
-    const multi = Array.isArray(q.correct);
-    const h = document.createElement('label');
-    h.textContent = `Answers (2-6) — tick the correct one${multi ? 's' : ''}`;
-    body.appendChild(h);
-    const wrap = document.createElement('div');
-    wrap.className = 'answers';
-    body.appendChild(wrap);
-    q.answers.forEach((/** @type {string} */ a, /** @type {number} */ ai) => {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'arow';
-      const tick = document.createElement('input');
-      tick.type = multi ? 'checkbox' : 'radio';
-      tick.name = 'correct';
-      tick.checked = multi ? q.correct.includes(ai) : q.correct === ai;
-      tick.onchange = () => {
-        if (multi) {
-          const set = new Set(q.correct);
-          tick.checked ? set.add(ai) : set.delete(ai);
-          q.correct = [...set].sort((x, y) => x - y);
-        } else q.correct = ai;
-        softRefresh();
-      };
-      const inp = document.createElement('input');
-      inp.type = 'text'; inp.value = a;
-      inp.oninput = () => { q.answers[ai] = inp.value; softRefresh(); };
-      const del = document.createElement('button');
-      del.className = 'small danger'; del.textContent = '✕';
-      del.onclick = () => {
-        q.answers.splice(ai, 1);
-        if (multi) q.correct = q.correct.filter((/** @type {number} */ c) => c !== ai).map((/** @type {number} */ c) => (c > ai ? c - 1 : c));
-        else if (q.correct >= q.answers.length) q.correct = 0;
-        refreshAll();
-      };
-      rowEl.append(tick, inp, del);
-      wrap.appendChild(rowEl);
-    });
-    const add = document.createElement('button');
-    add.className = 'small'; add.textContent = '+ Add answer';
-    add.onclick = () => { q.answers.push(`Answer ${q.answers.length + 1}`); refreshAll(); };
-    body.appendChild(add);
-    check(body, 'Select-all-that-apply (2+ correct answers)', multi, (v) => {
-      q.correct = v ? [typeof q.correct === 'number' ? q.correct : 0] : (Array.isArray(q.correct) ? q.correct[0] ?? 0 : 0);
-      refreshAll();
-    });
+  if (b.type === 'choice' || b.type === 'multi') {
     const laySel = document.createElement('select');
     for (const l of ['islands', 'row', 'pyramid', 'reverse-pyramid']) {
       const o = document.createElement('option');
-      o.value = l; o.textContent = l;
-      if ((q.layout ?? 'islands') === l) o.selected = true;
+      o.value = l;
+      o.textContent = l;
+      if ((b.directives.layout?.value ?? 'islands') === l) o.selected = true;
       laySel.appendChild(o);
     }
     laySel.onchange = () => {
-      if (laySel.value === 'islands') delete q.layout;
-      else q.layout = laySel.value;
-      softRefresh();
+      setText(setDirective(docText, b, 'layout', laySel.value === 'islands' ? null : laySel.value), { keepPanel: true });
     };
     const ll = document.createElement('label');
     ll.textContent = 'Layout (picture questions always play the row)';
     body.append(ll, laySel);
   }
+
+  if (b.type === 'sort') {
+    numField(body, 'Seconds per item (3-15)', directiveSeconds(b, 'pace', 6), (v) => {
+      setText(setDirective(docText, b, 'pace', v === 6 ? null : `${v}s`), { keepPanel: true });
+    });
+  }
+
+  if (b.type === 'range') renderLineFields(body, b, true);
 
   // ---- picture, on any deck type
   const pl = document.createElement('label');
@@ -369,49 +369,115 @@ function refreshEditor() {
   body.appendChild(prow);
   const fileBtn = document.createElement('button');
   fileBtn.className = 'small';
-  fileBtn.textContent = q.image ? `🖼 ${q.image}` : 'Attach image…';
-  fileBtn.onclick = async () => {
+  fileBtn.textContent = b.img ? `🖼 ${b.img}` : 'Attach image…';
+  fileBtn.onclick = () => {
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.accept = '.png,.jpg,.jpeg,.webp,.svg';
     inp.onchange = () => {
       const f = inp.files?.[0];
       if (!f) return;
-      q.image = f.name;
       const url = URL.createObjectURL(f);
       localImages.set(f.name, url);
       registerPreviewImage(f.name, url);
-      refreshAll();
+      setText(setDirective(docText, b, 'img', f.name));
     };
     inp.click();
   };
   prow.appendChild(fileBtn);
-  if (q.image) {
+  if (b.img) {
     const clear = document.createElement('button');
     clear.className = 'small danger';
     clear.textContent = 'Remove';
-    clear.onclick = () => { delete q.image; refreshAll(); };
+    clear.onclick = () => setText(setDirective(docText, b, 'img', null));
     prow.appendChild(clear);
   }
   const note = document.createElement('div');
   note.className = 'hint';
   note.textContent = 'The exported pack references the FILENAME only — send the image file along; the host drops it in questions/images/.';
   body.appendChild(note);
+
+  dangerDelete(body, b, 'Delete question');
 }
 
-// small form helpers -------------------------------------------------------
+/**
+ * Caret-line fields for structured lines: the range: line of a range
+ * question, or a number control's range/step/start/unit. For range
+ * questions the line is unique, so it renders regardless of the caret.
+ * @param {HTMLElement} body @param {import('./pack-text.js').BlockInfo} b
+ * @param {boolean} [anyLine]
+ */
+function renderLineFields(body, b, anyLine = false) {
+  let ln = -1;
+  if (anyLine) {
+    ln = parsed.lines.findIndex((l, i) => l.kind === 'range' && i >= b.startLine && i <= b.endLine);
+  } else if (caretLn >= b.startLine && caretLn <= b.endLine && parsed.lines[caretLn]) {
+    const k = parsed.lines[caretLn].kind;
+    if (k === 'number' || k === 'toggle') ln = caretLn;
+  }
+  if (ln < 0) return;
+  const info = parsed.lines[ln];
 
-function field(/** @type {HTMLElement} */ into, /** @type {string} */ label, /** @type {string} */ value, /** @type {(v:string)=>void} */ set) {
+  if (info.kind === 'toggle') {
+    const line = ln;
+    const wrap = document.createElement('div');
+    wrap.className = 'checkline';
+    const i = document.createElement('input');
+    i.type = 'checkbox';
+    i.checked = info.startsOn === true;
+    i.onchange = () => setText(setStartsOn(docText, line, i.checked), { keepPanel: true });
+    const s = document.createElement('span');
+    s.textContent = 'This toggle starts ON';
+    wrap.append(i, s);
+    body.appendChild(wrap);
+    return;
+  }
+
+  const f = info.kind === 'range'
+    ? { lo: info.fields.answer[0], hi: info.fields.answer[1], min: info.fields.min, max: info.fields.max, unit: info.fields.unit ?? '' }
+    : { ...info.fields };
+  const line = ln;
+  const kind = /** @type {'range'|'number'} */ (info.kind === 'range' ? 'range' : 'number');
+  const write = () => setText(setLineFields(docText, line, kind, f), { keepPanel: true });
+
+  const h = document.createElement('label');
+  h.textContent = info.kind === 'range' ? 'The number line' : `"${f.label}" (number control)`;
+  body.appendChild(h);
+  const grid = document.createElement('div');
+  grid.className = 'row';
+  body.appendChild(grid);
+  const keys = info.kind === 'range' ? ['lo', 'hi', 'min', 'max'] : ['answer', 'min', 'max', 'step', 'initial'];
+  for (const key of keys) {
+    const cell = document.createElement('div');
+    grid.appendChild(cell);
+    numField(cell, key === 'initial' ? 'start' : key, f[key] ?? 0, (v) => { f[key] = v; write(); });
+  }
+  const un = document.createElement('div');
+  body.appendChild(un);
   const l = document.createElement('label');
-  l.textContent = label;
+  l.textContent = 'Unit';
   const i = document.createElement('input');
   i.type = 'text';
-  i.value = value;
-  i.oninput = () => { set(i.value); softRefresh(); };
-  into.append(l, i);
-  return i;
+  i.value = f.unit ?? '';
+  i.oninput = () => { f.unit = i.value.trim(); write(); };
+  un.append(l, i);
 }
-const inlineField = field;
+
+/** @param {import('./pack-text.js').BlockInfo} b */
+function directiveSeconds(b, /** @type {string} */ key, /** @type {number} */ dflt) {
+  const v = b.directives[key]?.value;
+  const n = v ? Number(v.replace(/s$/i, '')) : NaN;
+  return Number.isFinite(n) ? n : dflt;
+}
+
+function dangerDelete(/** @type {HTMLElement} */ body, /** @type {import('./pack-text.js').BlockInfo} */ b, /** @type {string} */ label) {
+  const del = document.createElement('button');
+  del.className = 'small danger';
+  del.style.marginTop = '12px';
+  del.textContent = label;
+  del.onclick = () => setText(removeBlock(docText, b));
+  body.appendChild(del);
+}
 
 function numField(/** @type {HTMLElement} */ into, /** @type {string} */ label, /** @type {number} */ value, /** @type {(v:number)=>void} */ set) {
   const l = document.createElement('label');
@@ -419,43 +485,56 @@ function numField(/** @type {HTMLElement} */ into, /** @type {string} */ label, 
   const i = document.createElement('input');
   i.type = 'number';
   i.value = String(value);
-  i.oninput = () => { const v = Number(i.value); if (Number.isFinite(v)) { set(v); softRefresh(); } };
+  i.oninput = () => { const v = Number(i.value); if (Number.isFinite(v)) set(v); };
   into.append(l, i);
 }
 
-function check(/** @type {HTMLElement} */ into, /** @type {string} */ label, /** @type {boolean} */ value, /** @type {(v:boolean)=>void} */ set) {
-  const line = document.createElement('div');
-  line.className = 'checkline';
-  const i = document.createElement('input');
-  i.type = 'checkbox';
-  i.checked = value;
-  i.onchange = () => { set(i.checked); softRefresh(); };
-  const s = document.createElement('span');
-  s.textContent = label;
-  line.append(i, s);
-  into.appendChild(line);
+// -------------------------------------------------------------- pack card
+
+/** @param {any} pack the validated pack */
+function syncPackCard(pack) {
+  const set = (/** @type {string} */ id, /** @type {string} */ v) => {
+    const el = $(id);
+    if (document.activeElement !== el) el.value = v;
+  };
+  set('packName', pack.pack);
+  set('packTheme', pack.theme);
+  set('packAnswerMs', String(Math.round(pack.answerMs / 1000)));
+  set('packOrder', parsed.raw.order === 'suggested' ? 'suggested' : 'authored');
 }
 
-function listEditor(/** @type {HTMLElement} */ into, /** @type {string} */ label, /** @type {string[]} */ arr, /** @type {()=>string} */ blank, /** @type {(a:string[])=>void} */ set) {
-  const l = document.createElement('label');
-  l.textContent = label;
-  into.appendChild(l);
-  arr.forEach((v, i) => {
-    const rowEl = document.createElement('div');
-    rowEl.className = 'arow answers';
-    const inp = document.createElement('input');
-    inp.type = 'text'; inp.value = v;
-    inp.oninput = () => { arr[i] = inp.value; softRefresh(); };
-    const del = document.createElement('button');
-    del.className = 'small danger'; del.textContent = '✕';
-    del.onclick = () => { arr.splice(i, 1); set(arr); refreshAll(); };
-    rowEl.append(inp, del);
-    into.appendChild(rowEl);
-  });
-  const add = document.createElement('button');
-  add.className = 'small'; add.textContent = '+ Add';
-  add.onclick = () => { arr.push(blank()); set(arr); refreshAll(); };
-  into.appendChild(add);
+// ------------------------------------------------------------------ refresh
+
+/** @param {{keepPanel?: boolean}} [opts] */
+function refresh(opts = {}) {
+  parsed = parseDoc(docText);
+  caretLn = document.activeElement === doc ? caretLine() : caretLn;
+  caretIx = blockAt(caretLn);
+  const { pack, problems: vproblems } = validated();
+  measure();
+  renderGutter(vproblems);
+  renderOutline(vproblems);
+  renderProblems(vproblems);
+  syncPackCard(pack);
+  if (!opts.keepPanel) renderPanel();
+  restartPreview();
+  save();
+}
+
+/** Caret moved without a text change: retarget the panel and preview. */
+function caretMoved() {
+  const ln = caretLine();
+  if (ln === caretLn) return;
+  caretLn = ln;
+  const ix = blockAt(ln);
+  const lineScoped = parsed.lines[ln]?.kind === 'number' || parsed.lines[ln]?.kind === 'toggle';
+  if (ix !== caretIx || lineScoped) {
+    const changed = ix !== caretIx;
+    caretIx = ix;
+    renderPanel();
+    renderOutline(validated().problems);
+    if (changed) restartPreview();
+  }
 }
 
 // ------------------------------------------------------------------ preview
@@ -470,26 +549,32 @@ let pvGame = createGame([]);
 let pvShowdown = null;
 const emptyRoster = new Map();
 
-/** Rebuild the preview run from the currently selected item. */
+/** Rebuild the preview run from the caret block (first deck question otherwise). */
 function restartPreview() {
   pvShowdown = null;
   pvWorld = createWorld([]);
   const { pack } = validated();
   setTheme(pack.theme);
 
-  if (tab === 'showdown') {
-    const st = model.showdown.statements[selIx.showdown];
-    if (!st || typeof st.answer !== 'boolean') { pvGame = createGame([]); return; }
+  const b = parsed.blocks[caretIx]
+    ?? parsed.blocks.find((x) => x.bucket === 'deck')
+    ?? parsed.blocks[0];
+  if (!b) { pvGame = createGame([]); return; }
+
+  if (b.bucket === 'showdown') {
+    const st = parsed.raw.showdown?.statements[b.ix];
+    pvGame = createGame([]);
+    if (!st || typeof st.answer !== 'boolean') return;
     pvShowdown = createShowdown(
-      { statements: [structuredClone(st)], answerMs: model.showdown.answerMs },
+      { statements: [structuredClone(st)], answerMs: parsed.raw.showdown.answerMs },
       pvWorld,
       []
     );
     return;
   }
 
-  if (tab === 'control') {
-    const src = model.controlRoom.questions[selIx.control];
+  if (b.bucket === 'control') {
+    const src = parsed.raw.controlRoom?.questions[b.ix];
     const vetted = validatePack({ questions: [], controlRoom: { perTeam: 1, questions: src ? [structuredClone(src)] : [] } });
     const cq = vetted.pack.controlRoom?.questions[0];
     pvGame = createGame([]);
@@ -501,10 +586,10 @@ function restartPreview() {
     return;
   }
 
-  const src = model.questions[selIx.deck];
+  const src = parsed.raw.questions[b.ix];
   const vetted = validatePack({ questions: src ? [structuredClone(src)] : [] });
   const q = vetted.pack.questions[0];
-  pvGame = createGame(q ? [q] : [], model.answerMs);
+  pvGame = createGame(q ? [q] : [], parsed.raw.answerMs);
   if (q) startGame(pvGame, pvWorld);
 }
 
@@ -539,38 +624,18 @@ function frame(/** @type {number} */ now) {
 // ------------------------------------------------------------------ IO
 
 function save() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(model)); } catch { /* full/blocked: drafts are a convenience */ }
+  try { localStorage.setItem(DOC_KEY, docText); } catch { /* full/blocked: drafts are a convenience */ }
 }
 
 function loadDraft() {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) { adoptImport(JSON.parse(raw)); return true; }
+    const raw = localStorage.getItem(DOC_KEY);
+    if (raw !== null) return raw;
+    // One-time migration from the form era: the old draft was pack JSON.
+    const old = localStorage.getItem(OLD_DRAFT_KEY);
+    if (old) return serializeDoc(JSON.parse(old));
   } catch { /* unreadable draft: start fresh */ }
-  return false;
-}
-
-/** @param {any} raw imported pack JSON, shaped into the model */
-function adoptImport(raw) {
-  model = {
-    pack: typeof raw?.pack === 'string' ? raw.pack : 'Imported pack',
-    theme: typeof raw?.theme === 'string' ? raw.theme : 'blanc',
-    answerMs: Number.isFinite(raw?.answerMs) ? raw.answerMs : 12000,
-    order: raw?.order === 'suggested' ? 'suggested' : 'authored',
-    questions: Array.isArray(raw?.questions) ? raw.questions : [],
-    controlRoom: {
-      perTeam: Number.isFinite(raw?.controlRoom?.perTeam) ? raw.controlRoom.perTeam : 1,
-      answerMs: Number.isFinite(raw?.controlRoom?.answerMs) ? raw.controlRoom.answerMs : 40000,
-      questions: Array.isArray(raw?.controlRoom?.questions) ? raw.controlRoom.questions : [],
-    },
-    showdown: {
-      answerMs: Number.isFinite(raw?.showdown?.answerMs) ? raw.showdown.answerMs : 6000,
-      statements: Array.isArray(raw?.showdown?.statements) ? raw.showdown.statements : [],
-    },
-  };
-  selIx.deck = model.questions.length ? 0 : -1;
-  selIx.control = model.controlRoom.questions.length ? 0 : -1;
-  selIx.showdown = model.showdown.statements.length ? 0 : -1;
+  return null;
 }
 
 const SAMPLE = {
@@ -584,97 +649,58 @@ const SAMPLE = {
     { type: 'sort', text: 'Sort each animal by class', buckets: ['Mammal', 'Bird'], items: [
       { label: 'Bat', bucket: 0 }, { label: 'Penguin', bucket: 1 }, { label: 'Dolphin', bucket: 0 }] },
   ],
-  controlRoom: { perTeam: 1, answerMs: 40000, questions: [newControlCase()] },
+  controlRoom: {
+    perTeam: 1,
+    answerMs: 40000,
+    questions: [{
+      text: 'New case: set the controls',
+      controls: Array.from({ length: 6 }, (_, i) => ({
+        label: `Control ${i + 1}`, kind: 'toggle', initial: false, answer: i % 2 === 0,
+      })),
+    }],
+  },
   showdown: { answerMs: 6000, statements: [{ text: 'An octopus has three hearts', answer: true }] },
 };
 
 // ------------------------------------------------------------------ wiring
 
-function refreshAll() {
-  $('packName').value = model.pack;
-  $('packAnswerMs').value = String(Math.round(model.answerMs / 1000));
-  $('packOrder').value = model.order;
-  refreshList();
-  refreshEditor();
-  refreshProblems();
-  restartPreview();
-  save();
+doc.addEventListener('input', () => { docText = doc.value; refresh({ keepPanel: false }); });
+doc.addEventListener('scroll', syncScroll);
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement === doc) caretMoved();
+});
+window.addEventListener('resize', () => refresh({ keepPanel: true }));
+
+$('addQ').onclick = () => addBlock('deck');
+$('addC').onclick = () => addBlock('control');
+$('addS').onclick = () => addBlock('showdown');
+function addBlock(/** @type {'deck'|'control'|'showdown'} */ bucket) {
+  const { text, line } = insertTemplate(docText, parsed, bucket);
+  setText(text, { line });
 }
 
-/** Field-level changes: refresh checks + preview, but do NOT rebuild the
- *  form that currently has keyboard focus. */
-function softRefresh() {
-  refreshList();
-  refreshProblems();
-  restartPreview();
-  save();
-}
-
-function setTab(/** @type {'deck'|'control'|'showdown'} */ t) {
-  tab = t;
-  for (const id of ['deck', 'control', 'showdown']) {
-    $(`tab-${id}`).classList.toggle('on', id === t);
-  }
-  refreshAll();
-}
-
-$('tab-deck').onclick = () => setTab('deck');
-$('tab-control').onclick = () => setTab('control');
-$('tab-showdown').onclick = () => setTab('showdown');
-
-$('addQ').onclick = () => {
-  const list = bucketList();
-  list.push(tab === 'deck' ? newDeckQuestion('choice') : tab === 'control' ? newControlCase() : newStatement());
-  selIx[tab] = list.length - 1;
-  refreshAll();
-};
-$('dupQ').onclick = () => {
-  const list = bucketList();
-  const q = list[selIx[tab]];
-  if (!q) return;
-  list.splice(selIx[tab] + 1, 0, structuredClone(q));
-  selIx[tab]++;
-  refreshAll();
-};
-$('delQ').onclick = () => {
-  const list = bucketList();
-  if (selIx[tab] < 0) return;
-  list.splice(selIx[tab], 1);
-  selIx[tab] = Math.min(selIx[tab], list.length - 1);
-  refreshAll();
-};
-$('upQ').onclick = () => moveSel(-1);
-$('downQ').onclick = () => moveSel(1);
-function moveSel(/** @type {number} */ d) {
-  const list = bucketList();
-  const i = selIx[tab];
-  const j = i + d;
-  if (i < 0 || j < 0 || j >= list.length) return;
-  [list[i], list[j]] = [list[j], list[i]];
-  selIx[tab] = j;
-  refreshAll();
-}
-
-$('packName').oninput = () => { model.pack = $('packName').value; softRefresh(); };
+$('packName').oninput = () => setText(setDirective(docText, null, 'pack', $('packName').value), { keepPanel: true });
 $('packAnswerMs').oninput = () => {
   const v = Number($('packAnswerMs').value);
-  if (Number.isFinite(v)) { model.answerMs = Math.round(v * 1000); softRefresh(); }
+  if (Number.isFinite(v) && v > 0) setText(setDirective(docText, null, 'time', `${v}s`), { keepPanel: true });
 };
-$('packOrder').onchange = () => { model.order = $('packOrder').value; softRefresh(); };
-
+$('packOrder').onchange = () => {
+  setText(setDirective(docText, null, 'order', $('packOrder').value === 'suggested' ? 'suggested' : null), { keepPanel: true });
+};
 const themeSel = $('packTheme');
 for (const t of PACK_THEMES) {
   const o = document.createElement('option');
-  o.value = t; o.textContent = t;
+  o.value = t;
+  o.textContent = t;
   themeSel.appendChild(o);
 }
-themeSel.onchange = () => { model.theme = themeSel.value; softRefresh(); };
+themeSel.onchange = () => setText(setDirective(docText, null, 'theme', themeSel.value), { keepPanel: true });
 
 $('download').onclick = () => {
   const blob = new Blob([JSON.stringify(exportable(), null, 2) + '\n'], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const safe = model.pack.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pack';
+  const safe = String(parsed.raw.pack).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pack';
   a.download = `${safe}.json`;
   a.click();
 };
@@ -690,7 +716,7 @@ $('openFile').onclick = () => {
   inp.onchange = async () => {
     const f = inp.files?.[0];
     if (!f) return;
-    try { adoptImport(JSON.parse(await f.text())); refreshAll(); } catch { alert('Not valid JSON'); }
+    try { setText(serializeDoc(JSON.parse(await f.text())), { caret: 0 }); } catch { alert('Not valid JSON'); }
   };
   inp.click();
 };
@@ -698,16 +724,16 @@ $('pasteJson').onclick = () => $('pasteDlg').showModal();
 $('pasteCancel').onclick = () => $('pasteDlg').close();
 $('pasteGo').onclick = () => {
   try {
-    adoptImport(JSON.parse($('pasteBox').value));
+    const next = serializeDoc(JSON.parse($('pasteBox').value));
     $('pasteDlg').close();
-    refreshAll();
+    setText(next, { caret: 0 });
   } catch { alert('Not valid JSON'); }
 };
-$('loadSample').onclick = () => { adoptImport(structuredClone(SAMPLE)); refreshAll(); };
+$('loadSample').onclick = () => setText(serializeDoc(SAMPLE), { caret: 0 });
 $('replay').onclick = () => restartPreview();
 
 // boot
-themeSel.value = model.theme;
-if (!loadDraft()) adoptImport(structuredClone(SAMPLE));
-refreshAll();
+doc.value = loadDraft() ?? serializeDoc(SAMPLE);
+docText = doc.value;
+refresh();
 requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });
