@@ -11,7 +11,6 @@
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { COHORTS, TEAM_COLORS, clampCohort } from '../../shared/palette.js';
-import { drawBean } from '../../shared/avatar.js';
 import { RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, isSortQuestion, sortItemMs, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
@@ -192,7 +191,7 @@ function drawMenu(cx, menu, playerCount) {
   const actions = menu.items.filter((it) => it === 'quiz' || it === 'control' || it === 'showdown');
   const packH = 104;
   const rowH = 58;
-  const stripH = 88;
+  const stripH = 56;
   const btnH = 68;
   const h = pad + packH + 2 * rowH + 22 + stripH + 24 + actions.length * (btnH + 12) + pad - 12;
   // Lighter veil than the round furniture: the lobby is where the breathing
@@ -272,20 +271,15 @@ function drawMenu(cx, menu, playerCount) {
   cx.lineTo(x0 + w - 24, y - 8);
   cx.stroke();
   const colW = (w - pad * 2) / 3;
-  const feet = y + stripH - 26;
+  const baseline = y + stripH / 2 + 12;
   for (let c = 0; c < 3; c++) {
-    const cxp = x0 + pad + colW * c + 10;
-    const bh = [30, 38, 52][c];
-    cx.save();
-    cx.translate(cxp, feet - bh);
-    drawBean(cx, TEAM_COLORS[c], 'flat', 27, bh, COHORTS[c].shape, true, 'none');
-    cx.restore();
-    cx.font = `800 26px ${FONT.display}`;
-    cx.fillStyle = counts[c] ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.3)';
-    cx.fillText(`×${counts[c]}`, cxp + 38, feet - 6);
-    cx.font = `700 14px ${FONT.ui}`;
+    const cxp = x0 + pad + colW * c + 6;
+    cx.font = `800 24px ${FONT.display}`;
     cx.fillStyle = counts[c] ? TEAM_COLORS[c] : 'rgba(255,255,255,0.3)';
-    cx.fillText(COHORTS[c].label, cxp + 1, feet + 18);
+    cx.fillText(COHORTS[c].label, cxp, baseline);
+    cx.font = `800 24px ${FONT.display}`;
+    cx.fillStyle = counts[c] ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.3)';
+    cx.fillText(`×${counts[c]}`, cxp + 74, baseline);
   }
   y += stripH + 24;
 
