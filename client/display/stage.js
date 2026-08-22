@@ -290,7 +290,15 @@ export function drawSignText(cx, p, text, opts = {}) {
     cx.fillStyle = activeWay().text;
     if (state === 'wrong') cx.globalAlpha = 0.55;
   } else if (themeName() === 'glass') {
-    cx.fillStyle = state === 'wrong' ? glassFam().textDim : glassFam().text;
+    if (state === 'correct') {
+      // The verdict GLOWS: full-white lettering with a white halo, on every
+      // family — the win moment trades the etched-ink look for light.
+      cx.fillStyle = 'rgba(255,255,255,0.98)';
+      cx.shadowColor = 'rgba(255,255,255,0.9)';
+      cx.shadowBlur = 18;
+    } else {
+      cx.fillStyle = state === 'wrong' ? glassFam().textDim : glassFam().text;
+    }
   } else {
     cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
   }
