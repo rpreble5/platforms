@@ -87,6 +87,8 @@ export const ACCESSORIES = [
   { key: 'tophat', label: 'Top hat' },
   { key: 'cowboy', label: 'Cowboy' },
   { key: 'beanie', label: 'Beanie' },
+  { key: 'halo', label: 'Halo' },
+  { key: 'catears', label: 'Cat ears' },
 ];
 
 /** @param {number} i @returns {number} */
@@ -95,15 +97,21 @@ export function clampAccessory(i) {
 }
 
 /**
- * Finishes: the same hue rendered two ways. `flat` is the saturated colour
- * with a bold ink outline; `pastel` is the colour washed toward white with a
- * deep same-hue outline and a blush. Both read on every stage theme, and
- * players simply pick which they like — a pure preference, never overridden,
- * because the colour alone carries uniqueness.
+ * Finishes: the same hue rendered different ways. `flat` is the saturated
+ * colour with a bold ink outline; `pastel` is the colour washed toward white
+ * with a deep same-hue outline and a blush; `ghost` is near-white porcelain
+ * with the identity moved into a thick same-hue outline; `dipped` is flat
+ * with the bottom third dunked in a deeper shade; `glow` is flat with a soft
+ * same-colour aura. All read on every stage theme, and players simply pick
+ * which they like — a pure preference, never overridden, because the colour
+ * alone carries uniqueness.
  */
 export const FINISHES = [
   { key: 'flat', label: 'Flat' },
   { key: 'pastel', label: 'Pastel' },
+  { key: 'ghost', label: 'Ghost' },
+  { key: 'dipped', label: 'Dipped' },
+  { key: 'glow', label: 'Glow' },
 ];
 
 /** Free slots per colour within one year: a colour is claimed whole. */

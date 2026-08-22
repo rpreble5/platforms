@@ -23,6 +23,7 @@ import { WebSocket } from 'ws';
 import { createHandler } from '../server/http.js';
 import { Relay } from '../server/relay.js';
 import { BTN_JUMP, BTN_RIGHT, T_INPUT, encodeInput, encodeJson, t16 } from '../shared/protocol.js';
+import { ACCESSORIES, FINISHES } from '../shared/palette.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shots = process.argv.includes('--shots');
@@ -267,10 +268,10 @@ await phonePage.locator('#go').click(); // -> extra
 await phonePage.locator(`.ac[data-i="${ACC}"]`).click();
 await phonePage.locator('#go').click(); // -> style
 
-// The finish step offers exactly the two renderings.
+// The finish step offers every rendering in the palette.
 assert(
-  (await phonePage.locator('#finishes .fin').count()) === 2,
-  'the style step offers flat and pastel'
+  (await phonePage.locator('#finishes .fin').count()) === FINISHES.length,
+  'the style step offers every finish'
 );
 await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
 
@@ -358,8 +359,8 @@ if (crowd > 0) {
       encodeJson({
         type: 'SET_LOOK',
         cohortIndex: i % 3,
-        finishIndex: i % 2,
-        accessoryIndex: i % 14,
+        finishIndex: i % FINISHES.length,
+        accessoryIndex: i % ACCESSORIES.length,
         colorIndex: i % 12,
       })
     );

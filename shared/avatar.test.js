@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AVATAR_INK, EYES, accessoryHidesEyes, avatarBodyPath, drawAccessory, drawBean, shade } from './avatar.js';
-import { ACCESSORIES } from './palette.js';
+import { ACCESSORIES, FINISHES } from './palette.js';
 
 /** A recording stub for CanvasRenderingContext2D — calls and style sets. */
 function stubCtx() {
@@ -39,7 +39,7 @@ function stubCtx() {
 
 test('drawBean runs without any DOM, for every shape and finish', () => {
   for (const shape of ['egg', 'pill', 'loaf']) {
-    for (const finish of ['flat', 'pastel']) {
+    for (const { key: finish } of FINISHES) {
       const cx = stubCtx();
       drawBean(cx, '#2fc98d', finish, 40, 56, shape);
       assert.ok(cx.calls.includes('fill'), `${shape}/${finish} fills`);
@@ -49,12 +49,25 @@ test('drawBean runs without any DOM, for every shape and finish', () => {
   }
 });
 
-test('the two finishes are genuinely different renderings', () => {
+test('every finish is a genuinely different rendering', () => {
+  // Signature = the full ordered trace of calls and stroke styles; if two
+  // finishes produce identical traces, one of them is dead weight.
+  const sig = (/** @type {string} */ finish) => {
+    const cx = stubCtx();
+    drawBean(cx, '#2fc98d', finish, 40, 56, 'pill');
+    return JSON.stringify([cx.calls, cx.strokes]);
+  };
+  const seen = new Map();
+  for (const { key } of FINISHES) {
+    const s = sig(key);
+    assert.ok(!seen.has(s), `${key} renders identically to ${seen.get(s)}`);
+    seen.set(s, key);
+  }
+
   const flat = stubCtx();
   drawBean(flat, '#2fc98d', 'flat', 40, 56, 'pill');
   const pastel = stubCtx();
   drawBean(pastel, '#2fc98d', 'pastel', 40, 56, 'pill');
-
   assert.equal(flat.strokes[0], AVATAR_INK, 'flat outlines in theme ink');
   assert.notEqual(pastel.strokes[0], AVATAR_INK, 'pastel outlines in its own deep hue');
   assert.ok(pastel.calls.includes('clip'), 'pastel has the grounding shade');
@@ -63,6 +76,18 @@ test('the two finishes are genuinely different renderings', () => {
     pastel.calls.filter((/** @type {string} */ c) => c === 'ellipse').length >= 3,
     'pastel draws the blush'
   );
+
+  const ghost = stubCtx();
+  drawBean(ghost, '#2fc98d', 'ghost', 40, 56, 'pill');
+  assert.notEqual(ghost.strokes[0], AVATAR_INK, 'ghost carries identity in its outline');
+  const dipped = stubCtx();
+  drawBean(dipped, '#2fc98d', 'dipped', 40, 56, 'pill');
+  assert.ok(dipped.calls.includes('clip'), 'dipped clips the dunk band inside the body');
+  assert.ok(dipped.calls.includes('fillRect'), 'dipped paints a hard band');
+  const glow = stubCtx();
+  drawBean(glow, '#2fc98d', 'glow', 40, 56, 'pill');
+  assert.ok(glow.calls.includes('set:shadowBlur'), 'glow bakes an aura');
+  assert.ok(glow.calls.includes('restore'), 'glow cleans its shadow state up');
 });
 
 test('eyes can be omitted for callers that draw them live', () => {

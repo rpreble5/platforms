@@ -101,8 +101,11 @@ export function accessoryHidesEyes(key) {
  *
  * @param {CanvasRenderingContext2D} cx
  * @param {string} color the palette hex
- * @param {string} finish 'flat' (saturated hue, ink outline) or 'pastel'
- *   (hue washed toward white, deep same-hue outline, blush)
+ * @param {string} finish a key from palette FINISHES: 'flat' (saturated hue,
+ *   ink outline), 'pastel' (hue washed toward white, deep same-hue outline,
+ *   blush), 'ghost' (porcelain body, identity in a thick same-hue outline),
+ *   'dipped' (flat with the base dunked in a deeper shade), 'glow' (flat
+ *   with a soft same-colour aura)
  * @param {number} w @param {number} h
  * @param {string} shape 'egg' | 'pill' | 'loaf'
  * @param {boolean} [eyes] false when the caller draws live eyes itself
@@ -110,14 +113,26 @@ export function accessoryHidesEyes(key) {
  */
 export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory = 'none') {
   const pastel = finish === 'pastel';
+  const ghost = finish === 'ghost';
 
-  // Body fill: flat keeps the hue nearly full strength; pastel washes it.
-  // Both are FLAT fills — no gloss gradient; that belonged to a different
-  // game than the terrazzo stage.
+  // Body fill: flat keeps the hue nearly full strength; pastel washes it;
+  // ghost bleaches it almost to porcelain. All FLAT fills — no gloss
+  // gradient; that belonged to a different game than the terrazzo stage.
   cx.beginPath();
   avatarBodyPath(cx, w, h, shape);
-  cx.fillStyle = shade(color, pastel ? 0.45 : 0.12);
-  cx.fill();
+  if (finish === 'glow') {
+    // The aura: a same-colour shadow baked into the sprite. The cache's
+    // 18px pad absorbs the spread.
+    cx.save();
+    cx.shadowColor = color;
+    cx.shadowBlur = 10;
+    cx.fillStyle = shade(color, 0.12);
+    cx.fill();
+    cx.restore();
+  } else {
+    cx.fillStyle = shade(color, ghost ? 0.78 : pastel ? 0.45 : 0.12);
+    cx.fill();
+  }
 
   if (pastel) {
     // Grounding: a soft same-hue shade pooled at the base, inside the line.
@@ -133,12 +148,25 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
     cx.restore();
   }
 
+  if (finish === 'dipped') {
+    // The dunk: a hard band of the deeper shade across the base, inside the
+    // outline — same clip technique as the pastel grounding, no soft edge.
+    cx.save();
+    cx.beginPath();
+    avatarBodyPath(cx, w, h, shape);
+    cx.clip();
+    cx.fillStyle = shade(color, -0.32);
+    cx.fillRect(0, h * 0.66, w, h * 0.34);
+    cx.restore();
+  }
+
   // One confident outline: theme ink on flat, a deep tone of the body's own
-  // hue on pastel — never a gray-black.
+  // hue on pastel — never a gray-black. Ghost inverts the deal: the outline
+  // IS the colour, thick enough to carry identity on its own.
   cx.beginPath();
   avatarBodyPath(cx, w, h, shape);
-  cx.lineWidth = 3;
-  cx.strokeStyle = pastel ? shade(color, -0.45) : AVATAR_INK;
+  cx.lineWidth = ghost ? 4 : 3;
+  cx.strokeStyle = ghost ? shade(color, -0.1) : pastel ? shade(color, -0.45) : AVATAR_INK;
   cx.stroke();
 
   if (pastel) {
@@ -470,5 +498,44 @@ const ACCESSORY_PAINTERS = {
     g.arc(cx, y0 - w * 0.26, w * 0.07, 0, Math.PI * 2);
     g.fill();
     g.stroke();
+  },
+
+  halo(g, w, h) {
+    // A floating ring: ink edging first, gold over it, and a visible gap of
+    // air between ring and crown — the gap is what reads at distance.
+    const cx = w * 0.5, cy = -w * 0.28;
+    g.strokeStyle = AVATAR_INK;
+    g.lineWidth = 6;
+    g.beginPath();
+    g.ellipse(cx, cy, w * 0.24, w * 0.085, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.strokeStyle = '#ffd93d';
+    g.lineWidth = 3.4;
+    g.beginPath();
+    g.ellipse(cx, cy, w * 0.24, w * 0.085, 0, 0, Math.PI * 2);
+    g.stroke();
+  },
+
+  catears(g, w, h) {
+    g.lineWidth = 2.2;
+    g.strokeStyle = AVATAR_INK;
+    for (const d of [-1, 1]) {
+      const bx = w * (0.5 + d * 0.24);
+      g.fillStyle = '#5a5266';
+      g.beginPath();
+      g.moveTo(bx - d * w * 0.15, h * 0.03);
+      g.lineTo(bx + d * w * 0.09, -w * 0.24);
+      g.lineTo(bx + d * w * 0.14, h * 0.06);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#f7b8c8';
+      g.beginPath();
+      g.moveTo(bx - d * w * 0.06, h * 0.025);
+      g.lineTo(bx + d * w * 0.075, -w * 0.15);
+      g.lineTo(bx + d * w * 0.1, h * 0.04);
+      g.closePath();
+      g.fill();
+    }
   },
 };

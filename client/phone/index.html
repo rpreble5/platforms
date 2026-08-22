@@ -819,10 +819,28 @@
    * the saturated flat and the washed pastel, the same two renderings the
    * display draws.
    */
+  // Each tile depicts its finish in the player's own colour: pastel washed,
+  // ghost near-white with the colour moved into the ink, dipped split at the
+  // waterline, glow haloed. shade() comes from the inlined avatar renderer.
   function paintFinishes(hex) {
     for (var i = 0; i < elFins.children.length; i++) {
       var el = elFins.children[i];
-      el.style.background = FINISHES[i].key === 'pastel' ? pastelOf(hex) : hex;
+      var key = FINISHES[i].key;
+      el.style.background = hex;
+      el.style.color = '';
+      el.style.textShadow = '';
+      el.style.boxShadow = '';
+      if (key === 'pastel') {
+        el.style.background = pastelOf(hex);
+      } else if (key === 'ghost') {
+        el.style.background = shade(hex, 0.78);
+        el.style.color = shade(hex, -0.35);
+        el.style.textShadow = 'none';
+      } else if (key === 'dipped') {
+        el.style.background = 'linear-gradient(180deg, ' + hex + ' 62%, ' + shade(hex, -0.32) + ' 62%)';
+      } else if (key === 'glow') {
+        el.style.boxShadow = '0 0 16px ' + hex;
+      }
       el.classList.toggle('sel', i === pickedFinish);
     }
   }

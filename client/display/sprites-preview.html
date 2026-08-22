@@ -53,7 +53,7 @@
 // Absolute paths: this page is served at /sprites, so anything relative would
 // resolve against that rather than against the file's own directory.
 import { getAvatar } from '/client/display/sprites.js';
-import { COHORTS, COLORS, FINISHES } from '/shared/palette.js';
+import { ACCESSORIES, COHORTS, COLORS, FINISHES } from '/shared/palette.js';
 
 const PLAYER_W = 40;
 const PLAYER_H = 56;
@@ -65,6 +65,48 @@ const SCALES = [
 ];
 
 const out = document.getElementById('out');
+
+// Accessory gallery first: every accessory on a pill at the three real
+// sizes — the 30-player column is the one that decides if a silhouette
+// earns its place.
+{
+  const section = document.createElement('section');
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Accessories — every key on a jade pill';
+  section.appendChild(h2);
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  for (const acc of ACCESSORIES) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = acc.label;
+    card.appendChild(name);
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const { s } of SCALES) {
+      const w = Math.round(PLAYER_W * s);
+      const h = Math.round(PLAYER_H * s);
+      const sprite = getAvatar('#2fc98d', 'flat', w, h, 'pill', true, acc.key);
+      const holder = document.createElement('div');
+      const cv = document.createElement('canvas');
+      cv.width = sprite.width;
+      cv.height = sprite.height;
+      cv.getContext('2d').drawImage(sprite, 0, 0);
+      holder.appendChild(cv);
+      const cap = document.createElement('div');
+      cap.className = 'sizes';
+      cap.textContent = `${w}×${h}`;
+      holder.appendChild(cap);
+      row.appendChild(holder);
+    }
+    card.appendChild(row);
+    grid.appendChild(card);
+  }
+  section.appendChild(grid);
+  out.appendChild(section);
+}
 
 COHORTS.forEach((cohort) => {
   const section = document.createElement('section');
