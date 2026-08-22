@@ -503,7 +503,10 @@ export function startGame(g, world) {
     g.baseQuestions,
     g.controlPool,
     g.activeTeams,
-    g.controlPerTeam,
+    // The mode × type matrix, enforced at the source: Control Room is a
+    // TEAMS bucket. A free-for-all game never schedules its turns, no
+    // matter what the caller configured.
+    g.controlOnly || g.mode === 'teams' ? g.controlPerTeam : 0,
     g.controlOnly,
     g.controlStartOffset
   );

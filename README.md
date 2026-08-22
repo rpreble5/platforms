@@ -61,8 +61,39 @@ Questions live in `questions/*.json` — every file there is a selectable pack
 in the lobby menu (name it with a top-level `"pack"` field). Packs are re-read
 on every selection, so editing one and re-picking it is the whole edit loop.
 The lobby is a live arena: players join, run and warm up underneath the menu
-while the host picks a pack and answer time. Three kinds of question share a
-deck:
+while the host picks a pack and answer time.
+
+### Designing a night: the mode × type matrix
+
+A pack has three buckets, and each bucket belongs to specific modes. When you
+write a question, this table says where it can live — the loader enforces it
+(content in the wrong bucket is skipped with a console note, never mangled):
+
+| question type            | free-for-all | teams | Control Room | showdown |
+|--------------------------|:---:|:---:|:---:|:---:|
+| choice (single answer)   | ✓ | ✓ | – | – |
+| choice, select-all       | ✓ any correct scores | ✓ + team cover bonus | – | – |
+| range (number line)      | ✓ | ✓ | – | – |
+| lightning sort           | ✓ | ✓ | – | – |
+| `image` on any of the above | ✓ | ✓ | – | – |
+| control case             | – | ✓ turns between questions | ✓ | – |
+| true/false statement     | – | – | – | ✓ |
+
+- The **`questions` array** is the standard deck — it plays in BOTH
+  free-for-all and teams mode. Everything above the line lives here.
+- The **`controlRoom` block** is the teams bucket: cases play as team turns
+  interleaved through a teams-mode quiz, or as the standalone Control Room
+  mode. A free-for-all game never schedules them (enforced in the sim).
+- The **`showdown` block** is the finale mode: true/false statements,
+  no points, last one standing. Started separately from the lobby.
+
+Deck order is yours by default (`"order": "authored"` — plays as listed).
+Opt into the house program with a top-level `"order": "suggested"`: warmup
+single-choice first, then ranges, then select-alls, then picture questions,
+and lightning sorts as the finale — your relative order is kept within each
+group, and team turns still spread across the arranged deck.
+
+Three kinds of question share the standard deck:
 
 ```jsonc
 // Multiple choice (2-5 answers): get onto the platform with the right answer.

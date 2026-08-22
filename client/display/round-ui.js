@@ -184,7 +184,7 @@ function drawMenu(cx, menu, playerCount) {
   const activeTeams = counts.filter((n) => n > 0).length;
   const controlReady = activeTeams >= 1 && (menu.controlCases ?? 0) >= activeTeams;
   const controlReason = !activeTeams
-    ? 'needs a committed team'
+    ? 'teams only — needs at least one committed PGY year'
     : `needs ${activeTeams} case${activeTeams === 1 ? '' : 's'} · pack has ${menu.controlCases ?? 0}`;
 
   const actions = menu.items.filter((it) => it === 'quiz' || it === 'control' || it === 'showdown');
@@ -227,12 +227,15 @@ function drawMenu(cx, menu, playerCount) {
     cx.textAlign = 'left';
   }
   if (pack) {
+    // The bucket labels say their mode out loud: Control Room is a teams
+    // bucket, and a free-for-all game will simply not play it.
     const bits = [`${pack.questions} questions`];
-    if (pack.controlRoom) bits.push('control room');
+    if (pack.controlRoom) bits.push('control room (teams)');
     if (pack.showdown) bits.push('showdown');
-    cx.font = `600 20px ${FONT.ui}`;
+    const bitsLine = bits.join('  ·  ');
+    cx.font = fitFont(cx, bitsLine, w - pad * 2, 20, 13);
     cx.fillStyle = 'rgba(255,255,255,0.55)';
-    cx.fillText(bits.join('  ·  '), x0 + pad, y + 92);
+    cx.fillText(bitsLine, x0 + pad, y + 92);
   }
   y += packH;
 
@@ -292,10 +295,16 @@ function drawMenu(cx, menu, playerCount) {
     const selected = sel === item;
     const disabled = item === 'control' && !controlReady;
     const label = item === 'quiz' ? 'Start quiz' : item === 'control' ? 'Start Control Room' : 'Start showdown';
+    // Each button states what its mode will actually play, so the bucket
+    // rules are visible before anyone presses anything.
     const sub =
       item === 'control'
         ? disabled ? controlReason : 'teams take turns'
-        : item === 'showdown' ? 'no points · last one standing' : '';
+        : item === 'showdown'
+          ? 'no points · last one standing'
+          : menu.mode === 'teams'
+            ? (menu.controlCases ?? 0) > 0 ? 'teams · Control Room turns between questions' : 'teams by PGY year'
+            : 'free-for-all';
 
     cx.save();
     cx.beginPath();

@@ -166,3 +166,19 @@ test('pack control labels get the same length cap as the fixtures', async () => 
     `label capped (${g.controlArena.controls[0].label.length} chars)`
   );
 });
+
+test('free-for-all never schedules Control Room turns — teams bucket only', () => {
+  const standard = [{ text: 'plain', answers: ['a', 'b'], correct: 0 }];
+  for (const mode of /** @type {const} */ (['solo', 'teams'])) {
+    const g = createGame([]);
+    g.mode = mode;
+    g.baseQuestions = standard.slice();
+    g.activeTeams = [0, 1]; // committed cohorts exist either way
+    configureControlRounds(g, { questions: [controlQuestion('A'), controlQuestion('B')], perTeam: 1 });
+    const world = createWorld([]);
+    startGame(g, world);
+    const turns = g.questions.filter((q) => q.type === 'control').length;
+    if (mode === 'solo') assert.equal(turns, 0, 'solo game plays the standard deck only');
+    else assert.equal(turns, 2, 'teams game interleaves its turns');
+  }
+});

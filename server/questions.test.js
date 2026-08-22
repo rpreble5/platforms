@@ -206,3 +206,68 @@ test('a missing image file is dropped with a note, question kept', () => {
   assert.equal(pack.questions.length, 1);
   assert.equal(pack.questions[0].image, undefined);
 });
+
+// ------------------------------------------------- bucket boundaries + order
+
+/** @param {any[]} questions @param {any} [extra] top-level pack extras */
+function rootWithDeck(questions, extra = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bucket-pack-'));
+  fs.mkdirSync(path.join(root, 'questions'));
+  fs.writeFileSync(
+    path.join(root, 'questions', 'test.json'),
+    JSON.stringify({ pack: 'Buckets', questions, ...extra })
+  );
+  return root;
+}
+
+test('mode-specific content is turned away from the standard deck by name', () => {
+  const pack = loadQuestions(rootWithDeck([
+    { text: 'plain', answers: ['a', 'b'], correct: 0 },
+    { type: 'control', text: 'case', controls: [] },          // controlRoom bucket
+    { text: 'An octopus has three hearts', answer: true },    // showdown bucket
+  ]), 'test.json');
+  assert.equal(pack.questions.length, 1, 'only the standard question survives');
+  assert.equal(pack.questions[0].text, 'plain');
+});
+
+test('pictures are stripped from control cases and showdown statements', () => {
+  const packRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bucket-pack-'));
+  fs.mkdirSync(path.join(packRoot, 'questions'));
+  fs.writeFileSync(path.join(packRoot, 'questions', 'test.json'), JSON.stringify({
+    pack: 'Buckets',
+    questions: [{ text: 'plain', answers: ['a', 'b'], correct: 0 }],
+    controlRoom: { perTeam: 1, questions: [{
+      text: 'case', image: 'x.png',
+      controls: Array.from({ length: 6 }, (_, i) => ({ label: `c${i}`, kind: 'toggle', initial: false, answer: true })),
+    }] },
+    showdown: { statements: [{ text: 'true thing', answer: true, image: 'y.png' }] },
+  }));
+  const pack = loadQuestions(packRoot, 'test.json');
+  assert.equal(pack.controlRoom?.questions[0].image, undefined);
+  assert.equal(pack.showdown?.statements[0].image, undefined);
+});
+
+test('order "suggested" arranges the house program, stable within groups', () => {
+  const deck = [
+    { type: 'sort', text: 's1', buckets: ['A', 'B'], items: [{ label: 'x', bucket: 0 }, { label: 'y', bucket: 1 }] },
+    { text: 'multi', answers: ['a', 'b', 'c'], correct: [0, 1] },
+    { text: 'warm1', answers: ['a', 'b'], correct: 0 },
+    { type: 'range', text: 'r1', min: 0, max: 10, answer: [2, 4] },
+    { text: 'warm2', answers: ['a', 'b'], correct: 1 },
+  ];
+  const pack = loadQuestions(rootWithDeck(deck, { order: 'suggested' }), 'test.json');
+  assert.deepEqual(
+    pack.questions.map((/** @type {any} */ q) => q.text),
+    ['warm1', 'warm2', 'r1', 'multi', 's1'],
+    'singles, then ranges, then select-alls, sorts last — authored order inside each group'
+  );
+});
+
+test('an unknown order value plays as authored', () => {
+  const deck = [
+    { type: 'range', text: 'r1', min: 0, max: 10, answer: [2, 4] },
+    { text: 'warm', answers: ['a', 'b'], correct: 0 },
+  ];
+  const pack = loadQuestions(rootWithDeck(deck, { order: 'shuffled' }), 'test.json');
+  assert.deepEqual(pack.questions.map((/** @type {any} */ q) => q.text), ['r1', 'warm']);
+});

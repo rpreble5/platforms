@@ -378,6 +378,19 @@ export function loadQuestions(root, packFile = 'default.json') {
 
   const questions = (pack.questions ?? []).filter((/** @type {any} */ q, /** @type {number} */ i) => {
     const where = `Q${i + 1}`;
+
+    // Bucket boundaries are hard: the standard deck plays in free-for-all
+    // AND teams, so content belonging to a mode-specific bucket is turned
+    // away by name — not mangled by the choice validator's error messages.
+    if (q?.type === 'control' || Array.isArray(q?.controls)) {
+      problems.push(`${where}: control questions live in the "controlRoom" block (teams only) — skipped`);
+      return false;
+    }
+    if (typeof q?.answer === 'boolean' && q?.answers === undefined) {
+      problems.push(`${where}: true/false statements live in the "showdown" block — skipped`);
+      return false;
+    }
+
     if (q && typeof q === 'object') vetImage(q, where);
 
     if (q?.type === 'range') {
@@ -548,6 +561,10 @@ export function loadQuestions(root, packFile = 'default.json') {
             }
           }
         }
+        if (q.image !== undefined) {
+          problems.push(`${where}: pictures are a standard-deck feature — image ignored`);
+          delete q.image;
+        }
         q.type = 'control';
         // Same clamp as the block-level window: a stray 500ms (or negative)
         // per-question value would end a team's whole turn unplayed.
@@ -579,6 +596,10 @@ export function loadQuestions(root, packFile = 'default.json') {
           return false;
         }
         if (st.text.length > 110) problems.push(`showdown #${i + 1}: ${st.text.length} chars (>110 is hard to read fast)`);
+        if (st.image !== undefined) {
+          problems.push(`showdown #${i + 1}: pictures are a standard-deck feature — image ignored`);
+          delete st.image;
+        }
         return true;
       });
     if (statements.length) {
@@ -595,6 +616,15 @@ export function loadQuestions(root, packFile = 'default.json') {
     else problems.push(`theme "${pack.theme}" is unknown — using glass`);
   }
 
+  // Deck order: authors either own it ("authored", the default — the deck
+  // plays exactly as listed) or opt into the house program with
+  // "order": "suggested".
+  let deck = questions;
+  if (pack.order !== undefined && pack.order !== 'authored') {
+    if (pack.order === 'suggested') deck = suggestOrder(questions);
+    else problems.push(`order "${pack.order}" is unknown — playing as authored`);
+  }
+
   if (problems.length) {
     console.log(`\n  \x1b[33m!\x1b[0m  questions/${path.basename(packFile)}:`);
     for (const m of problems) console.log(`       ${m}`);
@@ -606,8 +636,27 @@ export function loadQuestions(root, packFile = 'default.json') {
     file: path.basename(packFile),
     answerMs: pack.answerMs ?? 12000,
     theme,
-    questions,
+    questions: deck,
     showdown,
     controlRoom,
   };
+}
+
+/**
+ * The house program, for packs that say `"order": "suggested"`: warmup
+ * single-choice first, then ranges, then select-alls, then the picture
+ * questions, and lightning sorts as the finale. STABLE within each group —
+ * the author's relative order survives, only the grouping is imposed.
+ * Control turns interleave after this (buildQuestionSchedule), so team
+ * intermissions still spread across the arranged program.
+ * @param {any[]} questions
+ * @returns {any[]}
+ */
+export function suggestOrder(questions) {
+  const group = (/** @type {any} */ q) =>
+    q.type === 'sort' ? 4 : q.image ? 3 : Array.isArray(q.correct) ? 2 : q.type === 'range' ? 1 : 0;
+  return questions
+    .map((q, i) => ({ q, i }))
+    .sort((a, b) => group(a.q) - group(b.q) || a.i - b.i)
+    .map((e) => e.q);
 }
