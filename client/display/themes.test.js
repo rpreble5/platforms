@@ -46,13 +46,25 @@ test('unknown themes fall back to glass, the default', () => {
   assert.equal(themeName(), 'glass');
 });
 
-test('four-colour glass aliases select their family and ordinary glass resets to blanc', () => {
-  for (const family of ['aurora', 'berry', 'ocean']) {
+test('every glass family name is a theme alias and ordinary glass resets to blanc', () => {
+  for (const family of Object.keys(GLASS_FAMILIES)) {
+    if (family === 'dusk') continue; // dusk names the night THEME, not an alias
     setTheme(family);
-    assert.equal(themeName(), 'glass');
+    assert.equal(themeName(), 'glass', family);
     assert.equal(glassFam().key, family);
-    assert.equal(GLASS_FAMILIES[family].blobs.length, 4);
   }
   setTheme('glass');
   assert.equal(glassFam().key, 'blanc', 'blanc is the resting family');
+});
+
+test('palette families bound their hue drift; rainbow families leave it open', () => {
+  for (const key of ['sorbet', 'lagoon', 'highlighter', 'duotone']) {
+    const f = GLASS_FAMILIES[key];
+    assert.ok(f, key);
+    const drift = f.hueDrift ?? 0;
+    assert.ok(drift > 0 && drift < 180, `${key} holds its palette in a band`);
+    assert.ok(f.light, `${key} is a light family (ink text)`);
+  }
+  assert.equal(GLASS_FAMILIES.blanc.hueDrift, undefined, 'blanc rides the full rainbow');
+  assert.equal(GLASS_FAMILIES.noir.hueDrift, undefined, 'noir rides the full rainbow');
 });

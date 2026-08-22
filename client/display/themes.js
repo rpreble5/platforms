@@ -90,6 +90,9 @@ const CHIPS = [
  * @property {string} floorEdge
  * @property {boolean} [light] a light field: ink-side text everywhere the
  *   dark families use paper, and more veil/body on the glass
+ * @property {number} [hueDrift] degrees of bounded hue swing while the sky
+ *   breathes. Omit for the full rainbow lap; set it and the blooms
+ *   transition only inside that band, so the palette keeps its identity.
  */
 
 /** @type {Record<string, GlassFamily>} */
@@ -223,6 +226,88 @@ export const GLASS_FAMILIES = {
     floorTop: '#3c3c46',
     floorEdge: 'rgba(255,255,255,0.35)',
   },
+  // ---- the palette families: blanc's white field and bloom layout with a
+  // designed palette, and hueDrift so the colours transition WITHIN the
+  // palette instead of lapping the whole spectrum. Same glass/floor/ink as
+  // blanc throughout.
+  sorbet: {
+    key: 'sorbet',
+    light: true,
+    hueDrift: 32,
+    stops: ['#fdfdfe', '#f7f6f9', '#eef0f4'],
+    blobs: [
+      { x: 0.0, y: 0.46, r: 0.38, c: 'rgba(255,110,95,0.30)' },
+      { x: 0.04, y: 0.78, r: 0.4, c: 'rgba(255,160,110,0.30)' },
+      { x: 0.98, y: 0.52, r: 0.46, c: 'rgba(255,105,150,0.30)' },
+      { x: 0.48, y: 1.06, r: 0.52, c: 'rgba(255,200,70,0.30)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.5)',
+    glassRim: 'rgba(255,255,255,0.95)',
+    text: 'rgba(38,36,48,0.95)',
+    textDim: 'rgba(38,36,48,0.45)',
+    floorBody: '#2c2c34',
+    floorTop: '#3c3c46',
+    floorEdge: 'rgba(255,255,255,0.35)',
+  },
+  lagoon: {
+    key: 'lagoon',
+    light: true,
+    hueDrift: 32,
+    stops: ['#fdfdfe', '#f7f6f9', '#eef0f4'],
+    blobs: [
+      { x: 0.0, y: 0.46, r: 0.38, c: 'rgba(70,170,255,0.38)' },
+      { x: 0.04, y: 0.78, r: 0.4, c: 'rgba(90,225,160,0.38)' },
+      { x: 0.98, y: 0.52, r: 0.46, c: 'rgba(0,190,180,0.38)' },
+      { x: 0.48, y: 1.06, r: 0.52, c: 'rgba(120,140,255,0.38)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.5)',
+    glassRim: 'rgba(255,255,255,0.95)',
+    text: 'rgba(38,36,48,0.95)',
+    textDim: 'rgba(38,36,48,0.45)',
+    floorBody: '#2c2c34',
+    floorTop: '#3c3c46',
+    floorEdge: 'rgba(255,255,255,0.35)',
+  },
+  highlighter: {
+    key: 'highlighter',
+    light: true,
+    hueDrift: 32,
+    stops: ['#fdfdfe', '#f7f6f9', '#eef0f4'],
+    blobs: [
+      { x: 0.0, y: 0.46, r: 0.38, c: 'rgba(30,235,255,0.34)' },
+      { x: 0.04, y: 0.78, r: 0.4, c: 'rgba(170,255,40,0.34)' },
+      { x: 0.98, y: 0.52, r: 0.46, c: 'rgba(255,30,200,0.34)' },
+      { x: 0.48, y: 1.06, r: 0.52, c: 'rgba(150,60,255,0.34)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.5)',
+    glassRim: 'rgba(255,255,255,0.95)',
+    text: 'rgba(38,36,48,0.95)',
+    textDim: 'rgba(38,36,48,0.45)',
+    floorBody: '#2c2c34',
+    floorTop: '#3c3c46',
+    floorEdge: 'rgba(255,255,255,0.35)',
+  },
+  duotone: {
+    key: 'duotone',
+    light: true,
+    hueDrift: 24,
+    // Two hues only, paired on opposite diagonals — graphic and calm, and
+    // the bounded drift keeps them permanently opposed.
+    stops: ['#fdfdfe', '#f7f6f9', '#eef0f4'],
+    blobs: [
+      { x: 0.0, y: 0.46, r: 0.38, c: 'rgba(235,40,150,0.32)' },
+      { x: 0.04, y: 0.78, r: 0.4, c: 'rgba(0,190,190,0.32)' },
+      { x: 0.98, y: 0.52, r: 0.46, c: 'rgba(0,190,190,0.32)' },
+      { x: 0.48, y: 1.06, r: 0.52, c: 'rgba(235,40,150,0.32)' },
+    ],
+    glassFill: 'rgba(255,255,255,0.5)',
+    glassRim: 'rgba(255,255,255,0.95)',
+    text: 'rgba(38,36,48,0.95)',
+    textDim: 'rgba(38,36,48,0.45)',
+    floorBody: '#2c2c34',
+    floorTop: '#3c3c46',
+    floorEdge: 'rgba(255,255,255,0.35)',
+  },
   cream: {
     key: 'cream',
     light: true,
@@ -324,10 +409,11 @@ function hslaOf(rgba) {
 /**
  * The big soft light blobs. With a world time they BREATHE: each drifts a
  * few dozen pixels, swells/dims a touch, and — the colour part — its hue
- * RIDES THE FULL RAINBOW, one lap a minute plus a small per-blob wobble, so
- * the lights slowly wander the spectrum while the family's base gradient
- * keeps the scene's identity anchored. All the periods are offset and share
- * no common multiple, so the pattern never visibly repeats. t=0 (or
+ * moves. Families without `hueDrift` RIDE THE FULL RAINBOW, one lap a
+ * minute plus a small per-blob wobble; palette families set `hueDrift` to a
+ * band in degrees, and their hues swing back and forth inside it instead —
+ * colour transitions that stay in character. All the periods are offset and
+ * share no common multiple, so the pattern never visibly repeats. t=0 (or
  * FX.skyBreathe off) is exactly the family's own static colours — which is
  * also what the frost blur and the node tests see.
  * @param {CanvasRenderingContext2D} cx
@@ -341,7 +427,6 @@ function drawGlassBlobs(cx, w, h, f, t = 0, opts = {}) {
   const widen = opts.widen ?? 1;
   const boost = opts.boost ?? 1;
   const live = FX.skyBreathe && t > 0;
-  const hueSpin = live ? (t / 60000) * 360 : 0;
   f.blobs.forEach((b, i) => {
     const phase = i * 2.4;
     const dx = live ? Math.sin((t / 18000) * TAU + phase) * 34 : 0;
@@ -349,10 +434,15 @@ function drawGlassBlobs(cx, w, h, f, t = 0, opts = {}) {
     // Slightly brighter than rest while live, so the travelling hues carry —
     // at the family's resting alpha the rainbow read as a rumour.
     const glow = live ? 1.12 + 0.18 * Math.sin((t / 16000) * TAU + phase * 0.7) : 1;
-    const wobble = live ? 14 * Math.sin((t / 29000) * TAU + phase) : 0;
+    let hueOff = 0;
+    if (live) {
+      hueOff = f.hueDrift !== undefined
+        ? f.hueDrift * Math.sin((t / 41000) * TAU + phase * 0.9)
+        : (t / 60000) * 360 + 14 * Math.sin((t / 29000) * TAU + phase);
+    }
 
     const c = hslaOf(b.c);
-    const hue = (((c.h + hueSpin + wobble) % 360) + 360) % 360;
+    const hue = (((c.h + hueOff) % 360) + 360) % 360;
     const x = b.x * w + dx;
     const y = b.y * h + dy;
     const r = b.r * w * widen;
@@ -442,7 +532,9 @@ let way = WAYS[1]; // teal: the lobby/showdown resting colourway
 
 /** @param {string | undefined} key unknown keys fall back to glass */
 export function setTheme(key) {
-  if (key === 'aurora' || key === 'berry' || key === 'ocean' || key === 'frost' || key === 'cream' || key === 'noir' || key === 'blanc') {
+  // Any glass family name is a theme alias — except dusk, which predates
+  // the families and still names the original night THEME.
+  if (key && key !== 'dusk' && key in GLASS_FAMILIES) {
     themeKey = 'glass';
     setGlassFamily(key);
     return;
