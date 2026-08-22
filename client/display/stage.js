@@ -188,6 +188,13 @@ export const GLASS_CHUNK_H = SLAB_H + PLAQUE_GAP + PLAQUE_H;
  */
 function drawGlassChunk(cx, x, y, w, h, r, state) {
   const fam = glassFam();
+  // The winning chunk must go WHITER than resting glass on every family.
+  // The old constants (0.34/0.30) were tuned against the dark families'
+  // 0.13 body — on the light families, whose resting glass is already 0.5
+  // white, they made the correct platform MORE transparent than its
+  // neighbours, so the win read as darkening. The lit veil now clears the
+  // family's own body with room to spare, and the text stays etched ink.
+  const litFill = fam.light ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.34)';
   cx.save();
   cx.beginPath();
   cx.roundRect(x, y, w, h, r);
@@ -196,7 +203,7 @@ function drawGlassChunk(cx, x, y, w, h, r, state) {
   cx.shadowColor = state === 'correct' ? 'rgba(255,255,255,0.9)' : 'rgba(4,6,24,0.30)';
   cx.shadowBlur = state === 'correct' ? 36 : 22;
   cx.shadowOffsetY = state === 'correct' ? 0 : 10;
-  cx.fillStyle = state === 'correct' ? 'rgba(255,255,255,0.34)' : fam.glassFill;
+  cx.fillStyle = state === 'correct' ? litFill : fam.glassFill;
   cx.fill();
   cx.shadowColor = 'rgba(0,0,0,0)';
 
@@ -211,7 +218,7 @@ function drawGlassChunk(cx, x, y, w, h, r, state) {
     // The live half: today's blobs, at this frame's drift and hue, so the
     // glass keeps blurring the sky it actually stands in front of.
     drawFrostBlobs(cx, WORLD_W, WORLD_H);
-    cx.fillStyle = state === 'correct' ? 'rgba(255,255,255,0.30)' : fam.glassFill;
+    cx.fillStyle = state === 'correct' ? litFill : fam.glassFill;
     cx.fillRect(x, y, w, h);
   }
   // Diagonal sheen across the top-left: the one gradient that sells "glass".
@@ -290,15 +297,7 @@ export function drawSignText(cx, p, text, opts = {}) {
     cx.fillStyle = activeWay().text;
     if (state === 'wrong') cx.globalAlpha = 0.55;
   } else if (themeName() === 'glass') {
-    if (state === 'correct') {
-      // The verdict GLOWS: full-white lettering with a white halo, on every
-      // family — the win moment trades the etched-ink look for light.
-      cx.fillStyle = 'rgba(255,255,255,0.98)';
-      cx.shadowColor = 'rgba(255,255,255,0.9)';
-      cx.shadowBlur = 18;
-    } else {
-      cx.fillStyle = state === 'wrong' ? glassFam().textDim : glassFam().text;
-    }
+    cx.fillStyle = state === 'wrong' ? glassFam().textDim : glassFam().text;
   } else {
     cx.fillStyle = state === 'wrong' ? STAGE.platTextDim : STAGE.platText;
   }
