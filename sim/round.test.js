@@ -896,3 +896,46 @@ test('debris clears itself even if a phase runs long', () => {
   run(world, game, DEBRIS_LIFE_MS + 200);
   assert.equal(game.debris.length, 0);
 });
+
+test('an image question never lifts a platform into the picture band', () => {
+  // Both paths that could reintroduce elevated boards are set as traps: an
+  // explicit tall layout on the question, and a designed 4-board level in
+  // the pool with boards up on high tiers. The image must beat both.
+  /** @type {import('./round.js').Question[]} */
+  const deck = [
+    { text: 'What rhythm is this?', image: 'ekg.png', layout: 'islands',
+      answers: ['a', 'b', 'c', 'd'], correct: 0 },
+    { type: 'sort', text: 'Sort these', image: 'rash.png',
+      buckets: ['A', 'B'], answers: ['A', 'B'], itemMs: 200,
+      items: [{ label: 'x', bucket: 0 }, { label: 'y', bucket: 1 }] },
+  ];
+  const world = createWorld([]);
+  const game = createGame(deck, 12000);
+  game.levelPool = [{
+    name: 'towers',
+    boards: [[300, 4, 288], [800, 4, 288], [1300, 4, 288], [1700, 4, 288]],
+    rungs: [[500, 2, 240], [1000, 2, 240]],
+  }];
+  addPlayer(world, 1);
+  startGame(game, world);
+
+  for (const label of ['choice', 'sort']) {
+    const anils = world.platforms.filter((p) => String(p.id).startsWith('ans'));
+    assert.ok(anils.length >= 2, `${label}: answer platforms exist`);
+    for (const p of world.platforms) {
+      const id = String(p.id);
+      if (!id.startsWith('ans') && !id.startsWith('perch')) continue;
+      assert.ok(p.y >= ANSWER_Y, `${label}: ${id} sits in the bottom band (y=${p.y})`);
+    }
+    assert.ok(
+      !world.platforms.some((p) => String(p.id).startsWith('perch')),
+      `${label}: the flat row has no perches to climb into the picture`
+    );
+    // Advance to the second question for the sort pass of the loop.
+    if (label === 'choice') {
+      game.phase = PHASE.SCORE;
+      game.phaseT = 1e9;
+      stepRound(game, world, STEP_MS);
+    }
+  }
+});

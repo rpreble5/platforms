@@ -487,6 +487,10 @@ function drawQuestionImage(cx, q) {
   const img = q.image ? questionImage(q.image) : null;
   if (!img) return;
   const maxW = 780;
+  // The height budget honors a contract the sim tests pin: image questions
+  // keep ALL furniture in the bottom band, and the closest thing to the
+  // picture is the range rail at y=770 — matte bottom (190 + 420 + 14)
+  // clears it by ~145px. Grow maxH only with that budget in mind.
   const maxH = 420;
   // Fit the box; tiny images may grow a little, but never into mush.
   const s = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 2);
