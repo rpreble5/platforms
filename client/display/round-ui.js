@@ -105,9 +105,11 @@ function fallOffset(t) {
  * @property {number} packIndex
  * @property {number} sel
  * @property {boolean} loading
- * @property {Array<'pack'|'time'|'mode'|'quiz'|'control'|'showdown'>} items
+ * @property {Array<'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'>} items
  * @property {number} answerMs
  * @property {'solo'|'teams'} mode
+ * @property {string} look 'deck' = play the pack's theme; else the override
+ * @property {string} [deckTheme] the loaded pack's own theme, for the row label
  * @property {number[]} [cohortCounts] committed + connected players per year
  * @property {number} [controlCases] size of the pack's Control Room pool
  * @property {boolean} [browse] the deck browser is open (modal over the card)
@@ -193,7 +195,7 @@ function drawMenu(cx, menu, playerCount) {
   const rowH = 58;
   const stripH = 56;
   const btnH = 68;
-  const h = pad + packH + 2 * rowH + 22 + stripH + 24 + actions.length * (btnH + 12) + pad - 12;
+  const h = pad + packH + 3 * rowH + 22 + stripH + 24 + actions.length * (btnH + 12) + pad - 12;
   // Lighter veil than the round furniture: the lobby is where the breathing
   // sky gets to show off, and this card's text is big enough to carry it.
   panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
@@ -238,11 +240,14 @@ function drawMenu(cx, menu, playerCount) {
   }
   y += packH;
 
-  // ---- the two settings
-  /** @type {Array<['time'|'mode', string, string]>} */
+  // ---- the three settings
+  /** @type {Array<['time'|'mode'|'look', string, string]>} */
   const settingRows = [
     ['time', 'Answer time', `${Math.round(menu.answerMs / 1000)}s`],
     ['mode', 'Teams', menu.mode === 'teams' ? 'PGY years' : 'off'],
+    ['look', 'Background', menu.look === 'deck'
+      ? `from deck${menu.deckTheme ? ` · ${menu.deckTheme}` : ''}`
+      : menu.look],
   ];
   for (const [key, label, value] of settingRows) {
     const selected = sel === key;

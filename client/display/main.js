@@ -22,6 +22,7 @@ import {
 } from '../../shared/tuning.js';
 import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJson } from '../../shared/protocol.js';
 import { clampCohort } from '../../shared/palette.js';
+import { PACK_THEMES } from '../../shared/pack-validate.js';
 import { encodeQR } from '../../shared/qr.js';
 import { addPlayer, createWorld, removePlayer } from '../../sim/world.js';
 import { FLOOR_Y, buildLobbyArena } from '../../sim/levels.js';
@@ -294,21 +295,37 @@ const menu = {
   /** @type {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom?:number}>} */
   packs: [],
   packIndex: 0,
-  // The cursor starts on "Start quiz" (row 3), so a plain Enter in the lobby
+  // The cursor starts on "Start quiz" (row 4), so a plain Enter in the lobby
   // still does what it has always done — including for the smoke test.
-  sel: 3,
+  sel: 4,
   loading: false,
   /** @type {'solo'|'teams'} */
   mode: 'solo',
+  // The host's background override: 'deck' plays the pack's theme; any
+  // other value pins the room's look regardless of what packs say.
+  look: 'deck',
   // The deck browser: a modal list over the card, for real libraries.
   browse: false,
   browseSel: 0,
 };
 
+/** The Background row's cycle: the deck's own theme, then every pack theme
+ *  ('glass' is skipped — it is just an alias for blanc). */
+const LOOKS = ['deck', ...PACK_THEMES.filter((t) => t !== 'glass')];
+
+/** The loaded pack's theme, kept so "from deck" can win again later. */
+/** @type {string | undefined} */
+let deckTheme;
+
+/** The one place the display's theme is decided: override beats deck. */
+function applyTheme() {
+  setTheme(menu.look === 'deck' ? deckTheme : menu.look);
+}
+
 /** Menu rows, in display order. Optional modes appear only when the pack has content. */
 function menuItems() {
-  /** @type {Array<'pack'|'time'|'mode'|'quiz'|'control'|'showdown'>} */
-  const items = ['pack', 'time', 'mode', 'quiz'];
+  /** @type {Array<'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'>} */
+  const items = ['pack', 'time', 'mode', 'look', 'quiz'];
   if (controlSpec) items.push('control');
   if (showdownSpec) items.push('showdown');
   // Switching to a pack without a showdown can strand the cursor one row past
@@ -398,6 +415,7 @@ function menuView() {
     answerMs: game.answerMs,
     cohortCounts,
     controlCases: controlSpec?.questions.length ?? 0,
+    deckTheme,
   };
 }
 
@@ -419,7 +437,8 @@ async function selectPack(index) {
       applyMode();
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
       controlSpec = pack.controlRoom?.questions?.length ? pack.controlRoom : null;
-      setTheme(pack.theme);
+      deckTheme = pack.theme;
+      applyTheme();
       hud.note = '';
     } else {
       hud.note = `${file}: no valid questions`;
@@ -442,17 +461,22 @@ function cycleTime(dir) {
   lastCheckpoint = 0;
 }
 
-/** @param {'pack'|'time'|'mode'|'quiz'|'control'|'showdown'} item @param {number} dir */
+/** @param {'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'} item @param {number} dir */
 function menuAdjust(item, dir) {
   if (item === 'pack') void selectPack(menu.packIndex + dir);
   else if (item === 'time') cycleTime(dir);
   else if (item === 'mode') {
     menu.mode = menu.mode === 'teams' ? 'solo' : 'teams';
     applyMode();
+  } else if (item === 'look') {
+    const at = Math.max(0, LOOKS.indexOf(menu.look));
+    menu.look = LOOKS[(at + dir + LOOKS.length) % LOOKS.length];
+    // Applied on the spot: the lobby sky is the preview.
+    applyTheme();
   }
 }
 
-/** @param {'pack'|'time'|'mode'|'quiz'|'control'|'showdown'} item */
+/** @param {'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'} item */
 function menuActivate(item) {
   if (item === 'quiz') {
     startConfiguredGame(false);
@@ -936,7 +960,8 @@ async function init() {
     await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
     if (pack?.controlRoom?.questions?.length) controlSpec = pack.controlRoom;
-    setTheme(pack?.theme);
+    deckTheme = pack?.theme;
+    applyTheme();
     const packs = await fetch('/api/packs').then((r) => r.json());
     if (Array.isArray(packs) && packs.length) {
       menu.packs = packs;
