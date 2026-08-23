@@ -60,6 +60,13 @@ with no phone at all.
 Questions live in `questions/*.json` — every file there is a selectable pack
 in the lobby menu (name it with a top-level `"pack"` field). Packs are re-read
 on every selection, so editing one and re-picking it is the whole edit loop.
+**`showcase.json` is the demo night**: a medicine + trivia mix that exercises
+every mechanic (choices, ranges, select-alls, a picture question, two
+lightning sorts, three Control Room cases — one per PGY team — and a
+showdown). Its picture question ships with a placeholder strip: drop a
+de-identified EKG at `questions/images/your-ekg-here.png` (same filename)
+and the question uses it as-is. Verify the medical answer keys before a
+real session — they're board-classic, but they're the author's word.
 The lobby is a live arena: players join, run and warm up underneath the menu
 while the host picks a pack and answer time.
 
