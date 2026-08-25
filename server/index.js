@@ -21,8 +21,15 @@ const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const dev = process.argv.includes('--watch') || process.env.NODE_ENV !== 'production';
 
+// A cloud test instance (e.g. Render) fronts this server with HTTPS on a
+// public hostname — the LAN address in the QR would be meaningless there.
+// PUBLIC_URL (or Render's injected RENDER_EXTERNAL_URL) wins when present;
+// game night on a laptop sets neither and keeps the LAN behavior.
+const publicUrl = process.env.PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL;
 const lanAddr = bestLanAddress();
-const joinUrl = lanAddr ? `http://${lanAddr.address}:${PORT}/` : `http://localhost:${PORT}/`;
+const joinUrl = publicUrl
+  ? publicUrl.replace(/\/*$/, '/')
+  : lanAddr ? `http://${lanAddr.address}:${PORT}/` : `http://localhost:${PORT}/`;
 
 // The host key gates the remote-control page. Four characters from an
 // unambiguous alphabet: it lives in a URL fragment the host taps once, and
@@ -109,10 +116,14 @@ server.listen(PORT, HOST, () => {
   console.log(qrToTerminal(joinUrl));
   console.log('');
   console.log(`  players   ${bold(joinUrl)}`);
-  console.log(`  display   ${bold(`http://localhost:${PORT}/display/`)}`);
+  console.log(`  display   ${bold(publicUrl ? `${joinUrl}display/` : `http://localhost:${PORT}/display/`)}`);
   console.log(`  host      ${bold(hostUrl)}  (keep the key to yourself)`);
   console.log(`  levels    ${bold(`http://localhost:${PORT}/levels`)}`);
   console.log('');
+
+  // Behind a public URL the container's interface list is noise, and the
+  // wireless warnings below are about party-night LAN quality — skip both.
+  if (publicUrl) return;
 
   const others = lanAddresses().filter((a) => a.address !== addr?.address);
   if (others.length) {

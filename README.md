@@ -231,6 +231,41 @@ about latency, which is the only reason this milestone exists.
 
 There is no deploy step. `git clone`, `npm install`, `npm run dev`.
 
+### Faculty test drive: the one sanctioned cloud instance
+
+Faculty who want to poke at the game don't have Node, git, or GitHub
+accounts — and updates land here daily, so anything installed on their
+laptops is stale by Friday. For THEM (and only them) there is a cloud test
+instance: they open a URL, the QR points their phone at the same URL, and
+every visit runs whatever was pushed last. Zero installs, always current.
+
+**The latency doctrine above still holds.** The cloud hop adds ~60-150 ms
+to each button press. A solo evaluator barely notices — the sim and
+rendering run at 120 Hz in their own browser; only their taps commute
+through the cloud — but that number is disqualifying for thirty people
+racing platforms for speed bonuses. One sentence to repeat to everyone:
+**the test URL is the test drive; game night runs on the host laptop over
+LAN.**
+
+One-time setup (repo owner): [render.com](https://render.com) → sign in
+with GitHub → **New → Blueprint** → pick this repository. Render reads
+`render.yaml`, builds the free service, and **redeploys automatically on
+every push** to the branch it names. Share
+`https://<name>.onrender.com/display/` with faculty; phones join by
+scanning the QR on that page, exactly like game night.
+
+Honest small print:
+
+- The free instance sleeps when idle — the first visit of the day can take
+  a minute to wake. Refresh once and it's snappy.
+- There is ONE room. Two faculty testing at the same moment will see each
+  other's avatars. Take turns, or treat it as a feature and wave.
+- Anyone holding the URL can technically fetch pack answer keys from the
+  API, so share it with faculty only — and never load the real night's
+  pack on the test instance.
+- The `/host` page works there too: the key is the `HOST_KEY` environment
+  variable in the Render dashboard.
+
 ### Testing without a room full of people
 
 | what you have | what you can learn |

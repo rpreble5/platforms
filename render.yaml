@@ -1,0 +1,30 @@
+# Render Blueprint: the FACULTY TEST INSTANCE — not game night.
+#
+# One-time setup: render.com -> sign in with GitHub -> New -> Blueprint ->
+# pick this repository. Render reads this file, builds the free web
+# service, and redeploys it automatically on every push to the branch
+# below. Share https://<name>.onrender.com/display/ with faculty; the QR
+# on that page points phones at the same public URL automatically
+# (server/index.js prefers RENDER_EXTERNAL_URL over the LAN address).
+#
+# The cloud hop adds ~60-150 ms to every button press — fine for one
+# person evaluating content, disqualifying for a 30-player race. Game
+# night runs on the host laptop over LAN, exactly as before.
+services:
+  - type: web
+    name: platforms
+    runtime: node
+    plan: free
+    branch: claude/multiplayer-platformer-quiz-xnvuc2
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # The /host page key. Render generates a stable random value; read
+      # it in the dashboard (Environment tab) when you want host controls
+      # on the test instance.
+      - key: HOST_KEY
+        generateValue: true
