@@ -70,6 +70,17 @@ real session — they're board-classic, but they're the author's word.
 The lobby is a live arena: players join, run and warm up underneath the menu
 while the host picks a pack and answer time.
 
+### Training for question writers: /training
+
+Before faculty write anything, point them at **`/training`** (served by
+the game server, the Render instance, and GitHub Pages alike, at
+`/client/training/`). It's the question writer's guide: every arena a
+question type builds — drawn from the real level code, so the diagrams
+can't go stale — a live "does it fit?" checker for question/answer/label
+lengths, the enforced counts and timings (quoted from the same `LIMITS`
+the loader applies), and the mode × type matrix. It ends where writing
+starts: a link into the Pack Studio.
+
 ### Authoring packs with zero install: the Pack Studio
 
 Faculty don't need the repo, node, or anything installed — the **Pack

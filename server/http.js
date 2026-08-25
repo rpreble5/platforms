@@ -38,7 +38,7 @@ const MIME = {
 };
 
 /** Directories that may be served verbatim. Anything else 404s. */
-const STATIC_DIRS = ['shared', 'sim', 'client/display', 'client/builder', 'assets'];
+const STATIC_DIRS = ['shared', 'sim', 'client/display', 'client/builder', 'client/training', 'assets'];
 
 /**
  * @param {string} root repo root
@@ -216,6 +216,17 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
     }
     if (pathname === '/client/builder/' || pathname === '/client/builder') {
       sendFile(res, path.join(root, 'client/builder/index.html'));
+      return;
+    }
+
+    // The question writer's guide: arena diagrams + limits, for faculty
+    // "training". Same serving pattern as the Studio.
+    if (pathname === '/training' || pathname === '/training/') {
+      res.writeHead(302, { Location: '/client/training/' }).end();
+      return;
+    }
+    if (pathname === '/client/training/' || pathname === '/client/training') {
+      sendFile(res, path.join(root, 'client/training/index.html'));
       return;
     }
 

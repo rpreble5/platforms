@@ -8,7 +8,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PACK_THEMES, suggestOrder, validatePack } from './pack-validate.js';
+import { LIMITS, PACK_THEMES, suggestOrder, validatePack } from './pack-validate.js';
+
+test('LIMITS match what validatePack actually enforces', () => {
+  const q = (/** @type {any} */ over) => validatePack({ questions: [over] }).problems;
+  const long = (/** @type {number} */ n) => 'x'.repeat(n);
+  // exactly at the limit: silent; one over: flagged
+  assert.equal(q({ text: long(LIMITS.questionChars), answers: ['a', 'b'], correct: 0 }).length, 0);
+  assert.equal(q({ text: long(LIMITS.questionChars + 1), answers: ['a', 'b'], correct: 0 }).length, 1);
+  assert.equal(q({ text: 'ok?', answers: [long(LIMITS.answerChars + 1), 'b'], correct: 0 }).length, 1);
+  assert.equal(
+    validatePack({ questions: [], showdown: { statements: [{ text: long(LIMITS.statementChars + 1), answer: true }] } }).problems.length,
+    1
+  );
+  // count ranges are the hard ones
+  assert.ok(q({ text: 'ok?', answers: Array(LIMITS.answers[1] + 1).fill('a'), correct: 0 }).some((m) => m.includes('must be 2-6')));
+});
 
 test('validatePack is pure shape-checking: same rules as the server, no fs', () => {
   const { pack, problems } = validatePack({

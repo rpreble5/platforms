@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question Writer's Guide</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #241d3c; color: #e6e0f5;
+    font: 500 15px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  header {
+    padding: 12px 20px; background: #1a1530; border-bottom: 1px solid #443a68;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 3;
+  }
+  h1 { font-size: 16px; margin: 0 12px 0 0; letter-spacing: .05em; color: #9ff5c9; }
+  header .spacer { flex: 1; }
+  header a {
+    color: #e6e0f5; text-decoration: none; border: 1px solid #5d4f8c; border-radius: 8px;
+    padding: 6px 12px; font-weight: 700; font-size: 13px;
+  }
+  header a:hover { border-color: #9ff5c9; color: #9ff5c9; }
+  main { max-width: 1060px; margin: 0 auto; padding: 26px 20px 80px; }
+  h2 {
+    font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    color: #9a90bd; margin: 40px 0 14px;
+  }
+  h2:first-of-type { margin-top: 8px; }
+  p.lede { font-size: 17px; color: #cfc6ec; max-width: 62ch; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  .card { background: #2e2650; border: 1px solid #4d4177; border-radius: 12px; padding: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 15px; color: #ffffff; }
+  .card .tag {
+    font: 700 10px/1 inherit; letter-spacing: .07em; text-transform: uppercase;
+    color: #9ff5c9; background: #2fc98d1c; border: 1px solid #2fc98d55;
+    border-radius: 6px; padding: 3px 6px; margin-left: 6px; vertical-align: 2px;
+  }
+  .card p { margin: 8px 0 0; font-size: 13.5px; color: #b9aede; }
+  .card canvas { width: 100%; aspect-ratio: 16/9; display: block; border-radius: 8px; background: #1c1632; margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #4d417766; }
+  th { color: #9a90bd; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  td.num { font-family: ui-monospace, Menlo, monospace; color: #9ff5c9; white-space: nowrap; }
+  .ok { color: #7fd8a8; } .no { color: #7a6fa3; }
+  /* fit checker */
+  .fit { display: grid; gap: 14px; }
+  .fit label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .06em; color: #9a90bd; margin-bottom: 4px; text-transform: uppercase; }
+  .fit input {
+    width: 100%; background: #1c1632; color: #e6e0f5; border: 1px solid #4d4177;
+    border-radius: 8px; padding: 9px 11px; font: inherit;
+  }
+  .meter { height: 6px; border-radius: 3px; background: #1c1632; margin-top: 6px; overflow: hidden; }
+  .meter div { height: 100%; background: #2fc98d; transition: width .1s; }
+  .meter.over div { background: #d6a24f; }
+  .fitnote { font-size: 12.5px; color: #9a90bd; margin-top: 4px; min-height: 1.2em; }
+  .cta {
+    display: inline-block; margin-top: 10px; background: #2fc98d22; border: 1px solid #2fc98d;
+    color: #9ff5c9; border-radius: 10px; padding: 12px 20px; font-weight: 800; text-decoration: none;
+  }
+  code { background: #1c1632; border-radius: 5px; padding: 1px 6px; font-size: .92em; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>QUESTION WRITER'S GUIDE</h1>
+  <span style="color:#7a6fa3;font-size:13px">how questions become platforms, and what fits on a projector</span>
+  <span class="spacer"></span>
+  <a href="../builder/">Pack Studio →</a>
+</header>
+
+<main>
+  <p class="lede">
+    In PLATFORMS, your answers aren't buttons — they're <b>platforms in an
+    arena</b>, and the whole room physically jumps onto the one they believe.
+    That has two consequences for writing: the <b>question type picks the
+    arena</b>, and everything you write is <b>painted on the big screen</b>,
+    so short text lands hard and long text shrinks. This page shows exactly
+    what each type builds and how much room your words have. Diagrams below
+    are generated from the real level code, so they can't go stale.
+  </p>
+
+  <h2>The arenas — what each question type builds</h2>
+  <div class="cards" id="arenas"></div>
+
+  <h2>Does it fit? Try your text</h2>
+  <div class="card">
+    <div class="fit" id="fit"></div>
+    <p style="font-size:13px;color:#9a90bd;margin-top:12px;margin-bottom:0">
+      Going over a limit never breaks the game — the text just shrinks on the
+      projector, and the loader prints a note. The counts and timings in the
+      next table <i>are</i> enforced.
+    </p>
+  </div>
+
+  <h2>The numbers that are enforced</h2>
+  <div class="card"><table id="numbers"></table></div>
+
+  <h2>Where each type can play</h2>
+  <div class="card"><table>
+    <tr><th>question type</th><th>free-for-all</th><th>teams</th><th>Control Room</th><th>Showdown</th></tr>
+    <tr><td>choice (one correct)</td><td class="ok">✓</td><td class="ok">✓</td><td class="no">–</td><td class="no">–</td></tr>
+    <tr><td>select-all-that-apply</td><td class="ok">✓</td><td class="ok">✓ + cover bonus</td><td class="no">–</td><td class="no">–</td></tr>
+    <tr><td>range (number line)</td><td class="ok">✓</td><td class="ok">✓</td><td class="no">–</td><td class="no">–</td></tr>
+    <tr><td>lightning sort</td><td class="ok">✓</td><td class="ok">✓</td><td class="no">–</td><td class="no">–</td></tr>
+    <tr><td>picture on any of the above</td><td class="ok">✓</td><td class="ok">✓</td><td class="no">–</td><td class="no">–</td></tr>
+    <tr><td>control case</td><td class="no">–</td><td class="ok">✓ team turns</td><td class="ok">✓</td><td class="no">–</td></tr>
+    <tr><td>true / false statement</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="ok">✓ finale</td></tr>
+  </table></div>
+  <p style="color:#b9aede;font-size:14px">
+    The standard deck (everything above the line) plays in <b>both</b>
+    free-for-all and teams. Control cases only ever play when teams exist —
+    write <b>at least one case per team</b> (three PGY teams → three cases),
+    because the scheduler refuses to give one team a turn another team can't
+    have. The Showdown is its own finale mode: no points, last one standing.
+  </p>
+
+  <h2>Ready to write</h2>
+  <p style="color:#cfc6ec">
+    The <b>Pack Studio</b> is where packs are written — a document you type
+    (<code>#</code> starts a question, answers on the lines below, click the
+    box beside the correct one) with a live preview that runs the actual
+    game. Nothing to install, drafts save in your browser, and when you're
+    done you download one file and send it to the host.
+  </p>
+  <a class="cta" href="../builder/">Open the Pack Studio →</a>
+</main>
+
+<script type="module" src="./training.js"></script>
+</body>
+</html>

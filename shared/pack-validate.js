@@ -14,6 +14,27 @@
  * on the host?) stays in server/http.js as a second pass.
  */
 
+/**
+ * The numbers the checks below enforce, exported so the training page and
+ * the Pack Studio quote the SAME limits the loader applies. Char limits are
+ * cosmetic (over-long text still plays, it just shrinks small on screen);
+ * the count and timing ranges are hard. Update these together with the
+ * corresponding checks in validatePack.
+ */
+export const LIMITS = {
+  questionChars: 90,
+  answerChars: 28,
+  sortLabelChars: 24, // buckets and items alike
+  controlLabelChars: 18,
+  statementChars: 110,
+  answers: [2, 6],
+  buckets: [2, 4],
+  items: [2, 12],
+  controls: [6, 8],
+  controlSeconds: [10, 90],
+  sortItemSeconds: [3, 15],
+};
+
 /** Every theme a pack may name: the three theme keys plus the glass families. */
 export const PACK_THEMES = [
   'terrazzo', 'dusk', 'glass',
@@ -107,7 +128,7 @@ export function validatePack(raw) {
         problems.push(`${where}: answer [${lo}, ${hi}] falls outside the ${q.min}-${q.max} line — skipped`);
         return false;
       }
-      if (q.text.length > 90) problems.push(`${where}: question is ${q.text.length} chars (>90 is hard to read across a room)`);
+      if (q.text.length > LIMITS.questionChars) problems.push(`${where}: question is ${q.text.length} chars (>90 is hard to read across a room)`);
       return true;
     }
 
@@ -149,10 +170,10 @@ export function validatePack(raw) {
       // answers[] drawing path works untouched.
       q.answers = q.buckets.slice();
       for (const b of q.buckets) {
-        if (b.length > 24) problems.push(`${where}: bucket "${b}" is ${b.length} chars (>24 shrinks small)`);
+        if (b.length > LIMITS.sortLabelChars) problems.push(`${where}: bucket "${b}" is ${b.length} chars (>24 shrinks small)`);
       }
       for (const it of items) {
-        if (it.label.length > 24) problems.push(`${where}: item "${it.label}" is ${it.label.length} chars (>24 shrinks small)`);
+        if (it.label.length > LIMITS.sortLabelChars) problems.push(`${where}: item "${it.label}" is ${it.label.length} chars (>24 shrinks small)`);
       }
       return true;
     }
@@ -194,9 +215,9 @@ export function validatePack(raw) {
       problems.push(`${where}: "correct" is out of range — skipped`);
       return false;
     }
-    if (q.text.length > 90) problems.push(`${where}: question is ${q.text.length} chars (>90 is hard to read across a room)`);
+    if (q.text.length > LIMITS.questionChars) problems.push(`${where}: question is ${q.text.length} chars (>90 is hard to read across a room)`);
     for (const a of q.answers) {
-      if (String(a).length > 28) problems.push(`${where}: answer "${a}" is ${String(a).length} chars (>28 shrinks small)`);
+      if (String(a).length > LIMITS.answerChars) problems.push(`${where}: answer "${a}" is ${String(a).length} chars (>28 shrinks small)`);
     }
     return true;
   });
@@ -228,7 +249,7 @@ export function validatePack(raw) {
             problems.push(`${at}: needs a label and toggle/number kind — skipped`);
             return false;
           }
-          if (control.label.length > 18) problems.push(`${at}: label "${control.label}" is over 18 chars`);
+          if (control.label.length > LIMITS.controlLabelChars) problems.push(`${at}: label "${control.label}" is over 18 chars`);
           if (control.kind === 'toggle') {
             if (typeof control.initial !== 'boolean' || typeof control.answer !== 'boolean') {
               problems.push(`${at}: toggle initial/answer must be boolean — skipped`);
@@ -291,7 +312,7 @@ export function validatePack(raw) {
           problems.push(`showdown #${i + 1}: needs text and a boolean answer — skipped`);
           return false;
         }
-        if (st.text.length > 110) problems.push(`showdown #${i + 1}: ${st.text.length} chars (>110 is hard to read fast)`);
+        if (st.text.length > LIMITS.statementChars) problems.push(`showdown #${i + 1}: ${st.text.length} chars (>110 is hard to read fast)`);
         if (st.image !== undefined) {
           problems.push(`showdown #${i + 1}: pictures are a standard-deck feature — image ignored`);
           delete st.image;
