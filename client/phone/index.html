@@ -333,12 +333,17 @@
     return proto + '//' + location.host + '/ws';
   }
 
+  var neverOpened = 0; // consecutive sockets that died without EVER opening
+
   function connect() {
     clearTimeout(reconnectTimer);
     try { ws = new WebSocket(wsUrl()); } catch (e) { scheduleReconnect(); return; }
     ws.binaryType = 'arraybuffer';
+    var opened = false;
 
     ws.onopen = function () {
+      opened = true;
+      neverOpened = 0;
       connected = true;
       backoff = 250;
       setStatus('connected');
@@ -380,8 +385,24 @@
       connected = false;
       setStatus('reconnecting…');
       // Before the first join there are no controls behind the overlay, so say
-      // what is wrong instead of leaving a dead "tap to join" on screen.
-      if (!joined) showMessage('📡', 'Can’t reach the game', 'Check you are on the same WiFi as the host, then wait a moment.');
+      // what is wrong instead of leaving a dead "tap to join" on screen. After
+      // repeated handshakes that never open, probe with a plain fetch: if that
+      // works, the page loaded but this network eats WebSocket upgrades
+      // (corporate/hospital TLS inspection) — name that, it needs a different
+      // network, not patience.
+      if (!opened) neverOpened++;
+      if (!joined) {
+        if (neverOpened >= 3) {
+          fetch('/api/health').then(function (r) {
+            if (r.ok) showMessage('🚧', 'This network blocks live connections', 'The game server is fine, but WebSockets are being blocked here. Try cellular data or another WiFi.');
+            else showMessage('📡', 'Can’t reach the game', 'Check you are on the same WiFi as the host, then wait a moment.');
+          }).catch(function () {
+            showMessage('📡', 'Can’t reach the game', 'Check you are on the same WiFi as the host, then wait a moment.');
+          });
+        } else {
+          showMessage('📡', 'Can’t reach the game', 'Check you are on the same WiFi as the host, then wait a moment.');
+        }
+      }
       scheduleReconnect();
     };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };

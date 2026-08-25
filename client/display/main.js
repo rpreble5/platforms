@@ -153,13 +153,38 @@ function toggleKeyboardPlayer() {
 /** @type {WebSocket | null} */
 let ws = null;
 let backoff = 250;
+/** Consecutive sockets that died without EVER opening. Ordinary drops reset
+ *  this; only a handshake that never completes counts. */
+let neverOpened = 0;
+
+/**
+ * The socket refuses to open but the page itself loaded — so HTTPS works and
+ * something between this browser and the server is eating the WebSocket
+ * upgrade (hospital/corporate TLS inspection does this routinely). Confirm
+ * with a plain fetch and say WHICH half is broken, instead of spinning on
+ * "connecting" forever.
+ */
+async function diagnoseStuckBoot() {
+  try {
+    const r = await fetch('/api/health');
+    if (r.ok) {
+      boot.textContent =
+        'the server is fine, but this network is blocking live connections (WebSockets) — try another WiFi or a phone hotspot';
+      return;
+    }
+  } catch { /* fall through: the server itself is unreachable */ }
+  boot.textContent = 'server unreachable — if it just woke up, give it a minute. retrying…';
+}
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${proto}//${location.host}/ws?role=display`);
   ws.binaryType = 'arraybuffer';
+  let opened = false;
 
   ws.onopen = () => {
+    opened = true;
+    neverOpened = 0;
     backoff = 250;
     boot.classList.add('hidden');
     send({ type: 'DISPLAY_HELLO' });
@@ -189,6 +214,7 @@ function connect() {
   ws.onclose = () => {
     boot.textContent = 'relay disconnected — reconnecting…';
     boot.classList.remove('hidden');
+    if (!opened && ++neverOpened >= 3) void diagnoseStuckBoot();
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 4000);
   };
