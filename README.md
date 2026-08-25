@@ -250,9 +250,13 @@ LAN.**
 One-time setup (repo owner): [render.com](https://render.com) → sign in
 with GitHub → **New → Blueprint** → pick this repository. Render reads
 `render.yaml`, builds the free service, and **redeploys automatically on
-every push** to the branch it names. Share
-`https://<name>.onrender.com/display/` with faculty; phones join by
-scanning the QR on that page, exactly like game night.
+every push** to the branch it names. Then copy the service's URL **from
+the top of its page in the Render dashboard** and share
+`<that-url>/display/` with faculty; phones join by scanning the QR on
+that page, exactly like game night. (Don't type the URL from memory:
+onrender.com subdomains are global across all Render users, so the name
+in render.yaml may come back with a random suffix — and a guessed URL
+can land on a stranger's app entirely.)
 
 Honest small print:
 
