@@ -148,6 +148,7 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
           res.end(JSON.stringify(out));
         })
         .catch((/** @type {any} */ err) => {
+          if (err?.code === 'SDK_MISSING') return fail(503, err.message);
           if (err instanceof RangeError) return fail(400, err.message);
           // Anthropic SDK errors carry .status; map the interesting ones.
           if (err?.status === 401) return fail(502, 'the server’s API key was rejected — check ANTHROPIC_API_KEY');

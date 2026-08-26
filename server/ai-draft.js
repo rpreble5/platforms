@@ -17,9 +17,24 @@
  * uncertainty becomes a visible task, never a silent guess.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-
 import { LIMITS } from '../shared/pack-validate.js';
+
+/**
+ * The SDK is loaded lazily, on the first draft — NOT at boot. AI drafting
+ * is optional, and an optional feature must never stop the game server
+ * from starting (e.g. after a git pull without npm install).
+ * @returns {Promise<any>}
+ */
+async function getAnthropic() {
+  try {
+    return (await import('@anthropic-ai/sdk')).default;
+  } catch {
+    throw Object.assign(
+      new Error('the @anthropic-ai/sdk package is not installed — run `npm install` on the server'),
+      { code: 'SDK_MISSING' }
+    );
+  }
+}
 
 export const NOTES_CAP = 50 * 1024;
 export const INSTRUCTIONS_CAP = 5 * 1024;
@@ -96,6 +111,7 @@ export function underDailyLimit(/** @type {string} */ ip) {
  * @returns {Promise<{doc: string, usage: {input_tokens: number, output_tokens: number}}>}
  */
 export async function draftPack(body) {
+  const Anthropic = await getAnthropic();
   const client = new Anthropic();
   const model = process.env.AI_MODEL ?? 'claude-sonnet-5';
 
