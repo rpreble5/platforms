@@ -732,6 +732,53 @@ export function insertTemplate(text, parsed, bucket) {
 }
 
 /**
+ * Replace just the LABEL of a line while preserving its structure: the ✓ on
+ * an answer, the #/#sort tag on a head, the [on]/[off] and "(starts on)" on
+ * a toggle, the true:/false: prefix on a statement, the "= N (…)" tail on a
+ * number control, the item list after a bucket name — or one ITEM inside a
+ * bucket line when itemIx is given. Used by the shorter-phrasings picker.
+ * @param {string} text @param {ReturnType<typeof parseDoc>} parsed
+ * @param {number} lineIx @param {string} newLabel @param {number} [itemIx]
+ */
+export function setLabel(text, parsed, lineIx, newLabel, itemIx) {
+  const lines = text.split('\n');
+  const t = (lines[lineIx] ?? '').trim();
+  const kind = parsed.lines[lineIx]?.kind;
+  const label = newLabel.trim();
+
+  if (kind === 'head') {
+    const tag = HEAD_TAG_RE.exec(t);
+    lines[lineIx] = tag ? `#${tag[1].toLowerCase()} ${label}` : `# ${label}`;
+  } else if (kind === 'answer') {
+    lines[lineIx] = CHECK_RE.test(t) ? `✓ ${label}` : label;
+  } else if (kind === 'statement') {
+    const st = STATEMENT_RE.exec(t);
+    lines[lineIx] = st ? `${st[1].toLowerCase()}: ${label}` : label;
+  } else if (kind === 'toggle') {
+    const tg = TOGGLE_RE.exec(t);
+    const startsOn = STARTS_ON_RE.test(t);
+    const prefix = tg ? `[${tg[1].toLowerCase()}] ` : '';
+    lines[lineIx] = `${prefix}${label}${startsOn ? ' (starts on)' : ''}`;
+  } else if (kind === 'number') {
+    lines[lineIx] = t.replace(/^.+?(\s*=)/, `${label}$1`);
+  } else if (kind === 'bucket') {
+    const bm = BUCKET_RE.exec(t);
+    if (bm) {
+      const items = bm[2].split(',').map((s) => s.trim()).filter(Boolean);
+      if (itemIx === undefined) {
+        lines[lineIx] = `${label}: ${items.join(', ')}`;
+      } else if (itemIx >= 0 && itemIx < items.length) {
+        items[itemIx] = label;
+        lines[lineIx] = `${bm[1].trim()}: ${items.join(', ')}`;
+      }
+    }
+  } else {
+    return text; // not a labelled line — leave the doc untouched
+  }
+  return lines.join('\n');
+}
+
+/**
  * Remove a block (and the blank line that followed it, if doubling up).
  * @param {string} text @param {import('./pack-text.js').BlockInfo} block
  */

@@ -19,7 +19,7 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
 import { deleteLevel, listLevels, saveLevel } from './levels-store.js';
-import { NOTES_CAP, draftPack, underDailyLimit } from './ai-draft.js';
+import { NOTES_CAP, draftPack, suggestShorter, underDailyLimit } from './ai-draft.js';
 
 /** @type {Record<string, string>} */
 const MIME = {
@@ -142,7 +142,12 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
         return;
       }
       readBody(req, NOTES_CAP + 16 * 1024)
-        .then((body) => draftPack(JSON.parse(body)))
+        .then((body) => {
+          const parsed = JSON.parse(body);
+          /** @type {Promise<object>} */
+          const run = parsed?.mode === 'suggest' ? suggestShorter(parsed) : draftPack(parsed);
+          return run;
+        })
         .then((out) => {
           res.writeHead(200, { 'Content-Type': MIME['.json'] });
           res.end(JSON.stringify(out));

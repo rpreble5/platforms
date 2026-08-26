@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { validatePack } from '../../shared/pack-validate.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
-  setLineFields, setDirective, setBlockType, insertTemplate, removeBlock,
+  setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock,
 } from './pack-text.js';
 
 /** A pack exercising every type, matching what the Studio exports. */
@@ -261,6 +261,37 @@ test('insertTemplate appends to sections, creating headers in order', () => {
   assert.equal(parsed.raw.controlRoom.questions.length, 1);
   assert.equal(parsed.raw.showdown.statements.length, 1);
   assert.match(ctrl.text.split('\n')[ctrl.line], /^# New case/);
+});
+
+test('setLabel swaps just the label, preserving line structure', () => {
+  const doc = [
+    '#sort Sort each bug by stain',   // 0 head with tag
+    'Gram positive: Staph aureus, Listeria', // 1 bucket
+    '',                               // 2
+    '# Which nerve?',                 // 3 head
+    '✓ Spinal accessory',             // 4 checked answer
+    'Vagus',                          // 5 plain answer
+    '',                               // 6
+    '## Control Room',                // 7
+    '# Case',                         // 8
+    '[off] Alarms muted (starts on)', // 9 toggle
+    'NS bolus = 1 (0-3, L)',          // 10 number
+    '## Showdown',                    // 11
+    'true: An octopus has three hearts', // 12 statement
+  ].join('\n');
+  const p = () => parseDoc(doc);
+  const line = (/** @type {string} */ s, /** @type {number} */ i) => s.split('\n')[i];
+
+  assert.equal(line(setLabel(doc, p(), 1, 'Gram +'), 1), 'Gram +: Staph aureus, Listeria');
+  assert.equal(line(setLabel(doc, p(), 1, 'Staph', 0), 1), 'Gram positive: Staph, Listeria');
+  assert.equal(line(setLabel(doc, p(), 0, 'Sort by stain'), 0), '#sort Sort by stain');
+  assert.equal(line(setLabel(doc, p(), 4, 'CN XI'), 4), '✓ CN XI');
+  assert.equal(line(setLabel(doc, p(), 5, 'CN X'), 5), 'CN X');
+  assert.equal(line(setLabel(doc, p(), 9, 'Alarms off'), 9), '[off] Alarms off (starts on)');
+  assert.equal(line(setLabel(doc, p(), 10, 'NS (L)'), 10), 'NS (L) = 1 (0-3, L)');
+  assert.equal(line(setLabel(doc, p(), 12, 'Octopus: 3 hearts'), 12), 'true: Octopus: 3 hearts');
+  // a non-label line is left alone
+  assert.equal(setLabel(doc, p(), 2, 'nope'), doc);
 });
 
 test('removeBlock deletes the block and its trailing blank', () => {

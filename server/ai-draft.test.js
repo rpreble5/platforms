@@ -11,7 +11,7 @@ import http from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 
-import { buildSystemPrompt, NOTES_CAP } from './ai-draft.js';
+import { buildSuggestPrompt, buildSystemPrompt, NOTES_CAP } from './ai-draft.js';
 import { LIMITS, validatePack } from '../shared/pack-validate.js';
 import { parseDoc } from '../client/builder/pack-text.js';
 
@@ -28,6 +28,10 @@ test('the system prompt quotes the enforced limits and the output contract', () 
   assert.match(p, /## Control Room/);
   assert.match(p, /BREVITY: the ceilings are not targets/);
   assert.ok(p.includes(`~${Math.round(LIMITS.questionChars * 2 / 3)}`), 'brevity target derived from LIMITS');
+  // the suggestions prompt: JSON contract, opt-out allowed
+  const sp = buildSuggestPrompt();
+  assert.match(sp, /ONLY a JSON array/);
+  assert.match(sp, /OMIT items/);
 });
 
 const CANNED_DOC = [
@@ -51,11 +55,20 @@ function mockAnthropic() {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
-      seen.push(JSON.parse(body));
+      const sent = JSON.parse(body);
+      seen.push(sent);
+      const isSuggest = /SHORTER phrasings/.test(sent.system?.[0]?.text ?? '');
+      const text = isSuggest
+        ? JSON.stringify([
+            { id: 'b1', options: ['Gram pos', 'Gram +'] },
+            { id: 'nope', options: ['x'] },              // unknown id -> dropped
+            { id: 'a4', options: ['A phrase far longer than the original text ever was'] }, // longer -> dropped
+          ])
+        : '```\n' + CANNED_DOC + '\n```';
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         id: 'msg_mock', type: 'message', role: 'assistant', model: 'claude-sonnet-5',
-        content: [{ type: 'text', text: '```\n' + CANNED_DOC + '\n```' }],
+        content: [{ type: 'text', text }],
         stop_reason: 'end_turn',
         usage: { input_tokens: 1200, output_tokens: 300 },
       }));
@@ -134,13 +147,17 @@ test('endpoint: off without a key, passcode-gated, and drafts flow through valid
     assert.match(sent.messages[0].content, /AUTHOR INSTRUCTIONS: two questions/);
     assert.match(sent.messages[0].content, /apap max 4g/);
 
-    // (d) tighten mode sends the doc + warnings
-    const tight = await post(8272, { mode: 'tighten', doc: CANNED_DOC, problems: ['Q1: answer "x" is 30 chars (>28 shrinks small)'] }, 'ward6');
-    assert.equal(tight.status, 200);
-    const sentTighten = seen.at(-1);
-    assert.match(sentTighten.messages[0].content, /Rewrite ONLY the flagged/);
-    assert.match(sentTighten.messages[0].content, /30 chars/);
-    assert.match(sentTighten.messages[0].content, /octopus/);
+    // (d) suggest mode: options filtered to known ids, shorter, within limits
+    const sug = await post(8272, { mode: 'suggest', items: [
+      { id: 'b1', kind: 'bucket', text: 'Gram positive', limit: 24 },
+      { id: 'a4', kind: 'answer', text: 'Spironolactone', limit: 28 },
+    ] }, 'ward6');
+    assert.equal(sug.status, 200);
+    const sugOut = await sug.json();
+    assert.deepEqual(sugOut.suggestions, [{ id: 'b1', options: ['Gram pos', 'Gram +'] }]);
+    const sentSuggest = seen.at(-1);
+    assert.match(sentSuggest.system[0].text, /SHORTER phrasings/);
+    assert.match(sentSuggest.messages[0].content, /Gram positive/);
 
     // guards: empty notes and oversized notes are 400s
     assert.equal((await post(8272, { mode: 'draft', notes: '' }, 'ward6')).status, 400);

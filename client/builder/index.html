@@ -143,7 +143,7 @@
   <span class="hint">type the pack as a document · nothing leaves your browser until you export</span>
   <span class="spacer"></span>
   <a href="../training/" style="color:#5c5c68;font-size:13px;font-weight:650;text-decoration:none;margin-right:6px">Writer's guide ↗</a>
-  <button id="aiTighten" class="small" title="AI shortens only the over-length text" disabled>✨ Tighten to fit</button>
+  <button id="aiShorten" class="small" title="AI suggests shorter phrasings — you pick" disabled>✨ Shorter phrasings…</button>
   <button id="aiDraft" class="small">✨ Draft from notes…</button>
   <button id="loadSample" class="small">Load sample</button>
   <button id="openFile" class="small">Open…</button>
@@ -227,6 +227,22 @@
     </div>
   </div>
 </main>
+
+<dialog id="sugDlg">
+  <div style="padding:16px">
+    <h2 style="margin-top:0">Shorter phrasings</h2>
+    <p class="hint" style="margin:0 0 10px">
+      Your text on the left; suggested shorter forms beside it. Click one to
+      use it (the row updates), or leave your own. Nothing changes unless
+      you click a suggestion — Ctrl+Z in the editor undoes any pick.
+    </p>
+    <div id="sugList" style="max-height:56vh;overflow:auto"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="sugClose" class="primary">Done</button>
+    </div>
+    <div class="hint" id="sugStatus" style="margin-top:8px"></div>
+  </div>
+</dialog>
 
 <dialog id="aiDlg">
   <div style="padding:16px">

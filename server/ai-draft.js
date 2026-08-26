@@ -92,6 +92,76 @@ RULES:
 - Output ONLY the document text. No markdown fences, no commentary, no headings other than ## Control Room / ## Showdown.`;
 }
 
+/** The shorter-phrasings picker: per-item alternatives, never rewrites.
+ *  Stable text — cache_control depends on it. */
+export function buildSuggestPrompt() {
+  return `You suggest SHORTER phrasings for quiz text that is drawn on platforms in a projected game, where short text reads best. The audience is physicians and residents.
+
+You receive a JSON array of items: {"id", "kind", "text", "limit"} — kind is one of question, answer, bucket, item, control, statement; limit is that kind's character ceiling.
+
+For each item where a materially shorter phrasing exists (saving at least ~20% or 4+ characters), reply with 1-3 alternatives, best first. Standard medical abbreviations and symbols are welcome when unambiguous to physicians ("Gram positive" → "Gram pos", "Gram +"). Every alternative must preserve the exact meaning and stay within the item's limit. OMIT items that are already tight — do not pad the list.
+
+Reply with ONLY a JSON array, no fences, no commentary: [{"id": "...", "options": ["...", "..."]}, ...]. An empty array is a valid reply.`;
+}
+
+/**
+ * mode 'suggest': per-item shorter phrasings for the picker dialog.
+ * @param {{items?: any[]}} body
+ * @returns {Promise<{suggestions: {id: string, options: string[]}[], usage: {input_tokens: number, output_tokens: number}}>}
+ */
+export async function suggestShorter(body) {
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!items.length) throw new RangeError('suggest needs items');
+  if (items.length > 300) throw new RangeError('too many items');
+  const clean = items.map((it) => ({
+    id: String(it?.id ?? '').slice(0, 40),
+    kind: String(it?.kind ?? '').slice(0, 20),
+    text: String(it?.text ?? '').slice(0, 200),
+    limit: Number(it?.limit) || 0,
+  }));
+  const byId = new Map(clean.map((it) => [it.id, it]));
+
+  const Anthropic = await getAnthropic();
+  const client = new Anthropic();
+  const response = await client.messages.create({
+    model: process.env.AI_MODEL ?? 'claude-sonnet-5',
+    max_tokens: 4000,
+    system: [
+      { type: 'text', text: buildSuggestPrompt(), cache_control: { type: 'ephemeral' } },
+    ],
+    messages: [{ role: 'user', content: JSON.stringify(clean) }],
+  });
+
+  let text = '';
+  for (const block of response.content) {
+    if (block.type === 'text') text += block.text;
+  }
+  text = text.trim().replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
+  /** @type {any} */
+  let parsed = [];
+  try { parsed = JSON.parse(text); } catch { parsed = []; }
+  const suggestions = (Array.isArray(parsed) ? parsed : [])
+    .filter((s) => byId.has(s?.id) && Array.isArray(s?.options))
+    .map((s) => {
+      const it = /** @type {any} */ (byId.get(s.id));
+      const options = s.options
+        .map((/** @type {any} */ o) => String(o).trim())
+        .filter((/** @type {string} */ o) =>
+          o && o.length < it.text.length && (!it.limit || o.length <= it.limit))
+        .slice(0, 3);
+      return { id: it.id, options };
+    })
+    .filter((s) => s.options.length);
+
+  return {
+    suggestions,
+    usage: {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    },
+  };
+}
+
 /** In-memory per-IP daily budget — this endpoint spends real money. */
 const spent = new Map();
 export function underDailyLimit(/** @type {string} */ ip) {
@@ -106,9 +176,9 @@ export function underDailyLimit(/** @type {string} */ ip) {
 }
 
 /**
- * Run one drafting call. Throws Anthropic SDK errors upward; the route
- * maps them to HTTP responses.
- * @param {{mode?: string, notes?: string, instructions?: string, doc?: string, problems?: string[]}} body
+ * mode 'draft': faculty notes -> a fresh document. Throws Anthropic SDK
+ * errors upward; the route maps them to HTTP responses.
+ * @param {{notes?: string, instructions?: string}} body
  * @returns {Promise<{doc: string, usage: {input_tokens: number, output_tokens: number}}>}
  */
 export async function draftPack(body) {
@@ -116,26 +186,11 @@ export async function draftPack(body) {
   const client = new Anthropic();
   const model = process.env.AI_MODEL ?? 'claude-sonnet-5';
 
-  let user;
-  if (body.mode === 'tighten') {
-    const doc = String(body.doc ?? '');
-    if (!doc.trim()) throw new RangeError('tighten needs the current document');
-    if (doc.length > NOTES_CAP) throw new RangeError('document too large');
-    const problems = (Array.isArray(body.problems) ? body.problems : []).map(String).slice(0, 200);
-    user = `Here is a pack document and the editor's length warnings. Rewrite ONLY the flagged over-length text so it fits its limit, preserving meaning and every ✓ / [on] / [off] / true: / false: mark. Change nothing else — not order, not unflagged lines. Return the complete document.
-
-WARNINGS:
-${problems.join('\n') || '(none provided — shorten any text over the limits)'}
-
-DOCUMENT:
-${doc}`;
-  } else {
-    const notes = String(body.notes ?? '');
-    if (!notes.trim()) throw new RangeError('draft needs notes');
-    if (notes.length > NOTES_CAP) throw new RangeError('notes too large');
-    const instructions = String(body.instructions ?? '').slice(0, INSTRUCTIONS_CAP);
-    user = `${instructions.trim() ? `AUTHOR INSTRUCTIONS: ${instructions.trim()}\n\n` : ''}NOTES:\n${notes}`;
-  }
+  const notes = String(body.notes ?? '');
+  if (!notes.trim()) throw new RangeError('draft needs notes');
+  if (notes.length > NOTES_CAP) throw new RangeError('notes too large');
+  const instructions = String(body.instructions ?? '').slice(0, INSTRUCTIONS_CAP);
+  const user = `${instructions.trim() ? `AUTHOR INSTRUCTIONS: ${instructions.trim()}\n\n` : ''}NOTES:\n${notes}`;
 
   const response = await client.messages.create({
     model,

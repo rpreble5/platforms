@@ -13,7 +13,7 @@
  * the repository for people who have nothing installed.
  */
 
-import { PACK_THEMES, validatePack } from '../../shared/pack-validate.js';
+import { LIMITS, PACK_THEMES, validatePack } from '../../shared/pack-validate.js';
 import { STEP_MS, MAX_FRAME_DT_MS, MAX_STEPS_PER_FRAME } from '../../shared/tuning.js';
 import { createWorld } from '../../sim/world.js';
 import { PHASE, configureControlRounds, createGame, startGame, stepRound } from '../../sim/round.js';
@@ -25,7 +25,7 @@ import { drawRoundOverlay, registerPreviewImage } from '../display/round-ui.js';
 import { drawShowdown } from '../display/showdown-ui.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
-  setLineFields, setDirective, setBlockType, insertTemplate, removeBlock,
+  setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock,
 } from './pack-text.js';
 
 // ------------------------------------------------------------------ state
@@ -550,9 +550,7 @@ function refresh(opts = {}) {
   renderOutline(vproblems);
   renderProblems(vproblems);
   syncPackCard();
-  // Length warnings arm the AI tighten button.
-  lengthWarnings = vproblems.filter((m) => /chars \(>|over 18 chars/.test(m));
-  $('aiTighten').disabled = !lengthWarnings.length;
+  $('aiShorten').disabled = !parsed.blocks.length;
   if (!opts.keepPanel) renderPanel();
   restartPreview();
   save();
@@ -802,10 +800,9 @@ $('replay').onclick = () => restartPreview();
 // not sure about arrive unchecked, which the gutter already flags.
 
 const AI_CODE_KEY = 'packstudio-ai-code';
-/** @type {string[]} */
-let lengthWarnings = [];
 
 /** A dismissible notice that outlives the dialog (click to close). */
+/** @type {any} */
 let toastTimer = 0;
 function toast(/** @type {string} */ msg) {
   const el = $('toast');
@@ -888,29 +885,95 @@ $('aiGo').onclick = async () => {
   toast('✨ Drafted — click the answer checks the AI left blank, and verify every key before use.');
 };
 
-$('aiTighten').onclick = async () => {
-  const btn = $('aiTighten');
-  btn.disabled = true;
-  const old = btn.textContent;
-  btn.textContent = '✨ Tightening…';
-  const r = await callAi({ mode: 'tighten', doc: docText, problems: lengthWarnings });
-  btn.textContent = old;
-  btn.disabled = false;
-  if (!r.ok) {
-    if (r.status === 401) {
-      const code = window.prompt('Drafting passcode (ask the host):');
-      if (code) {
-        try { localStorage.setItem(AI_CODE_KEY, code.trim()); } catch { /* no store */ }
-        btn.click();
-        return;
+/** Every piece of author text a shorter phrasing could help, with enough
+ *  addressing (line, item index) to apply a pick surgically. setLabel never
+ *  changes the line count, so these addresses stay valid across picks. */
+function suggestibleItems() {
+  /** @type {{id:string, kind:string, text:string, limit:number, line:number, itemIx?:number}[]} */
+  const items = [];
+  const src = docText.split('\n');
+  parsed.lines.forEach((l, i) => {
+    const t = (src[i] ?? '').trim();
+    if (l.kind === 'head' && l.block !== null) {
+      const b = parsed.blocks[l.block];
+      if (b?.text) items.push({ id: `h${i}`, kind: 'question', text: b.text, limit: LIMITS.questionChars, line: i });
+    } else if (l.kind === 'answer') {
+      const text = t.replace(/^[✓*]\s*/, '').trim();
+      if (text) items.push({ id: `a${i}`, kind: 'answer', text, limit: LIMITS.answerChars, line: i });
+    } else if (l.kind === 'statement') {
+      const text = parsed.blocks[l.block ?? -1]?.text ?? '';
+      if (text) items.push({ id: `s${i}`, kind: 'statement', text, limit: LIMITS.statementChars, line: i });
+    } else if (l.kind === 'toggle') {
+      const text = t.replace(/^\[(on|off)\]\s*/i, '').replace(/\s*\(starts?\s+on\)\s*$/i, '').trim();
+      if (text) items.push({ id: `t${i}`, kind: 'control', text, limit: LIMITS.controlLabelChars, line: i });
+    } else if (l.kind === 'number') {
+      const text = t.split('=')[0].trim();
+      if (text) items.push({ id: `n${i}`, kind: 'control', text, limit: LIMITS.controlLabelChars, line: i });
+    } else if (l.kind === 'bucket') {
+      const m = /^([^:]+):\s*(.*)$/.exec(t);
+      if (m) {
+        items.push({ id: `b${i}`, kind: 'bucket', text: m[1].trim(), limit: LIMITS.sortLabelChars, line: i });
+        m[2].split(',').map((x) => x.trim()).filter(Boolean).forEach((it, j) => {
+          items.push({ id: `i${i}_${j}`, kind: 'item', text: it, limit: LIMITS.sortLabelChars, line: i, itemIx: j });
+        });
       }
     }
-    window.alert(r.json.error ?? `tighten failed (${r.status})`);
+  });
+  return items;
+}
+
+$('aiShorten').onclick = async () => {
+  $('sugList').replaceChildren();
+  $('sugStatus').textContent = 'Asking for suggestions… (a few seconds)';
+  $('sugDlg').showModal();
+  const items = suggestibleItems();
+  let r = await callAi({ mode: 'suggest', items: items.map(({ id, kind, text, limit }) => ({ id, kind, text, limit })) });
+  if (r.status === 401) {
+    const code = window.prompt('Drafting passcode (ask the host):');
+    if (code) {
+      try { localStorage.setItem(AI_CODE_KEY, code.trim()); } catch { /* no store */ }
+      r = await callAi({ mode: 'suggest', items: items.map(({ id, kind, text, limit }) => ({ id, kind, text, limit })) });
+    }
+  }
+  if (!r.ok) {
+    $('sugStatus').textContent = r.json.error ?? `suggestions failed (${r.status})`;
     return;
   }
-  setText(String(r.json.doc ?? ''), { keepPanel: true });
-  toast('✨ Tightened the flagged text — review the changes (Ctrl+Z undoes them).');
+  const byId = new Map(items.map((it) => [it.id, it]));
+  const got = (Array.isArray(r.json.suggestions) ? r.json.suggestions : [])
+    .filter((/** @type {any} */ sg) => byId.has(sg.id));
+  if (!got.length) {
+    $('sugStatus').textContent = 'No shorter suggestions — your text is already tight.';
+    return;
+  }
+  $('sugStatus').textContent = 'Click a suggestion to use it; your original stays otherwise.';
+  for (const sg of got) {
+    const it = /** @type {any} */ (byId.get(sg.id));
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid #ececf1';
+    const chip = document.createElement('span');
+    chip.className = 'badge';
+    chip.textContent = it.kind;
+    const cur = document.createElement('span');
+    cur.style.cssText = 'flex:1;min-width:180px';
+    cur.textContent = it.text;
+    row.append(chip, cur);
+    for (const opt of sg.options) {
+      const b = document.createElement('button');
+      b.className = 'small';
+      b.textContent = `${opt} (${opt.length})`;
+      b.onclick = () => {
+        setText(setLabel(docText, parsed, it.line, opt, it.itemIx), { keepPanel: true });
+        cur.textContent = opt;
+        for (const sib of row.querySelectorAll('button')) sib.classList.remove('primary');
+        b.classList.add('primary');
+      };
+      row.appendChild(b);
+    }
+    $('sugList').appendChild(row);
+  }
 };
+$('sugClose').onclick = () => $('sugDlg').close();
 
 // boot
 adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
