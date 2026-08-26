@@ -137,6 +137,13 @@
   }
   .sugrow button:hover { border-color: #047857; background: #d9f5e8; color: #047857; }
   #editorArea.withSugs textarea#doc, #editorArea.withSugs #mirror { padding-right: 250px; }
+  .packrow {
+    display: flex; gap: 10px; align-items: center; padding: 7px 9px; margin-bottom: 6px;
+    background: #fbfbfc; border: 1px solid #ececf1; border-radius: 8px;
+  }
+  .packrow .t { flex: 1; }
+  .packrow .sub { color: #8a8a96; font-size: 12px; }
+  .packsHead { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: #8a8a96; font-weight: 700; margin: 12px 0 6px; }
   #toast {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
     max-width: min(680px, 92vw); z-index: 10; cursor: pointer;
@@ -155,7 +162,8 @@
   <a href="../training/" style="color:#5c5c68;font-size:13px;font-weight:650;text-decoration:none;margin-right:6px">Writer's guide ↗</a>
   <button id="aiShorten" class="small" title="AI suggests shorter phrasings — you pick" disabled>✨ Shorter phrasings…</button>
   <button id="aiDraft" class="small">✨ Draft from notes…</button>
-  <button id="loadSample" class="small">Load sample</button>
+  <button id="packsBtn" class="small">Packs…</button>
+  <button id="newPack" class="small">New</button>
   <button id="openFile" class="small">Open…</button>
   <button id="pasteJson" class="small">Paste JSON</button>
   <button id="copyJson" class="small">Copy JSON</button>
@@ -238,6 +246,17 @@
     </div>
   </div>
 </main>
+
+<dialog id="packsDlg">
+  <div style="padding:16px">
+    <h2 style="margin-top:0">Packs</h2>
+    <div id="packsDrafts"></div>
+    <div id="packsServer"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="packsClose">Close</button>
+    </div>
+  </div>
+</dialog>
 
 <dialog id="aiDlg">
   <div style="padding:16px">

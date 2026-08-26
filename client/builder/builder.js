@@ -50,6 +50,11 @@ let caretIx = -1;
 let caretLn = -1;
 /** Local image files chosen this session, filename -> object URL. */
 const localImages = new Map();
+/** Designed levels from /api/levels: the preview rotates through these for
+ *  choice questions exactly like the game (choiceArena picks by board
+ *  count). Empty when no server is reachable (e.g. GitHub Pages). */
+/** @type {any[]} */
+let levelPool = [];
 
 /** Validate a fresh copy (validatePack normalizes in place). */
 function validated() {
@@ -634,6 +639,7 @@ function restartPreview() {
   const vetted = validatePack({ questions: src ? [structuredClone(src)] : [] });
   const q = vetted.pack.questions[0];
   pvGame = createGame(q ? [q] : [], meta.answerMs);
+  pvGame.levelPool = levelPool;
   if (q) startGame(pvGame, pvWorld);
 }
 
@@ -672,6 +678,7 @@ function save() {
     localStorage.setItem(DOC_KEY, docText);
     localStorage.setItem(META_KEY, JSON.stringify(meta));
   } catch { /* full/blocked: drafts are a convenience */ }
+  saveDraftEntry();
 }
 
 function loadDraft() {
@@ -799,8 +806,129 @@ $('pasteGo').onclick = () => {
     adoptDoc(next);
   } catch { alert('Not valid JSON'); }
 };
-$('loadSample').onclick = () => adoptDoc(serializeDoc(SAMPLE));
-$('replay').onclick = () => restartPreview();
+// ---------------------------------------------------------------- packs
+// The library: every pack you have touched in this browser (keyed by its
+// name), the packs on the game server, and the built-in sample.
+
+const DRAFTS_KEY = 'packstudio-drafts';
+
+/** @returns {Record<string, {doc: string, meta: any, at: number}>} */
+function loadDrafts() {
+  try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') ?? {}; } catch { return {}; }
+}
+
+function saveDraftEntry() {
+  const name = String(meta.pack ?? '').trim();
+  if (!name) return;
+  try {
+    const drafts = loadDrafts();
+    drafts[name] = { doc: docText, meta: { ...meta }, at: Date.now() };
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+  } catch { /* full/blocked: drafts are a convenience */ }
+}
+
+async function openPacksDlg() {
+  const draftsHolder = $('packsDrafts');
+  const serverHolder = $('packsServer');
+  draftsHolder.replaceChildren();
+  serverHolder.replaceChildren();
+
+  const row = (/** @type {HTMLElement} */ into, /** @type {string} */ title, /** @type {string} */ sub, /** @type {() => void} */ open, /** @type {(() => void) | null} */ del) => {
+    const r = document.createElement('div');
+    r.className = 'packrow';
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = title;
+    const su = document.createElement('span');
+    su.className = 'sub';
+    su.textContent = sub;
+    const b = document.createElement('button');
+    b.className = 'small primary';
+    b.textContent = 'Open';
+    b.onclick = () => { open(); $('packsDlg').close(); };
+    r.append(t, su, b);
+    if (del) {
+      const d = document.createElement('button');
+      d.className = 'small danger';
+      d.textContent = '✕';
+      d.title = 'delete this draft from this browser';
+      d.onclick = () => { if (window.confirm(`Delete the draft "${title}" from this browser?`)) { del(); void openPacksDlg(); } };
+      r.appendChild(d);
+    }
+    into.appendChild(r);
+  };
+
+  const head = (/** @type {HTMLElement} */ into, /** @type {string} */ text) => {
+    const h = document.createElement('div');
+    h.className = 'packsHead';
+    h.textContent = text;
+    into.appendChild(h);
+  };
+
+  head(draftsHolder, 'Your drafts (this browser)');
+  const drafts = loadDrafts();
+  const names = Object.keys(drafts).sort((a, b) => (drafts[b].at ?? 0) - (drafts[a].at ?? 0));
+  if (!names.length) {
+    const s = document.createElement('div');
+    s.className = 'hint';
+    s.textContent = 'Nothing yet — everything you write is saved here automatically, under its pack name.';
+    draftsHolder.appendChild(s);
+  }
+  for (const name of names) {
+    const d = drafts[name];
+    const current = name === String(meta.pack ?? '').trim();
+    row(draftsHolder, name, `${current ? 'open now · ' : ''}${new Date(d.at).toLocaleString()}`, () => {
+      saveDraftEntry();
+      meta = { ...d.meta };
+      setText(d.doc, { caret: 0 });
+    }, () => {
+      const all = loadDrafts();
+      delete all[name];
+      try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+    });
+  }
+
+  head(serverHolder, 'On the game server');
+  try {
+    const packs = await fetch('/api/packs').then((r) => r.ok ? r.json() : Promise.reject());
+    for (const pk of Array.isArray(packs) ? packs : []) {
+      row(serverHolder, pk.name, `${pk.questions} questions — opens as a local draft`, async () => {
+        try {
+          const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
+          saveDraftEntry();
+          adoptDoc(serializeDoc(pack));
+          toast(`Opened "${pk.name}" from the server — your edits stay in this browser until you download and send the file.`);
+        } catch { toast('Could not load that pack from the server.'); }
+      }, null);
+    }
+  } catch {
+    const s = document.createElement('div');
+    s.className = 'hint';
+    s.textContent = 'No game server reachable from this page.';
+    serverHolder.appendChild(s);
+  }
+  row(serverHolder, 'Sample night', 'the built-in example — every question type', () => {
+    saveDraftEntry();
+    adoptDoc(serializeDoc(SAMPLE));
+  }, null);
+
+  $('packsDlg').showModal();
+}
+
+$('packsBtn').onclick = () => void openPacksDlg();
+$('packsClose').onclick = () => $('packsDlg').close();
+
+$('newPack').onclick = () => {
+  if (!window.confirm('Start a new pack? The current one stays available under Packs…')) return;
+  saveDraftEntry();
+  meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored' };
+  setText('# \n', { caret: 2 });
+};
+$('replay').onclick = () => {
+  // Rotate the designed-level pool so replays show the variety the game has.
+  if (levelPool.length > 1) levelPool.push(levelPool.shift());
+  restartPreview();
+};
 
 // ------------------------------------------------------------------ AI drafting
 // Notes -> the doc format, via the server's /api/ai-draft (Claude). The AI
@@ -1032,4 +1160,17 @@ $('aiShorten').onclick = async () => {
 
 // boot
 adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
+void fetch('/api/levels')
+  .then((r) => (r.ok ? r.json() : Promise.reject()))
+  .then((list) => {
+    if (Array.isArray(list) && list.length) {
+      levelPool = list;
+      restartPreview(); // the first preview ran before the pool arrived
+    }
+  })
+  .catch(() => { /* no server (GitHub Pages): generated arenas only */ });
+// Debug handle for harnesses — mirrors the display's __platforms.
+Object.defineProperty(globalThis, '__studio', {
+  value: { get pvGame() { return pvGame; }, get pvWorld() { return pvWorld; }, get levelPool() { return levelPool; } },
+});
 requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });
