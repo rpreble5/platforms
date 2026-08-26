@@ -805,6 +805,17 @@ const AI_CODE_KEY = 'packstudio-ai-code';
 /** @type {string[]} */
 let lengthWarnings = [];
 
+/** A dismissible notice that outlives the dialog (click to close). */
+let toastTimer = 0;
+function toast(/** @type {string} */ msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = 'none'; }, 12000);
+  el.onclick = () => { el.style.display = 'none'; };
+}
+
 /** @param {any} body @returns {Promise<{ok: boolean, status: number, json: any}>} */
 async function callAi(body) {
   let code = '';
@@ -871,10 +882,10 @@ $('aiGo').onclick = async () => {
     return;
   }
   const doc = String(r.json.doc ?? '');
+  $('aiDlg').close();
   if ($('aiAppend').checked) setText(mergeDocs(docText, doc), { caret: 0 });
   else adoptDoc(doc);
-  $('aiStatus').textContent =
-    'Drafted — review the document behind this dialog. Click the answer checks it left blank, and verify every key before use.';
+  toast('✨ Drafted — click the answer checks the AI left blank, and verify every key before use.');
 };
 
 $('aiTighten').onclick = async () => {
@@ -898,6 +909,7 @@ $('aiTighten').onclick = async () => {
     return;
   }
   setText(String(r.json.doc ?? ''), { keepPanel: true });
+  toast('✨ Tightened the flagged text — review the changes (Ctrl+Z undoes them).');
 };
 
 // boot

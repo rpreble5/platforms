@@ -26,6 +26,8 @@ test('the system prompt quotes the enforced limits and the output contract', () 
   assert.match(p, /ONLY the document text/i);
   assert.match(p, /Never guess an answer key/i);
   assert.match(p, /## Control Room/);
+  assert.match(p, /BREVITY: the ceilings are not targets/);
+  assert.ok(p.includes(`~${Math.round(LIMITS.questionChars * 2 / 3)}`), 'brevity target derived from LIMITS');
 });
 
 const CANNED_DOC = [
