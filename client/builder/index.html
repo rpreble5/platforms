@@ -127,6 +127,8 @@
   <span class="hint">type the pack as a document · nothing leaves your browser until you export</span>
   <span class="spacer"></span>
   <a href="../training/" style="color:#9a90bd;font-size:13px;font-weight:700;text-decoration:none;margin-right:6px">Writer's guide ↗</a>
+  <button id="aiTighten" class="small" title="AI shortens only the over-length text" disabled>✨ Tighten to fit</button>
+  <button id="aiDraft" class="small">✨ Draft from notes…</button>
   <button id="loadSample" class="small">Load sample</button>
   <button id="openFile" class="small">Open…</button>
   <button id="pasteJson" class="small">Paste JSON</button>
@@ -209,6 +211,37 @@
     </div>
   </div>
 </main>
+
+<dialog id="aiDlg">
+  <div style="padding:16px">
+    <h2 style="margin-top:0">Draft questions from your notes</h2>
+    <p class="hint" style="margin:0 0 10px">
+      Paste rough questions, lecture notes, or a list of facts — any format.
+      The AI writes them into the document for your review. It only marks an
+      answer correct when your notes say so; everything else is left for you
+      to click.
+    </p>
+    <textarea id="aiNotes" rows="12" style="width:100%" placeholder="e.g.
+- max daily acetaminophen is 4g (make this a range question)
+- CURB-65 components: confusion, urea >7, RR≥30, SBP<90, age≥65
+- a few true/false myths for the finale…"></textarea>
+    <label>Instructions (optional)</label>
+    <input type="text" id="aiInstructions" placeholder="about 10 questions, mostly multiple choice, one sort">
+    <div class="row" style="margin-top:8px">
+      <div class="checkline"><input type="radio" name="aiMode" id="aiReplace" checked><span>Replace the document</span></div>
+      <div class="checkline"><input type="radio" name="aiMode" id="aiAppend"><span>Append to it</span></div>
+    </div>
+    <div id="aiCodeRow" style="display:none">
+      <label>Passcode</label>
+      <input type="text" id="aiCode" placeholder="ask the host for the drafting passcode">
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="aiGo" class="primary">Draft</button>
+      <button id="aiCancel">Cancel</button>
+    </div>
+    <div class="hint" id="aiStatus" style="margin-top:8px"></div>
+  </div>
+</dialog>
 
 <dialog id="pasteDlg">
   <div style="padding:16px">

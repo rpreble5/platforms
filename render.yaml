@@ -32,3 +32,10 @@ services:
       # on the test instance.
       - key: HOST_KEY
         generateValue: true
+      # AI drafting in the Pack Studio (optional). Set both in the
+      # dashboard: the Anthropic API key that pays for drafts, and the
+      # passcode you give faculty so strangers can't spend your credits.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AI_PASSCODE
+        sync: false

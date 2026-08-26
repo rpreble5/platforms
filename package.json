@@ -17,6 +17,7 @@
     "testsheet": "node tools/testsheet.js assets/platform.png"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

@@ -19,6 +19,7 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
 import { deleteLevel, listLevels, saveLevel } from './levels-store.js';
+import { NOTES_CAP, draftPack, underDailyLimit } from './ai-draft.js';
 
 /** @type {Record<string, string>} */
 const MIME = {
@@ -114,6 +115,46 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
     if (pathname === '/api/packs') {
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       res.end(JSON.stringify(listPacks(root)));
+      return;
+    }
+
+    // AI drafting for the Pack Studio: faculty notes -> the doc format,
+    // reviewed in the editor. Spends real API money, so it is off without
+    // ANTHROPIC_API_KEY, passcode-gated when AI_PASSCODE is set (the public
+    // Render instance should set both), and per-IP rate limited.
+    if (pathname === '/api/ai-draft' && req.method === 'POST') {
+      const fail = (/** @type {number} */ code, /** @type {string} */ error) => {
+        res.writeHead(code, { 'Content-Type': MIME['.json'] });
+        res.end(JSON.stringify({ error }));
+      };
+      if (!process.env.ANTHROPIC_API_KEY) {
+        fail(503, 'AI drafting is not configured on this server — set ANTHROPIC_API_KEY (and AI_PASSCODE) in its environment');
+        return;
+      }
+      const passcode = process.env.AI_PASSCODE;
+      if (passcode && req.headers['x-ai-passcode'] !== passcode) {
+        fail(401, 'wrong or missing passcode');
+        return;
+      }
+      const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '?').split(',')[0].trim();
+      if (!underDailyLimit(ip)) {
+        fail(429, 'daily drafting limit reached for this connection — try again tomorrow');
+        return;
+      }
+      readBody(req, NOTES_CAP + 16 * 1024)
+        .then((body) => draftPack(JSON.parse(body)))
+        .then((out) => {
+          res.writeHead(200, { 'Content-Type': MIME['.json'] });
+          res.end(JSON.stringify(out));
+        })
+        .catch((/** @type {any} */ err) => {
+          if (err instanceof RangeError) return fail(400, err.message);
+          // Anthropic SDK errors carry .status; map the interesting ones.
+          if (err?.status === 401) return fail(502, 'the server’s API key was rejected — check ANTHROPIC_API_KEY');
+          if (err?.status === 429) return fail(502, 'the AI API is rate limited right now — try again in a minute');
+          if (Number.isInteger(err?.status)) return fail(502, `AI API error ${err.status}`);
+          return fail(500, 'drafting failed — try again');
+        });
       return;
     }
 

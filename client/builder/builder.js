@@ -550,6 +550,9 @@ function refresh(opts = {}) {
   renderOutline(vproblems);
   renderProblems(vproblems);
   syncPackCard();
+  // Length warnings arm the AI tighten button.
+  lengthWarnings = vproblems.filter((m) => /chars \(>|over 18 chars/.test(m));
+  $('aiTighten').disabled = !lengthWarnings.length;
   if (!opts.keepPanel) renderPanel();
   restartPreview();
   save();
@@ -791,6 +794,111 @@ $('pasteGo').onclick = () => {
 };
 $('loadSample').onclick = () => adoptDoc(serializeDoc(SAMPLE));
 $('replay').onclick = () => restartPreview();
+
+// ------------------------------------------------------------------ AI drafting
+// Notes -> the doc format, via the server's /api/ai-draft (Claude). The AI
+// is a drafter: its output lands in the editor as ordinary text and goes
+// through the same parse/validate/preview as anything typed. Answers it was
+// not sure about arrive unchecked, which the gutter already flags.
+
+const AI_CODE_KEY = 'packstudio-ai-code';
+/** @type {string[]} */
+let lengthWarnings = [];
+
+/** @param {any} body @returns {Promise<{ok: boolean, status: number, json: any}>} */
+async function callAi(body) {
+  let code = '';
+  try { code = localStorage.getItem(AI_CODE_KEY) ?? ''; } catch { /* no store */ }
+  try {
+    const r = await fetch('/api/ai-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-ai-passcode': code },
+      body: JSON.stringify(body),
+    });
+    return { ok: r.ok, status: r.status, json: await r.json().catch(() => ({})) };
+  } catch {
+    return { ok: false, status: 0, json: { error: 'no server reachable — drafting runs on the game server or the test instance, not on a static copy of this page' } };
+  }
+}
+
+/** Merge two docs section by section, so an appended draft's Control Room
+ *  and Showdown join the existing ones instead of nesting inside them. */
+function mergeDocs(/** @type {string} */ a, /** @type {string} */ b) {
+  const split = (/** @type {string} */ t) => {
+    /** @type {{deck: string[], control: string[], showdown: string[]}} */
+    const parts = { deck: [], control: [], showdown: [] };
+    let cur = /** @type {'deck'|'control'|'showdown'} */ ('deck');
+    for (const l of t.split('\n')) {
+      const m = /^##\s*(.*)$/.exec(l.trim());
+      if (m) {
+        const n = m[1].toLowerCase();
+        if (n.startsWith('control')) { cur = 'control'; continue; }
+        if (n.startsWith('showdown')) { cur = 'showdown'; continue; }
+      }
+      parts[cur].push(l);
+    }
+    return parts;
+  };
+  const A = split(a);
+  const B = split(b);
+  const join = (/** @type {string[]} */ x, /** @type {string[]} */ y) =>
+    [...x, '', ...y].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  let out = join(A.deck, B.deck);
+  const control = join(A.control, B.control);
+  if (control) out += '\n\n## Control Room\n\n' + control;
+  const showdown = join(A.showdown, B.showdown);
+  if (showdown) out += '\n\n## Showdown\n\n' + showdown;
+  return out + '\n';
+}
+
+$('aiDraft').onclick = () => {
+  $('aiStatus').textContent = '';
+  $('aiDlg').showModal();
+};
+$('aiCancel').onclick = () => $('aiDlg').close();
+$('aiGo').onclick = async () => {
+  const notes = $('aiNotes').value;
+  if (!notes.trim()) { $('aiStatus').textContent = 'Paste some notes first.'; return; }
+  const typedCode = $('aiCode').value.trim();
+  if (typedCode) { try { localStorage.setItem(AI_CODE_KEY, typedCode); } catch { /* no store */ } }
+  $('aiGo').disabled = true;
+  $('aiStatus').textContent = 'Drafting… (a few seconds)';
+  const r = await callAi({ mode: 'draft', notes, instructions: $('aiInstructions').value });
+  $('aiGo').disabled = false;
+  if (!r.ok) {
+    if (r.status === 401) $('aiCodeRow').style.display = '';
+    $('aiStatus').textContent = r.json.error ?? `drafting failed (${r.status})`;
+    return;
+  }
+  const doc = String(r.json.doc ?? '');
+  if ($('aiAppend').checked) setText(mergeDocs(docText, doc), { caret: 0 });
+  else adoptDoc(doc);
+  $('aiStatus').textContent =
+    'Drafted — review the document behind this dialog. Click the answer checks it left blank, and verify every key before use.';
+};
+
+$('aiTighten').onclick = async () => {
+  const btn = $('aiTighten');
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = '✨ Tightening…';
+  const r = await callAi({ mode: 'tighten', doc: docText, problems: lengthWarnings });
+  btn.textContent = old;
+  btn.disabled = false;
+  if (!r.ok) {
+    if (r.status === 401) {
+      const code = window.prompt('Drafting passcode (ask the host):');
+      if (code) {
+        try { localStorage.setItem(AI_CODE_KEY, code.trim()); } catch { /* no store */ }
+        btn.click();
+        return;
+      }
+    }
+    window.alert(r.json.error ?? `tighten failed (${r.status})`);
+    return;
+  }
+  setText(String(r.json.doc ?? ''), { keepPanel: true });
+};
 
 // boot
 adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });

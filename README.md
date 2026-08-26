@@ -104,6 +104,19 @@ send the file to the host, who drops it in `questions/` (plus any
 referenced images in `questions/images/`). Drafts autosave in the
 browser; Open/Paste round-trips existing packs for editing.
 
+**AI drafting (optional).** The Studio's "✨ Draft from notes" button
+turns pasted rough material — lecture notes, half-written questions, a
+list of facts — into formatted questions, and "✨ Tighten to fit"
+shortens only over-length text. It runs on the game server (or the
+Render test instance) via the Anthropic API: set `ANTHROPIC_API_KEY`
+and a faculty `AI_PASSCODE` in the environment (both are pre-declared
+in `render.yaml`; a draft costs a few cents). The AI is a drafter, not
+an authority: it marks an answer correct only when the notes say so —
+anything uncertain arrives unchecked and flagged for the author to
+click — and its output lands in the editor as ordinary text, run
+through the same validation and live preview as anything typed. Verify
+every answer key before a real session.
+
 **Authoring is typing, not clicking.** The Studio's editor is a plain
 document: `#` starts a question, its answers go on the lines below, and
 everything updates live as you type. Correct answers are picked with the
