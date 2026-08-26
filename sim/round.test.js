@@ -35,7 +35,9 @@ import {
   DEBRIS_LIFE_MS,
   MAX_SPEED_BONUS,
   PHASE,
+  SCORE_MS,
   inputsLive,
+  skip,
   createGame,
   speedBonus,
   standings,
@@ -938,4 +940,34 @@ test('an image question never lifts a platform into the picture band', () => {
       stepRound(game, world, STEP_MS);
     }
   }
+});
+
+test('holdAfterReveal parks each scoreboard until skip()', () => {
+  const world = createWorld([]);
+  const game = createGame(structuredClone(DECK), 1000);
+  game.holdAfterReveal = true;
+  startGame(game, world);
+
+  // run far past every timer: the round must stop AT the first scoreboard
+  for (let t = 0; t < 60000; t += STEP_MS) stepRound(game, world, STEP_MS);
+  assert.equal(game.phase, PHASE.SCORE);
+  assert.equal(game.qIndex, 0);
+  assert.ok(game.phaseT > SCORE_MS, 'held well beyond the auto-advance point');
+
+  // the host advances; the next question plays and parks again
+  skip(game, world);
+  assert.equal(game.phase, PHASE.INTRO);
+  assert.equal(game.qIndex, 1);
+  for (let t = 0; t < 60000; t += STEP_MS) stepRound(game, world, STEP_MS);
+  assert.equal(game.phase, PHASE.SCORE);
+
+  // last question: skip ends the game as always
+  skip(game, world);
+  assert.equal(game.phase, PHASE.GAME_OVER);
+
+  // and with the flag off, the same deck auto-advances to GAME_OVER
+  const auto = createGame(structuredClone(DECK), 1000);
+  startGame(auto, world);
+  for (let t = 0; t < 60000; t += STEP_MS) stepRound(auto, world, STEP_MS);
+  assert.equal(auto.phase, PHASE.GAME_OVER);
 });

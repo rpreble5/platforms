@@ -138,6 +138,17 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
     case PHASE.SCORE:
       drawQuestion(cx, g);
       drawScoreboard(cx, g, roster);
+      // Host-paced mode parked here: say so quietly, or the room reads the
+      // frozen scoreboard as a hang.
+      if (g.holdAfterReveal && g.phaseT > 4000) {
+        cx.font = `700 22px ${FONT.ui}`;
+        cx.textAlign = 'center';
+        cx.fillStyle = themeName() === 'glass' && glassFam().light
+          ? glassFam().textDim
+          : 'rgba(255,255,255,0.55)';
+        cx.fillText('paced by the host — next question on their signal', 960, 1042);
+        cx.textAlign = 'left';
+      }
       break;
     case PHASE.GAME_OVER:
       drawFinal(cx, g, roster);

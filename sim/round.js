@@ -151,6 +151,8 @@ export const DEBRIS_LIFE_MS = 1600;
  * @property {Map<number, string|null>} atBuzzer playerId -> platform id they were
  *   on when the timer ended
  * @property {boolean} paused
+ * @property {boolean} holdAfterReveal host-paced rounds: park on each
+ *   scoreboard until skip() instead of auto-advancing
  * @property {import('./levels.js').LevelSpec[]} levelPool designed levels; a
  *   choice question uses one whose board count matches, rotating by qIndex
  * @property {'solo'|'teams'} mode teams = cohort play: select-all questions
@@ -199,6 +201,7 @@ export function createGame(questions, answerMs = 12000) {
     debrisT: 0,
     atBuzzer: new Map(),
     paused: false,
+    holdAfterReveal: false,
     levelPool: [],
     mode: /** @type {'solo'|'teams'} */ ('solo'),
     cohortOf: () => -1,
@@ -432,6 +435,10 @@ export function stepGame(g, world, dtMs) {
 
     case PHASE.SCORE:
       if (g.phaseT >= SCORE_MS) {
+        // Host-paced mode: park on the scoreboard (answers and standings on
+        // screen) until the host advances with skip(). Discussion happens
+        // here without racing a timer.
+        if (g.holdAfterReveal) break;
         if (g.qIndex + 1 >= g.questions.length) enter(g, world, PHASE.GAME_OVER);
         else nextQuestion(g, world);
       }

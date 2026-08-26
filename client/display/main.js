@@ -281,6 +281,13 @@ function onJson(msg) {
           else game.paused = false;
           hud.note = '';
           break;
+        case 'hold':
+          holdPref = !holdPref;
+          game.holdAfterReveal = holdPref;
+          note(holdPref
+            ? 'host-paced: each scoreboard holds until Next'
+            : 'auto-advance restored');
+          break;
         case 'restart':
           if (showdown) endShowdown();
           else if (game.phase === PHASE.LOBBY) startConfiguredGame(false);
@@ -317,6 +324,10 @@ function onJson(msg) {
  * phones keep joining underneath it the whole time — warming up in the arena
  * IS the lobby experience.
  */
+/** Host-paced rounds: hold each scoreboard until Next. Toggled from the
+ *  host phone (HOST_CMD 'hold') or the H key; reapplied by applyMode. */
+let holdPref = false;
+
 const menu = {
   /** @type {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom?:number}>} */
   packs: [],
@@ -374,6 +385,9 @@ function cohortOf(id) {
 function applyMode() {
   game.mode = menu.mode;
   game.cohortOf = cohortOf;
+  // The emcee-pacing choice survives pack switches and restarts: applyMode
+  // runs after every createGame.
+  game.holdAfterReveal = holdPref;
 }
 
 /** Teams represented by at least one connected, committed phone at game start. */
@@ -745,6 +759,7 @@ function frame(now) {
             roundKind: isControlQuestion(currentQuestion(game)) ? 'control' : 'standard',
             activeTeam: isControlQuestion(currentQuestion(game)) ? currentQuestion(game)?.team ?? null : null,
             paused: game.paused,
+            hold: game.holdAfterReveal,
             canShowdown:
               !!showdownSpec &&
               (game.phase === PHASE.LOBBY || game.phase === PHASE.GAME_OVER),

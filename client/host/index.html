@@ -5,80 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Host controls</title>
 <style>
-  /* One phone, one thumb, a dark room. Everything oversized on purpose. */
+  /* One phone, one thumb, a dark room. Everything oversized on purpose.
+     Modern dark: near-black slate, hairline borders, one emerald accent. */
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body {
-    margin: 0; background: #14101f; color: #e8e2d4;
+    margin: 0; background: #0e1013; color: #e7e9ec;
     font: 500 16px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
     display: flex; flex-direction: column; padding: 16px;
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
     user-select: none; -webkit-user-select: none;
   }
   header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-  #dot { width: 12px; height: 12px; border-radius: 50%; background: #f25f5c; flex: none; }
-  #dot.on { background: #3ddc9a; }
-  header b { letter-spacing: .06em; font-size: 14px; color: #9a9aa2; }
-  #players { margin-left: auto; font: 600 14px ui-monospace, Menlo, monospace; color: #9a9aa2; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: #e0524e; flex: none; }
+  #dot.on { background: #10b981; }
+  header b { letter-spacing: .14em; font-size: 13px; color: #8b919b; font-weight: 700; }
+  #players { margin-left: auto; font: 600 13px ui-monospace, Menlo, monospace; color: #8b919b; }
 
   #card {
-    background: #201a33; border: 1px solid #333338; border-radius: 16px;
+    background: #16181d; border: 1px solid #24272e; border-radius: 14px;
     padding: 16px; margin-bottom: 14px;
   }
   #phase {
-    display: inline-block; font: 800 13px ui-monospace, Menlo, monospace;
-    letter-spacing: .1em; padding: 3px 10px; border-radius: 999px;
-    background: #333338; color: #cfc6e8;
+    display: inline-block; font: 700 12px ui-monospace, Menlo, monospace;
+    letter-spacing: .12em; padding: 4px 10px; border-radius: 999px;
+    background: #1f232a; color: #aab0ba; border: 1px solid #2b303a;
   }
-  #phase.answer { background: #1d4b38; color: #3ddc9a; }
-  #phase.paused { background: #5c2320; color: #ff8a5c; }
-  #qnum { font: 600 13px ui-monospace, Menlo, monospace; color: #82828c; margin-left: 8px; }
-  #timer { float: right; font: 800 24px ui-monospace, Menlo, monospace; color: #ffd93d; }
-  #qtext { margin: 10px 0 0; font-size: 19px; font-weight: 700; min-height: 3em; }
-  #alist { margin: 10px 0 0; padding-left: 24px; font-size: 15px; color: #9a9aa2; }
-  #alist li { margin: 4px 0; }
-  #alist li.correct { color: #3ddc9a; font-weight: 800; }
+  #phase.answer { background: #0a2e22; color: #34d399; border-color: #14532d; }
+  #phase.paused { background: #3a1d12; color: #fb923c; border-color: #7c2d12; }
+  #qnum { font: 600 12px ui-monospace, Menlo, monospace; color: #6b7280; margin-left: 8px; }
+  #timer { float: right; font: 700 26px ui-monospace, Menlo, monospace; color: #fbbf24; font-variant-numeric: tabular-nums; }
+  #qtext { margin: 12px 0 0; font-size: 19px; font-weight: 650; line-height: 1.35; min-height: 3em; }
+  #alist { margin: 10px 0 0; padding-left: 22px; font-size: 15px; color: #8b919b; }
+  #alist li { margin: 5px 0; }
+  #alist li.correct { color: #34d399; font-weight: 750; }
   #alist li.correct::after { content: ' ✓'; }
-  #akey { margin: 10px 0 0; font-weight: 800; color: #3ddc9a; }
+  #akey { margin: 12px 0 0; font-weight: 750; color: #34d399; }
 
   button {
-    width: 100%; border: 0; border-radius: 16px; color: inherit;
-    font: 800 22px/1 inherit; padding: 22px; margin-bottom: 12px;
-    background: #333338; touch-action: manipulation;
+    width: 100%; border: 1px solid #2b303a; border-radius: 14px; color: #e7e9ec;
+    font: 700 20px/1 inherit; padding: 20px; margin-bottom: 10px;
+    background: #1a1d23; touch-action: manipulation;
   }
-  button:active { transform: scale(0.98); filter: brightness(1.15); }
+  button:active { transform: scale(0.985); filter: brightness(1.2); }
   button:disabled { opacity: .35; }
-  #next { background: #2f7a5a; font-size: 26px; padding: 28px; }
-  #pause { background: #44444e; }
-  #showdown { background: #5c2320; color: #ffb08a; }
-  #menurow { display: flex; gap: 12px; }
-  #menurow button { font-size: 16px; padding: 16px 12px; }
-  #menu { background: #23324d; color: #9dc4ff; font-size: 17px; padding: 16px; }
-  #playersBtn { background: #1f2b3c; color: #9db4d4; font-size: 16px; padding: 14px; }
+  #next { background: #047857; border-color: #059669; font-size: 24px; padding: 26px; }
+  #pauserow { display: flex; gap: 10px; }
+  #pauserow button { font-size: 16px; padding: 18px 10px; }
+  #hold.on { background: #0a2e22; border-color: #14532d; color: #34d399; }
+  #showdown { background: #2c1214; border-color: #7f1d1d; color: #fca5a5; }
+  #menurow { display: flex; gap: 10px; }
+  #menurow button { font-size: 15px; padding: 15px 10px; }
+  #menu { font-size: 16px; padding: 15px; color: #93c5fd; border-color: #1e3a5f; background: #131a24; }
+  #playersBtn { font-size: 15px; padding: 13px; color: #aab0ba; }
   #plist {
-    background: #201a33; border: 1px solid #333338; border-radius: 16px;
-    padding: 4px 14px; margin-bottom: 12px; max-height: 38vh; overflow: auto;
+    background: #16181d; border: 1px solid #24272e; border-radius: 14px;
+    padding: 4px 14px; margin-bottom: 10px; max-height: 38vh; overflow: auto;
   }
-  .prow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #2c2547; }
+  .prow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #1f232a; }
   .prow:last-child { border-bottom: 0; }
-  .prow .swd { width: 14px; height: 14px; border-radius: 50%; flex: none; }
-  .prow .nm { font-weight: 700; }
-  .prow.off .nm { color: #82828c; text-decoration: line-through; }
-  .prow .meta { color: #82828c; font-size: 13px; margin-left: auto; }
-  .prow button { width: auto; margin: 0; padding: 8px 14px; font: 800 14px/1 inherit; background: #5c2320; color: #ffb08a; border-radius: 10px; }
-  #plist .none { color: #82828c; font-size: 14px; padding: 12px 0; }
-  #restart { background: #46213f; color: #ff9db0; font-size: 17px; padding: 16px; }
-  #restart.armed { background: #a12f3d; color: #fff; }
+  .prow .swd { width: 13px; height: 13px; border-radius: 50%; flex: none; }
+  .prow .nm { font-weight: 650; }
+  .prow.off .nm { color: #6b7280; text-decoration: line-through; }
+  .prow .meta { color: #6b7280; font-size: 13px; margin-left: auto; }
+  .prow button { width: auto; margin: 0; padding: 8px 14px; font: 700 13px/1 inherit; background: #2c1214; border-color: #7f1d1d; color: #fca5a5; border-radius: 10px; }
+  #plist .none { color: #6b7280; font-size: 14px; padding: 12px 0; }
+  #restart { font-size: 15px; padding: 14px; color: #fca5a5; border-color: #7f1d1d; background: transparent; }
+  #restart.armed { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 
   #gate {
-    position: fixed; inset: 0; background: #14101f; display: flex;
+    position: fixed; inset: 0; background: #0e1013; display: flex;
     align-items: center; justify-content: center; text-align: center;
-    padding: 32px; font-size: 17px; color: #9a9aa2;
+    padding: 32px; font-size: 17px; color: #8b919b;
   }
   #gate.hidden { display: none; }
   .spacer { flex: 1; }
-  footer { text-align: center; color: #4d4472; font-size: 12px; }
+  footer { text-align: center; color: #3c4048; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -101,7 +104,10 @@
   <button id="pack">Pack</button>
   <button id="atime">Time</button>
 </div>
-<button id="pause">Pause</button>
+<div id="pauserow">
+  <button id="pause">Pause</button>
+  <button id="hold">Hold each reveal: off</button>
+</div>
 <button id="showdown" hidden>Start showdown ☠</button>
 <button id="playersBtn">Manage players</button>
 <div id="plist" hidden></div>
@@ -123,7 +129,7 @@ const key = location.hash.slice(1);
 const $ = (id) => document.getElementById(id);
 const dot = $('dot'), phaseEl = $('phase'), qnum = $('qnum'), timer = $('timer'),
       qtext = $('qtext'), players = $('players'), gate = $('gate'),
-      nextBtn = $('next'), pauseBtn = $('pause'), restartBtn = $('restart'),
+      nextBtn = $('next'), pauseBtn = $('pause'), holdBtn = $('hold'), restartBtn = $('restart'),
       menuBtn = $('menu'),
       showdownBtn = $('showdown'), menuRow = $('menurow'),
       packBtn = $('pack'), timeBtn = $('atime'),
@@ -254,9 +260,17 @@ function render() {
 
   nextBtn.textContent = sd
     ? 'Skip statement ▸'
-    : inLobby ? 'Start game' : over ? 'Play again' : 'Skip to next question ▸';
+    : inLobby ? 'Start game'
+    : over ? 'Play again'
+    : state.hold && state.phase === 'SCORE' ? 'Next question ▸'
+    : 'Skip to next question ▸';
   pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
   pauseBtn.disabled = (inLobby || over) && !sd;
+  // Host-paced rounds: every scoreboard waits for Next. Survives restarts
+  // and pack switches; the display re-applies it to each new game.
+  holdBtn.textContent = state.hold ? 'Hold each reveal: ON' : 'Hold each reveal: off';
+  holdBtn.classList.toggle('on', !!state.hold);
+  holdBtn.disabled = sd;
   showdownBtn.hidden = !state.canShowdown;
   // The way out of a finished game: back to the lobby to change pack, answer
   // time or teams. Pointless in the lobby, so it hides there.
@@ -322,6 +336,7 @@ function renderPlayers() {
   }
 }
 pauseBtn.addEventListener('click', () => cmd(state?.paused ? 'resume' : 'pause'));
+holdBtn.addEventListener('click', () => cmd('hold'));
 showdownBtn.addEventListener('click', () => cmd('showdown'));
 packBtn.addEventListener('click', () => cmd('packnext'));
 timeBtn.addEventListener('click', () => cmd('timenext'));
