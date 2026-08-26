@@ -8,7 +8,7 @@
 
 import { WORLD_W, WORLD_H } from '../../shared/tuning.js';
 import { LIMITS } from '../../shared/pack-validate.js';
-import { FLOOR_Y, buildArena, buildRangeArena, buildRowArena, answerId } from '../../sim/levels.js';
+import { FLOOR_Y, buildArena, buildCustomArena, buildRangeArena, buildRowArena, sanitizeLevelSpec } from '../../sim/levels.js';
 import { buildControlArena } from '../../sim/control-boxes.js';
 
 // ------------------------------------------------------------------ drawing
@@ -28,7 +28,7 @@ const INK = {
 /**
  * @param {HTMLCanvasElement} c
  * @param {any[]} platforms real platforms from sim/levels.js builders
- * @param {{labels?: string[], image?: boolean, controls?: any[], band?: boolean}} [opts]
+ * @param {{labels?: string[], image?: boolean, controls?: any[], band?: boolean, noHint?: boolean}} [opts]
  */
 function drawArena(c, platforms, opts = {}) {
   c.width = 640;
@@ -80,7 +80,7 @@ function drawArena(c, platforms, opts = {}) {
     cx.textAlign = 'center';
     cx.fillStyle = INK.answer;
     const band = platforms.find((p) => p.id === 'ansband');
-    if (band) cx.fillText('the answer band', band.x + band.w / 2, band.y - 24);
+    if (band) cx.fillText('answer band', band.x + band.w / 2, band.y - 24);
     cx.textAlign = 'left';
   }
 
@@ -105,7 +105,7 @@ function drawArena(c, platforms, opts = {}) {
   cx.fillStyle = INK.dim;
   cx.font = `800 46px ui-sans-serif, system-ui, sans-serif`;
   cx.textAlign = 'center';
-  cx.fillText(opts.image ? '' : 'your question sits up here', WORLD_W / 2, 110);
+  if (!opts.image && !opts.noHint) cx.fillText('question text', WORLD_W / 2, 110);
   cx.textAlign = 'left';
 }
 
@@ -115,45 +115,45 @@ function drawArena(c, platforms, opts = {}) {
 const ARENAS = [
   {
     title: 'Islands', tag: 'choice · default',
-    body: `The default for multiple choice: floating boards, one per answer (${LIMITS.answers[0]}-${LIMITS.answers[1]} of them). The game also rotates hand-designed variations of this arena, so repeat questions still feel fresh.`,
+    body: `The default for multiple choice: one floating board per answer (${LIMITS.answers[0]}-${LIMITS.answers[1]}). Choice questions also rotate through the designed levels listed below.`,
     build: () => ({ platforms: buildArena(4, 'islands') }),
   },
   {
     title: 'Row', tag: 'layout: row',
-    body: 'Everything on one line at ground level — the easiest arena to read and reach. Good for warmups and two-option questions.',
+    body: 'All answers in one line at ground level. The easiest arena to read and reach.',
     build: () => ({ platforms: buildArena(4, 'row') }),
   },
   {
     title: 'Pyramid', tag: 'layout: pyramid',
-    body: 'Answers climb toward the middle. A little platforming challenge — save it for when the room has warmed up.',
+    body: 'Answers rise toward the middle. Slightly harder platforming than the row.',
     build: () => ({ platforms: buildArena(5, 'pyramid') }),
   },
   {
     title: 'Reverse pyramid', tag: 'layout: reverse-pyramid',
-    body: 'High on the outside, low in the middle. Same skill bump as the pyramid, opposite shape.',
+    body: 'High at the edges, low in the middle.',
     build: () => ({ platforms: buildArena(5, 'reverse-pyramid') }),
   },
   {
     title: 'Picture question', tag: 'image on any type',
-    body: 'Attach an EKG, a rash, an X-ray — the image hangs in the airspace and the platforms drop to a ground row so nothing blocks it. Landscape images read best on a projector.',
+    body: 'An attached image (EKG, rash, X-ray) is shown above the arena; the platforms move to a single ground row so they do not cover it. Landscape images fit best.',
     build: () => ({ platforms: buildArena(4, 'row'), opts: { image: true } }),
   },
   {
     title: 'Range', tag: 'number line',
-    body: 'The whole floor becomes a number line from your min to your max; players stand where they believe the answer is, and the correct band is revealed. Great for doses, percentages, and "how many…" estimates.',
+    body: 'The floor becomes a number line from your min to your max. Players stand at the value they believe; the correct band is revealed. Works for doses, percentages, and counts.',
     build: () => ({
       platforms: buildRangeArena(/** @type {any} */ ({ min: 0, max: 160, answer: [60, 100] })),
       opts: { band: true },
     }),
   },
   {
-    title: 'Lightning sort', tag: 'rapid fire',
-    body: `${LIMITS.buckets[0]}-${LIMITS.buckets[1]} category buckets stay up while ${LIMITS.items[0]}-${LIMITS.items[1]} items flash past, ${LIMITS.sortItemSeconds[0]}-${LIMITS.sortItemSeconds[1]} seconds each — players dash to the right bucket for every item. Items play in shuffled order.`,
+    title: 'Lightning sort', tag: 'timed items',
+    body: `${LIMITS.buckets[0]}-${LIMITS.buckets[1]} category buckets stay on screen while ${LIMITS.items[0]}-${LIMITS.items[1]} items appear one at a time, ${LIMITS.sortItemSeconds[0]}-${LIMITS.sortItemSeconds[1]} seconds each. Players move to the matching bucket for each item. Items appear in shuffled order.`,
     build: () => ({ platforms: buildRowArena(3), opts: { labels: ['Bucket A', 'Bucket B', 'Bucket C'] } }),
   },
   {
     title: 'Control Room', tag: 'teams only',
-    body: `A wall of ${LIMITS.controls[0]}-${LIMITS.controls[1]} switches and dials one team must set together against the clock (${LIMITS.controlSeconds[0]}-${LIMITS.controlSeconds[1]} s). Each case is one clinical decision moment — first-hour orders are the sweet spot.`,
+    body: `${LIMITS.controls[0]}-${LIMITS.controls[1]} switches and dials one team sets together within ${LIMITS.controlSeconds[0]}-${LIMITS.controlSeconds[1]} seconds. Each case is one clinical scenario, for example first-hour orders.`,
     build: () => {
       const a = buildControlArena(8);
       return { platforms: a.platforms, opts: { controls: a.controls } };
@@ -183,11 +183,11 @@ for (const spec of ARENAS) {
 // ------------------------------------------------------------------ fit checker
 
 const FITS = [
-  { label: 'Question text', limit: LIMITS.questionChars, sample: 'Which was invented first?', why: 'painted across the top of the arena' },
-  { label: 'An answer', limit: LIMITS.answerChars, sample: 'The stethoscope', why: 'painted on a platform sign' },
-  { label: 'A sort bucket or item', limit: LIMITS.sortLabelChars, sample: 'Gram positive', why: 'flashes for a few seconds — shortest wins' },
-  { label: 'A control label', limit: LIMITS.controlLabelChars, sample: 'Blood cultures', why: 'sits on a switch in the Control Room wall' },
-  { label: 'A showdown statement', limit: LIMITS.statementChars, sample: 'An octopus has three hearts', why: 'read at speed in the finale' },
+  { label: 'Question text', limit: LIMITS.questionChars, sample: 'Which was invented first?', why: 'drawn across the top of the arena' },
+  { label: 'An answer', limit: LIMITS.answerChars, sample: 'The stethoscope', why: 'drawn on a platform sign' },
+  { label: 'A sort bucket or item', limit: LIMITS.sortLabelChars, sample: 'Gram positive', why: 'shown for a few seconds per item' },
+  { label: 'A control label', limit: LIMITS.controlLabelChars, sample: 'Blood cultures', why: 'label on a Control Room switch' },
+  { label: 'A showdown statement', limit: LIMITS.statementChars, sample: 'An octopus has three hearts', why: 'read quickly in the final mode' },
 ];
 
 const fitHolder = /** @type {HTMLElement} */ (document.getElementById('fit'));
@@ -209,7 +209,7 @@ for (const f of FITS) {
     bar.style.width = `${Math.min(100, (n / f.limit) * 100)}%`;
     meter.classList.toggle('over', n > f.limit);
     note.textContent = n > f.limit
-      ? `${n}/${f.limit} — still plays, but it will shrink small on the projector`
+      ? `${n}/${f.limit} — allowed, but drawn smaller on screen`
       : `${n}/${f.limit}`;
   };
   input.oninput = update;
@@ -247,3 +247,36 @@ for (const [what, rule] of NUMBERS) {
   tr.append(a, b);
   table.appendChild(tr);
 }
+
+// ------------------------------------------------------------------ island library
+// The designed levels the islands layout rotates through, served sanitized
+// by /api/levels on the game server (and the Render instance). GitHub Pages
+// has no API; the section degrades to a one-line note there.
+
+async function loadIslandLibrary() {
+  const holder = /** @type {HTMLElement} */ (document.getElementById('islandLib'));
+  const note = /** @type {HTMLElement} */ (document.getElementById('islandsNote'));
+  try {
+    const r = await fetch('/api/levels');
+    if (!r.ok) throw new Error(String(r.status));
+    const list = await r.json();
+    let shown = 0;
+    for (const raw of Array.isArray(list) ? list : []) {
+      const spec = sanitizeLevelSpec(raw);
+      if (!spec) continue;
+      const card = document.createElement('div');
+      card.className = 'card';
+      const h = document.createElement('h3');
+      h.textContent = `${spec.name} · ${spec.boards.length} answers`;
+      const canvas = document.createElement('canvas');
+      card.append(h, canvas);
+      holder.appendChild(card);
+      drawArena(canvas, buildCustomArena(spec), { noHint: true });
+      shown++;
+    }
+    if (!shown) throw new Error('empty');
+  } catch {
+    note.textContent = 'The designed-level library is served by the game server — open this page from the game or the test instance to see it.';
+  }
+}
+void loadIslandLibrary();
