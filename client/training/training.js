@@ -14,14 +14,15 @@ import { buildControlArena } from '../../sim/control-boxes.js';
 // ------------------------------------------------------------------ drawing
 
 const INK = {
-  floor: '#3a3160',
-  plat: '#6d5fa8',
-  answer: '#9ff5c9',
-  answerFill: '#2fc98d2e',
-  label: '#e6e0f5',
-  dim: '#9a90bd',
-  band: '#2fc98d',
-  image: '#f8f6f1',
+  floor: '#d9d9e0',
+  plat: '#b9b9c4',
+  answer: '#059669',
+  answerFill: '#05966922',
+  label: '#26262e',
+  dim: '#8a8a96',
+  band: '#059669',
+  image: '#ffffff',
+  pit: '#e6e6ec',
 };
 
 /**
@@ -38,7 +39,7 @@ function drawArena(c, platforms, opts = {}) {
   let ansIx = 0;
   for (const p of platforms) {
     const isAnswer = p.id.startsWith('ans');
-    cx.fillStyle = p.id === 'pit' ? '#171129'
+    cx.fillStyle = p.id === 'pit' ? INK.pit
       : isAnswer ? (opts.band && p.id === 'ansband' ? INK.band : INK.answerFill)
       : p.id.startsWith('floor') || p.id.includes('ground') ? INK.floor
       : INK.plat;
@@ -90,7 +91,10 @@ function drawArena(c, platforms, opts = {}) {
     cx.beginPath();
     cx.roundRect(x, y, w, h, 14);
     cx.fill();
-    cx.fillStyle = '#7a6fa3';
+    cx.strokeStyle = '#d8d8e0';
+    cx.lineWidth = 3;
+    cx.stroke();
+    cx.fillStyle = INK.dim;
     cx.font = `700 40px ui-sans-serif, system-ui, sans-serif`;
     cx.textAlign = 'center';
     cx.fillText('your image', x + w / 2, y + h / 2 + 14);

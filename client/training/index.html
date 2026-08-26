@@ -5,69 +5,76 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Question Writer's Guide</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #241d3c; color: #e6e0f5;
-    font: 500 15px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    margin: 0; background: #f7f7f8; color: #26262e;
+    font: 450 15px/1.65 ui-sans-serif, system-ui, -apple-system, sans-serif;
   }
   header {
-    padding: 12px 20px; background: #1a1530; border-bottom: 1px solid #443a68;
+    padding: 13px 24px; background: #ffffff; border-bottom: 1px solid #e6e6ec;
     display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
     position: sticky; top: 0; z-index: 3;
   }
-  h1 { font-size: 16px; margin: 0 12px 0 0; letter-spacing: .05em; color: #9ff5c9; }
+  h1 { font-size: 15px; margin: 0 12px 0 0; letter-spacing: .06em; color: #047857; }
+  header .sub { color: #8a8a96; font-size: 13px; }
   header .spacer { flex: 1; }
   header a {
-    color: #e6e0f5; text-decoration: none; border: 1px solid #5d4f8c; border-radius: 8px;
-    padding: 6px 12px; font-weight: 700; font-size: 13px;
+    color: #26262e; text-decoration: none; border: 1px solid #d8d8e0; border-radius: 8px;
+    padding: 6px 12px; font-weight: 650; font-size: 13px; background: #fff;
   }
-  header a:hover { border-color: #9ff5c9; color: #9ff5c9; }
-  main { max-width: 1060px; margin: 0 auto; padding: 26px 20px 80px; }
+  header a:hover { border-color: #047857; color: #047857; }
+  main { max-width: 1060px; margin: 0 auto; padding: 30px 24px 90px; }
   h2 {
-    font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
-    color: #9a90bd; margin: 40px 0 14px;
+    font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: #8a8a96; margin: 44px 0 14px; font-weight: 700;
   }
-  h2:first-of-type { margin-top: 8px; }
-  p.lede { font-size: 17px; color: #cfc6ec; max-width: 62ch; }
+  h2:first-of-type { margin-top: 10px; }
+  p.lede { font-size: 17px; color: #3d3d47; max-width: 64ch; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-  .card { background: #2e2650; border: 1px solid #4d4177; border-radius: 12px; padding: 14px; }
-  .card h3 { margin: 0 0 4px; font-size: 15px; color: #ffffff; }
+  .card {
+    background: #ffffff; border: 1px solid #e6e6ec; border-radius: 12px; padding: 16px;
+    box-shadow: 0 1px 2px rgba(24,24,32,.04);
+  }
+  .card h3 { margin: 0 0 4px; font-size: 15px; color: #16161c; }
   .card .tag {
     font: 700 10px/1 inherit; letter-spacing: .07em; text-transform: uppercase;
-    color: #9ff5c9; background: #2fc98d1c; border: 1px solid #2fc98d55;
+    color: #047857; background: #ecfdf5; border: 1px solid #a7e3cd;
     border-radius: 6px; padding: 3px 6px; margin-left: 6px; vertical-align: 2px;
   }
-  .card p { margin: 8px 0 0; font-size: 13.5px; color: #b9aede; }
-  .card canvas { width: 100%; aspect-ratio: 16/9; display: block; border-radius: 8px; background: #1c1632; margin-top: 10px; }
+  .card p { margin: 8px 0 0; font-size: 13.5px; color: #5c5c68; }
+  .card canvas { width: 100%; aspect-ratio: 16/9; display: block; border-radius: 8px; background: #f2f2f5; border: 1px solid #ececf1; margin-top: 12px; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #4d417766; }
-  th { color: #9a90bd; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
-  td.num { font-family: ui-monospace, Menlo, monospace; color: #9ff5c9; white-space: nowrap; }
-  .ok { color: #7fd8a8; } .no { color: #7a6fa3; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #ececf1; }
+  th { color: #8a8a96; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; }
+  td.num { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: #047857; white-space: nowrap; }
+  .ok { color: #047857; font-weight: 650; } .no { color: #b9b9c2; }
   /* fit checker */
-  .fit { display: grid; gap: 14px; }
-  .fit label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .06em; color: #9a90bd; margin-bottom: 4px; text-transform: uppercase; }
+  .fit { display: grid; gap: 16px; }
+  .fit label { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; color: #8a8a96; margin-bottom: 5px; text-transform: uppercase; }
   .fit input {
-    width: 100%; background: #1c1632; color: #e6e0f5; border: 1px solid #4d4177;
+    width: 100%; background: #ffffff; color: #26262e; border: 1px solid #d8d8e0;
     border-radius: 8px; padding: 9px 11px; font: inherit;
   }
-  .meter { height: 6px; border-radius: 3px; background: #1c1632; margin-top: 6px; overflow: hidden; }
-  .meter div { height: 100%; background: #2fc98d; transition: width .1s; }
-  .meter.over div { background: #d6a24f; }
-  .fitnote { font-size: 12.5px; color: #9a90bd; margin-top: 4px; min-height: 1.2em; }
+  .fit input:focus { outline: 2px solid #a7e3cd; border-color: #047857; }
+  .meter { height: 6px; border-radius: 3px; background: #ececf1; margin-top: 7px; overflow: hidden; }
+  .meter div { height: 100%; background: #059669; transition: width .1s; }
+  .meter.over div { background: #d97706; }
+  .fitnote { font-size: 12.5px; color: #8a8a96; margin-top: 4px; min-height: 1.2em; }
   .cta {
-    display: inline-block; margin-top: 10px; background: #2fc98d22; border: 1px solid #2fc98d;
-    color: #9ff5c9; border-radius: 10px; padding: 12px 20px; font-weight: 800; text-decoration: none;
+    display: inline-block; margin-top: 10px; background: #047857; border: 1px solid #047857;
+    color: #ffffff; border-radius: 10px; padding: 12px 20px; font-weight: 750; text-decoration: none;
   }
-  code { background: #1c1632; border-radius: 5px; padding: 1px 6px; font-size: .92em; }
+  .cta:hover { background: #059669; }
+  code { background: #f0f0f3; border: 1px solid #e6e6ec; border-radius: 5px; padding: 1px 6px; font-size: .92em; color: #26262e; }
+  .footnote { color: #5c5c68; font-size: 14px; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>QUESTION WRITER'S GUIDE</h1>
-  <span style="color:#7a6fa3;font-size:13px">how questions become platforms, and what fits on a projector</span>
+  <span class="sub">how questions become platforms, and what fits on a projector</span>
   <span class="spacer"></span>
   <a href="../builder/">Pack Studio →</a>
 </header>
@@ -89,7 +96,7 @@
   <h2>Does it fit? Try your text</h2>
   <div class="card">
     <div class="fit" id="fit"></div>
-    <p style="font-size:13px;color:#9a90bd;margin-top:12px;margin-bottom:0">
+    <p style="font-size:13px;color:#8a8a96;margin-top:12px;margin-bottom:0">
       Going over a limit never breaks the game — the text just shrinks on the
       projector, and the loader prints a note. The counts and timings in the
       next table <i>are</i> enforced.
@@ -110,7 +117,7 @@
     <tr><td>control case</td><td class="no">–</td><td class="ok">✓ team turns</td><td class="ok">✓</td><td class="no">–</td></tr>
     <tr><td>true / false statement</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="ok">✓ finale</td></tr>
   </table></div>
-  <p style="color:#b9aede;font-size:14px">
+  <p class="footnote">
     The standard deck (everything above the line) plays in <b>both</b>
     free-for-all and teams. Control cases only ever play when teams exist —
     write <b>at least one case per team</b> (three PGY teams → three cases),
@@ -119,7 +126,7 @@
   </p>
 
   <h2>Ready to write</h2>
-  <p style="color:#cfc6ec">
+  <p class="footnote" style="font-size:15px">
     The <b>Pack Studio</b> is where packs are written — a document you type
     (<code>#</code> starts a question, answers on the lines below, click the
     box beside the correct one) with a live preview that runs the actual
