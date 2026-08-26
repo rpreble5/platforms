@@ -244,7 +244,9 @@ function renderGutter(vproblems) {
 }
 
 function syncScroll() {
-  $('gutterInner').style.transform = `translateY(${-doc.scrollTop}px)`;
+  const t = `translateY(${-doc.scrollTop}px)`;
+  $('gutterInner').style.transform = t;
+  $('sugInner').style.transform = t;
 }
 
 // --------------------------------------------------------------- outline
@@ -545,8 +547,15 @@ function refresh(opts = {}) {
   caretLn = document.activeElement === doc ? caretLine() : caretLn;
   caretIx = blockAt(caretLn);
   const { problems: vproblems } = validated();
+  // Inline suggestions are addressed by line number; any edit that changes
+  // the line count would misalign them, so they clear themselves.
+  if (sugs.length && docText.split('\n').length !== sugsLineCount) sugs = [];
+  // The rail borrows right margin from the doc — set BEFORE measuring, so
+  // the mirror wraps exactly like the padded textarea.
+  $('editorArea').classList.toggle('withSugs', sugs.length > 0);
   measure();
   renderGutter(vproblems);
+  renderSugRail();
   renderOutline(vproblems);
   renderProblems(vproblems);
   syncPackCard();
@@ -885,34 +894,57 @@ $('aiGo').onclick = async () => {
   toast('✨ Drafted — click the answer checks the AI left blank, and verify every key before use.');
 };
 
-/** Every piece of author text a shorter phrasing could help, with enough
- *  addressing (line, item index) to apply a pick surgically. setLabel never
- *  changes the line count, so these addresses stay valid across picks. */
+/** Inline shorter-phrasing suggestions: chips to the RIGHT of each line,
+ *  click to replace. Addressed by line (+ item index inside bucket lines);
+ *  setLabel never changes the line count, so picks keep the rest aligned,
+ *  and any edit that does change the line count clears the rail. */
+/** @type {{line:number, itemIx?:number, kind:string, original:string, options:string[]}[]} */
+let sugs = [];
+let sugsLineCount = 0;
+let sugsBusy = false;
+
+/** The author text at an address, exactly as suggestibleItems() saw it. */
+function extractLabel(/** @type {number} */ lineIx, /** @type {number|undefined} */ itemIx) {
+  const t = (docText.split('\n')[lineIx] ?? '').trim();
+  const kind = parsed.lines[lineIx]?.kind;
+  if (kind === 'head') return parsed.blocks[parsed.lines[lineIx].block ?? -1]?.text ?? null;
+  if (kind === 'answer') return t.replace(/^[✓*]\s*/, '').trim();
+  if (kind === 'statement') return parsed.blocks[parsed.lines[lineIx].block ?? -1]?.text ?? null;
+  if (kind === 'toggle') return t.replace(/^\[(on|off)\]\s*/i, '').replace(/\s*\(starts?\s+on\)\s*$/i, '').trim();
+  if (kind === 'number') return t.split('=')[0].trim();
+  if (kind === 'bucket') {
+    const m = /^([^:]+):\s*(.*)$/.exec(t);
+    if (!m) return null;
+    if (itemIx === undefined) return m[1].trim();
+    const items = m[2].split(',').map((x) => x.trim()).filter(Boolean);
+    return items[itemIx] ?? null;
+  }
+  return null;
+}
+
+/** Every piece of author text a shorter phrasing could help. */
 function suggestibleItems() {
   /** @type {{id:string, kind:string, text:string, limit:number, line:number, itemIx?:number}[]} */
   const items = [];
   const src = docText.split('\n');
   parsed.lines.forEach((l, i) => {
-    const t = (src[i] ?? '').trim();
-    if (l.kind === 'head' && l.block !== null) {
-      const b = parsed.blocks[l.block];
-      if (b?.text) items.push({ id: `h${i}`, kind: 'question', text: b.text, limit: LIMITS.questionChars, line: i });
+    if (l.kind === 'head') {
+      const text = extractLabel(i, undefined);
+      if (text) items.push({ id: `h${i}`, kind: 'question', text, limit: LIMITS.questionChars, line: i });
     } else if (l.kind === 'answer') {
-      const text = t.replace(/^[✓*]\s*/, '').trim();
+      const text = extractLabel(i, undefined);
       if (text) items.push({ id: `a${i}`, kind: 'answer', text, limit: LIMITS.answerChars, line: i });
     } else if (l.kind === 'statement') {
-      const text = parsed.blocks[l.block ?? -1]?.text ?? '';
+      const text = extractLabel(i, undefined);
       if (text) items.push({ id: `s${i}`, kind: 'statement', text, limit: LIMITS.statementChars, line: i });
-    } else if (l.kind === 'toggle') {
-      const text = t.replace(/^\[(on|off)\]\s*/i, '').replace(/\s*\(starts?\s+on\)\s*$/i, '').trim();
+    } else if (l.kind === 'toggle' || l.kind === 'number') {
+      const text = extractLabel(i, undefined);
       if (text) items.push({ id: `t${i}`, kind: 'control', text, limit: LIMITS.controlLabelChars, line: i });
-    } else if (l.kind === 'number') {
-      const text = t.split('=')[0].trim();
-      if (text) items.push({ id: `n${i}`, kind: 'control', text, limit: LIMITS.controlLabelChars, line: i });
     } else if (l.kind === 'bucket') {
-      const m = /^([^:]+):\s*(.*)$/.exec(t);
+      const name = extractLabel(i, undefined);
+      if (name) items.push({ id: `b${i}`, kind: 'bucket', text: name, limit: LIMITS.sortLabelChars, line: i });
+      const m = /^([^:]+):\s*(.*)$/.exec((src[i] ?? '').trim());
       if (m) {
-        items.push({ id: `b${i}`, kind: 'bucket', text: m[1].trim(), limit: LIMITS.sortLabelChars, line: i });
         m[2].split(',').map((x) => x.trim()).filter(Boolean).forEach((it, j) => {
           items.push({ id: `i${i}_${j}`, kind: 'item', text: it, limit: LIMITS.sortLabelChars, line: i, itemIx: j });
         });
@@ -922,58 +954,81 @@ function suggestibleItems() {
   return items;
 }
 
+function renderSugRail() {
+  const inner = $('sugInner');
+  inner.replaceChildren();
+  $('aiShorten').textContent = sugs.length ? '✕ Clear suggestions' : '✨ Shorter phrasings…';
+  for (const sg of sugs) {
+    const row = document.createElement('div');
+    row.className = 'sugrow';
+    row.style.top = `${(lineTops[sg.line] ?? 0) + 2}px`;
+    for (const opt of sg.options) {
+      const b = document.createElement('button');
+      b.textContent = opt;
+      b.title = `replace "${sg.original}" (${sg.original.length} chars) with "${opt}" (${opt.length})`;
+      b.onmousedown = (ev) => ev.preventDefault(); // keep textarea focus
+      b.onclick = () => {
+        // The author may have edited this line since the suggestions came
+        // back — never clobber text that no longer matches.
+        if (extractLabel(sg.line, sg.itemIx) !== sg.original) {
+          sugs = sugs.filter((x) => x !== sg);
+          renderSugRail();
+          return;
+        }
+        sugs = sugs.filter((x) => x !== sg);
+        setText(setLabel(docText, parsed, sg.line, opt, sg.itemIx), { keepPanel: true });
+      };
+      row.appendChild(b);
+    }
+    inner.appendChild(row);
+  }
+  syncScroll();
+}
+
 $('aiShorten').onclick = async () => {
-  $('sugList').replaceChildren();
-  $('sugStatus').textContent = 'Asking for suggestions… (a few seconds)';
-  $('sugDlg').showModal();
+  if (sugs.length) { // acting as "✕ Clear suggestions"
+    sugs = [];
+    refresh({ keepPanel: true });
+    return;
+  }
+  if (sugsBusy) return;
+  const btn = $('aiShorten');
+  sugsBusy = true;
+  btn.disabled = true;
+  btn.textContent = '✨ Thinking…';
   const items = suggestibleItems();
-  let r = await callAi({ mode: 'suggest', items: items.map(({ id, kind, text, limit }) => ({ id, kind, text, limit })) });
+  const payload = { mode: 'suggest', items: items.map(({ id, kind, text, limit }) => ({ id, kind, text, limit })) };
+  let r = await callAi(payload);
   if (r.status === 401) {
     const code = window.prompt('Drafting passcode (ask the host):');
     if (code) {
       try { localStorage.setItem(AI_CODE_KEY, code.trim()); } catch { /* no store */ }
-      r = await callAi({ mode: 'suggest', items: items.map(({ id, kind, text, limit }) => ({ id, kind, text, limit })) });
+      r = await callAi(payload);
     }
   }
+  sugsBusy = false;
+  btn.disabled = false;
   if (!r.ok) {
-    $('sugStatus').textContent = r.json.error ?? `suggestions failed (${r.status})`;
+    btn.textContent = '✨ Shorter phrasings…';
+    toast(r.json.error ?? `suggestions failed (${r.status})`);
     return;
   }
   const byId = new Map(items.map((it) => [it.id, it]));
-  const got = (Array.isArray(r.json.suggestions) ? r.json.suggestions : [])
-    .filter((/** @type {any} */ sg) => byId.has(sg.id));
-  if (!got.length) {
-    $('sugStatus').textContent = 'No shorter suggestions — your text is already tight.';
+  sugs = (Array.isArray(r.json.suggestions) ? r.json.suggestions : [])
+    .filter((/** @type {any} */ sg) => byId.has(sg.id))
+    .map((/** @type {any} */ sg) => {
+      const it = /** @type {any} */ (byId.get(sg.id));
+      return { line: it.line, itemIx: it.itemIx, kind: it.kind, original: it.text, options: sg.options.slice(0, 3) };
+    });
+  sugsLineCount = docText.split('\n').length;
+  if (!sugs.length) {
+    btn.textContent = '✨ Shorter phrasings…';
+    toast('No shorter suggestions — your text is already tight.');
     return;
   }
-  $('sugStatus').textContent = 'Click a suggestion to use it; your original stays otherwise.';
-  for (const sg of got) {
-    const it = /** @type {any} */ (byId.get(sg.id));
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid #ececf1';
-    const chip = document.createElement('span');
-    chip.className = 'badge';
-    chip.textContent = it.kind;
-    const cur = document.createElement('span');
-    cur.style.cssText = 'flex:1;min-width:180px';
-    cur.textContent = it.text;
-    row.append(chip, cur);
-    for (const opt of sg.options) {
-      const b = document.createElement('button');
-      b.className = 'small';
-      b.textContent = `${opt} (${opt.length})`;
-      b.onclick = () => {
-        setText(setLabel(docText, parsed, it.line, opt, it.itemIx), { keepPanel: true });
-        cur.textContent = opt;
-        for (const sib of row.querySelectorAll('button')) sib.classList.remove('primary');
-        b.classList.add('primary');
-      };
-      row.appendChild(b);
-    }
-    $('sugList').appendChild(row);
-  }
+  toast(`✨ ${sugs.length} suggestion${sugs.length === 1 ? '' : 's'} beside your text — click one to use it, ✕ to clear the rest.`);
+  refresh({ keepPanel: true });
 };
-$('sugClose').onclick = () => $('sugDlg').close();
 
 // boot
 adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });

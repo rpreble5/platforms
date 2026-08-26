@@ -127,6 +127,16 @@
     width: min(720px, 90vw); box-shadow: 0 12px 40px rgba(24,24,32,.18);
   }
   dialog::backdrop { background: rgba(24,24,32,.35); }
+  /* ---- inline shorter-phrasing suggestions, right of each line ---- */
+  #sugRail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  #sugInner { position: absolute; inset: 0 0 auto 0; }
+  .sugrow { position: absolute; right: 8px; display: flex; gap: 4px; pointer-events: auto; }
+  .sugrow button {
+    padding: 2px 7px; font-size: 11.5px; line-height: 1.5; border-radius: 999px;
+    background: #ecfdf5; border: 1px solid #a7e3cd; color: #047857; font-weight: 650;
+  }
+  .sugrow button:hover { border-color: #047857; background: #d9f5e8; color: #047857; }
+  #editorArea.withSugs textarea#doc, #editorArea.withSugs #mirror { padding-right: 250px; }
   #toast {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
     max-width: min(680px, 92vw); z-index: 10; cursor: pointer;
@@ -197,6 +207,7 @@
         <div id="editorArea">
           <textarea id="doc" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
           <div id="mirror" aria-hidden="true"></div>
+          <div id="sugRail"><div id="sugInner"></div></div>
         </div>
       </div>
       <div class="hint" style="padding:6px 14px 8px">
@@ -227,22 +238,6 @@
     </div>
   </div>
 </main>
-
-<dialog id="sugDlg">
-  <div style="padding:16px">
-    <h2 style="margin-top:0">Shorter phrasings</h2>
-    <p class="hint" style="margin:0 0 10px">
-      Your text on the left; suggested shorter forms beside it. Click one to
-      use it (the row updates), or leave your own. Nothing changes unless
-      you click a suggestion — Ctrl+Z in the editor undoes any pick.
-    </p>
-    <div id="sugList" style="max-height:56vh;overflow:auto"></div>
-    <div class="row" style="margin-top:10px">
-      <button id="sugClose" class="primary">Done</button>
-    </div>
-    <div class="hint" id="sugStatus" style="margin-top:8px"></div>
-  </div>
-</dialog>
 
 <dialog id="aiDlg">
   <div style="padding:16px">
