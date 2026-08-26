@@ -118,6 +118,8 @@ server.listen(PORT, HOST, () => {
   console.log(`  players   ${bold(joinUrl)}`);
   console.log(`  display   ${bold(publicUrl ? `${joinUrl}display/` : `http://localhost:${PORT}/display/`)}`);
   console.log(`  host      ${bold(hostUrl)}  (keep the key to yourself)`);
+  console.log(`  studio    ${bold(publicUrl ? `${joinUrl}builder` : `http://localhost:${PORT}/builder`)}  (write question packs)`);
+  console.log(`  training  ${bold(publicUrl ? `${joinUrl}training` : `http://localhost:${PORT}/training`)}  (question writer's guide)`);
   console.log(`  levels    ${bold(`http://localhost:${PORT}/levels`)}`);
   console.log('');
 
