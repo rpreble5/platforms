@@ -4,46 +4,46 @@
 <meta charset="utf-8">
 <title>Level editor</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #241d3c; color: #e6e0f5;
+    margin: 0; background: #f7f7f8; color: #26262e;
     font: 500 14px/1.5 ui-sans-serif, system-ui, sans-serif;
     display: grid; grid-template-rows: auto 1fr; height: 100vh;
   }
   header {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    padding: 10px 16px; background: #1a1430; border-bottom: 1px solid #443a68;
+    padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #d8d8e0;
   }
-  h1 { font-size: 14px; margin: 0 10px 0 0; letter-spacing: .06em; color: #9ff5c9; }
+  h1 { font-size: 14px; margin: 0 10px 0 0; letter-spacing: .06em; color: #047857; }
   select, button, input[type=text] {
-    background: #3b3160; color: inherit; border: 1px solid #5a4d8a;
+    background: #e6e6ec; color: inherit; border: 1px solid #c9c9d3;
     border-radius: 8px; padding: 6px 10px; font: inherit;
   }
-  input[type=text] { width: 150px; background: #14102a; }
+  input[type=text] { width: 150px; background: #f0f0f3; }
   button:active { filter: brightness(1.3); }
-  button.primary { background: #1f5c46; border-color: #2fa47a; }
-  label.tog { display: flex; gap: 6px; align-items: center; color: #bdb3dd; }
-  #status { color: #7fe0af; font-size: 12px; min-width: 120px; }
-  header .hint { color: #7a6fa3; font-size: 12px; margin-left: auto; }
+  button.primary { background: #ecfdf5; border-color: #2fa47a; }
+  label.tog { display: flex; gap: 6px; align-items: center; color: #3d3d47; }
+  #status { color: #059669; font-size: 12px; min-width: 120px; }
+  header .hint { color: #8a8a96; font-size: 12px; margin-left: auto; }
   main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
   #stagewrap { position: relative; overflow: hidden; display: grid; place-items: center; padding: 10px; }
   canvas#stage { width: 100%; max-height: 100%; aspect-ratio: 16/9; border-radius: 8px; cursor: grab; }
   aside {
-    border-left: 1px solid #443a68; padding: 12px 14px; overflow: auto;
-    display: flex; flex-direction: column; gap: 10px; background: #1f1936;
+    border-left: 1px solid #d8d8e0; padding: 12px 14px; overflow: auto;
+    display: flex; flex-direction: column; gap: 10px; background: #ffffff;
   }
-  aside h2 { font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: #9a90bd; margin: 6px 0 0; }
+  aside h2 { font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: #5c5c68; margin: 6px 0 0; }
   #checks div { padding: 2px 0; font-size: 13px; }
-  #checks .ok { color: #7fe0af; }
-  #checks .bad { color: #ff9d8a; }
+  #checks .ok { color: #059669; }
+  #checks .bad { color: #b91c1c; }
   textarea {
-    width: 100%; min-height: 200px; background: #14102a; color: #cfe3f4;
-    border: 1px solid #443a68; border-radius: 8px;
+    width: 100%; min-height: 200px; background: #f0f0f3; color: #3d3d47;
+    border: 1px solid #d8d8e0; border-radius: 8px;
     font: 12px/1.5 ui-monospace, Menlo, monospace; padding: 8px; white-space: pre;
   }
-  #sel { color: #bdb3dd; font-size: 13px; min-height: 3em; }
-  kbd { background: #443a68; border-radius: 4px; padding: 0 5px; font: 600 11px ui-monospace, monospace; }
+  #sel { color: #3d3d47; font-size: 13px; min-height: 3em; }
+  kbd { background: #d8d8e0; border-radius: 4px; padding: 0 5px; font: 600 11px ui-monospace, monospace; }
 </style>
 </head>
 <body>
@@ -128,7 +128,7 @@ const surfaceY = (p, tier) => isBoard(p) ? answerTierY(tier) : tierY(tier);
 
 function status(text, bad = false) {
   $('status').textContent = text;
-  $('status').style.color = bad ? '#ff9d8a' : '#7fe0af';
+  $('status').style.color = bad ? '#b91c1c' : '#059669';
   clearTimeout(statusTimer);
   statusTimer = setTimeout(() => ($('status').textContent = ''), 3000);
 }
@@ -255,7 +255,7 @@ function draw() {
       for (let k = 0; k < n; k++) spots.push({ x: s.x + ((k + 0.5) / n) * s.w, y: s.y });
     }
     for (let i = 0; i < 12; i++) spots.push({ x: 120 + i * 150, y: FLOOR_Y });
-    const cols = ['#ff5a3c', '#ffa62b', '#ffd93d', '#a7e04a', '#2fc98d', '#26c6da', '#4aa8ff', '#7c72ff', '#b168ff', '#ff5fd2', '#ff7a9c', '#e8e2d4'];
+    const cols = ['#ff5a3c', '#ffa62b', '#ffd93d', '#a7e04a', '#059669', '#26c6da', '#4aa8ff', '#7c72ff', '#b168ff', '#ff5fd2', '#ff7a9c', '#e8e2d4'];
     const shapes = ['egg', 'pill', 'loaf'];
     const hs = [42, 56, 78.4];
     for (let i = 0; i < Math.min(28, spots.length); i++) {
@@ -272,7 +272,7 @@ function draw() {
     for (const p of world.players.values()) {
       cx.save();
       cx.translate(p.x, p.y);
-      drawBean(cx, '#2fc98d', 'flat', p.w, p.h, 'pill', true, 'none');
+      drawBean(cx, '#059669', 'flat', p.w, p.h, 'pill', true, 'none');
       cx.restore();
     }
   }
@@ -290,7 +290,7 @@ function draw() {
     }
   }
   if (selected) {
-    cx.strokeStyle = '#9ff5c9';
+    cx.strokeStyle = '#047857';
     cx.lineWidth = 3;
     cx.strokeRect(selected.x - 5, selected.y - 5, selected.w + 10, ANSWER_H + 10);
     // reach envelope: where a hop from this surface can land

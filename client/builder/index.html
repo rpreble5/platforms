@@ -5,50 +5,58 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pack Studio</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #241d3c; color: #e6e0f5;
-    font: 500 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    margin: 0; background: #f7f7f8; color: #26262e;
+    font: 470 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
   }
   header {
-    padding: 12px 20px; background: #1a1530; border-bottom: 1px solid #443a68;
-    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    padding: 12px 20px; background: #ffffff; border-bottom: 1px solid #e6e6ec;
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
     position: sticky; top: 0; z-index: 3;
   }
-  h1 { font-size: 16px; margin: 0 12px 0 0; letter-spacing: .05em; color: #9ff5c9; }
+  h1 { font-size: 15px; margin: 0 12px 0 0; letter-spacing: .06em; color: #047857; }
   header .spacer { flex: 1; }
   main {
     display: grid; grid-template-columns: 330px 1fr 500px;
     gap: 14px; padding: 14px 20px; align-items: start;
   }
   .col { display: flex; flex-direction: column; gap: 12px; }
-  .card { background: #2e2650; border: 1px solid #4d4177; border-radius: 12px; padding: 14px; }
-  .card h2 {
-    margin: 0 0 10px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
-    color: #9a90bd; font-weight: 700;
+  .card {
+    background: #ffffff; border: 1px solid #e6e6ec; border-radius: 12px; padding: 14px;
+    box-shadow: 0 1px 2px rgba(24,24,32,.04);
   }
-  label { display: block; margin: 8px 0 2px; color: #9a90bd; font-size: 12px; font-weight: 700; }
+  .card h2 {
+    margin: 0 0 10px; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: #8a8a96; font-weight: 700;
+  }
+  label { display: block; margin: 8px 0 2px; color: #8a8a96; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   input[type=text], input[type=number], select, textarea {
-    width: 100%; background: #1c163290; color: #e6e0f5; border: 1px solid #4d4177;
+    width: 100%; background: #ffffff; color: #26262e; border: 1px solid #d8d8e0;
     border-radius: 8px; padding: 7px 9px; font: inherit;
   }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #a7e3cd; border-color: #047857; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
   button {
-    background: #443a68; color: #e6e0f5; border: 1px solid #5d4f8c; border-radius: 8px;
-    padding: 7px 12px; font: 700 13px/1 inherit; cursor: pointer;
+    background: #ffffff; color: #26262e; border: 1px solid #d8d8e0; border-radius: 8px;
+    padding: 7px 12px; font: 650 13px/1 inherit; cursor: pointer;
   }
-  button:hover { border-color: #7c6fb0; background-color: #524680; }
-  button.primary { background: #2fc98d22; border-color: #2fc98d; color: #9ff5c9; }
+  button:hover { border-color: #047857; color: #047857; }
+  button:disabled { opacity: .45; cursor: default; }
+  button:disabled:hover { border-color: #d8d8e0; color: #26262e; }
+  button.primary { background: #047857; border-color: #047857; color: #ffffff; }
+  button.primary:hover { background: #059669; color: #ffffff; }
   button.small { padding: 4px 8px; font-size: 12px; }
-  button.danger { border-color: #d64f63; color: #ffb6c1; }
+  button.danger { border-color: #f0b6bd; color: #b91c1c; }
+  button.danger:hover { border-color: #b91c1c; color: #b91c1c; }
 
   /* ---- the doc ---- */
   #docwrap { display: flex; position: relative; }
   #gutter {
     width: 68px; flex-shrink: 0; position: relative; overflow: hidden;
-    border-right: 1px solid #3a3160;
+    border-right: 1px solid #ececf1;
   }
   #gutterInner { position: absolute; inset: 0 0 auto 0; }
   #gutterInner .g {
@@ -56,21 +64,21 @@
   }
   #gutterInner button {
     padding: 1px 5px; font-size: 11px; line-height: 1.4; border-radius: 6px;
-    background: #241d3c; border-color: #4d4177; color: #7a6fa3;
+    background: #f7f7f8; border-color: #d8d8e0; color: #8a8a96;
   }
-  #gutterInner button.on { border-color: #2fc98d; color: #9ff5c9; background: #2fc98d18; }
-  #gutterInner button.off { border-color: #d6a24f; color: #ffd9a3; background: #d6a24f18; }
+  #gutterInner button.on { border-color: #059669; color: #047857; background: #ecfdf5; }
+  #gutterInner button.off { border-color: #d97706; color: #b45309; background: #fef7ec; }
   #editorArea { position: relative; flex: 1; min-width: 0; }
   textarea#doc {
     display: block; width: 100%; height: 74vh; resize: vertical;
     background: transparent; border: 0; border-radius: 0; outline: none;
-    font: 500 14px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 450 14px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     padding: 12px 16px 40vh 12px;
     white-space: pre-wrap; overflow-wrap: break-word; overflow-y: auto;
   }
   #mirror {
     position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none;
-    font: 500 14px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 450 14px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     padding: 12px 16px 40vh 12px; white-space: pre-wrap; overflow-wrap: break-word;
   }
   #mirror div { min-height: 1.9em; }
@@ -80,44 +88,45 @@
     appearance: none; -webkit-appearance: none;
     font: 700 10px/1.4 ui-sans-serif, system-ui, sans-serif; letter-spacing: .05em;
     padding: 2px 5px; border-radius: 6px; text-transform: uppercase;
-    background: #443a68; color: #cfc6ec; border: 1px solid #5d4f8c;
+    background: #ecfdf5; color: #047857; border: 1px solid #a7e3cd;
     max-width: 60px; width: auto; cursor: pointer;
   }
-  select.chip:hover { border-color: #9ff5c9; color: #9ff5c9; }
-  .chip.bad { border-color: #d64f63; color: #ffb6c1; background: #d64f6322; }
+  select.chip:hover { border-color: #047857; }
+  .chip.bad { border-color: #f0b6bd; color: #b91c1c; background: #fdf1f2; }
   span.chip { cursor: default; }
 
   /* ---- outline ---- */
   #outline { display: flex; flex-direction: column; gap: 5px; max-height: 30vh; overflow: auto; }
   .qrow {
     display: flex; gap: 8px; align-items: center; padding: 6px 9px;
-    background: #251e42; border: 1px solid #4d4177; border-radius: 8px; cursor: pointer;
+    background: #fbfbfc; border: 1px solid #ececf1; border-radius: 8px; cursor: pointer;
   }
-  .qrow.on { border-color: #9ff5c9; }
-  .qrow.bad { border-color: #d64f63; }
+  .qrow:hover { border-color: #d8d8e0; }
+  .qrow.on { border-color: #059669; background: #ecfdf5; }
+  .qrow.bad { border-color: #f0b6bd; }
   .qrow .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
   .qrow.section { background: transparent; border-color: transparent; cursor: default;
-    text-transform: uppercase; font-size: 11px; letter-spacing: .1em; color: #9a90bd; padding: 4px 2px 0; }
+    text-transform: uppercase; font-size: 11px; letter-spacing: .1em; color: #8a8a96; padding: 4px 2px 0; }
   .badge {
     font: 700 10px/1 inherit; letter-spacing: .06em; padding: 3px 6px; border-radius: 6px;
-    background: #443a68; color: #cfc6ec; text-transform: uppercase; flex-shrink: 0;
+    background: #f0f0f3; color: #5c5c68; text-transform: uppercase; flex-shrink: 0;
   }
   canvas#preview {
     width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px;
-    border: 1px solid #4d4177; display: block;
+    border: 1px solid #e6e6ec; display: block;
   }
-  #problems { font: 500 12px/1.6 ui-monospace, Menlo, monospace; color: #ffb08a; white-space: pre-wrap; }
-  #problems.ok { color: #7fd8a8; }
+  #problems { font: 450 12px/1.6 ui-monospace, Menlo, monospace; color: #b45309; white-space: pre-wrap; }
+  #problems.ok { color: #047857; }
   #problems .jump { cursor: pointer; text-decoration: underline dotted; }
-  #problems .jump:hover { color: #ffd9a3; }
-  .hint { color: #7a6fa3; font-size: 12px; }
+  #problems .jump:hover { color: #92400e; }
+  .hint { color: #8a8a96; font-size: 12px; }
   .checkline { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .checkline input { width: auto; }
   dialog {
-    background: #2e2650; color: #e6e0f5; border: 1px solid #5d4f8c; border-radius: 12px;
-    width: min(720px, 90vw);
+    background: #ffffff; color: #26262e; border: 1px solid #e6e6ec; border-radius: 12px;
+    width: min(720px, 90vw); box-shadow: 0 12px 40px rgba(24,24,32,.18);
   }
-  dialog::backdrop { background: rgba(10,8,20,.7); }
+  dialog::backdrop { background: rgba(24,24,32,.35); }
 </style>
 </head>
 <body>
@@ -126,7 +135,7 @@
   <h1>PACK STUDIO</h1>
   <span class="hint">type the pack as a document · nothing leaves your browser until you export</span>
   <span class="spacer"></span>
-  <a href="../training/" style="color:#9a90bd;font-size:13px;font-weight:700;text-decoration:none;margin-right:6px">Writer's guide ↗</a>
+  <a href="../training/" style="color:#5c5c68;font-size:13px;font-weight:650;text-decoration:none;margin-right:6px">Writer's guide ↗</a>
   <button id="aiTighten" class="small" title="AI shortens only the over-length text" disabled>✨ Tighten to fit</button>
   <button id="aiDraft" class="small">✨ Draft from notes…</button>
   <button id="loadSample" class="small">Load sample</button>

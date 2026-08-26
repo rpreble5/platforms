@@ -19,24 +19,24 @@
   header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   #dot { width: 12px; height: 12px; border-radius: 50%; background: #f25f5c; flex: none; }
   #dot.on { background: #3ddc9a; }
-  header b { letter-spacing: .06em; font-size: 14px; color: #9a90bd; }
-  #players { margin-left: auto; font: 600 14px ui-monospace, Menlo, monospace; color: #9a90bd; }
+  header b { letter-spacing: .06em; font-size: 14px; color: #9a9aa2; }
+  #players { margin-left: auto; font: 600 14px ui-monospace, Menlo, monospace; color: #9a9aa2; }
 
   #card {
-    background: #201a33; border: 1px solid #3a3157; border-radius: 16px;
+    background: #201a33; border: 1px solid #333338; border-radius: 16px;
     padding: 16px; margin-bottom: 14px;
   }
   #phase {
     display: inline-block; font: 800 13px ui-monospace, Menlo, monospace;
     letter-spacing: .1em; padding: 3px 10px; border-radius: 999px;
-    background: #3a3157; color: #cfc6e8;
+    background: #333338; color: #cfc6e8;
   }
   #phase.answer { background: #1d4b38; color: #3ddc9a; }
   #phase.paused { background: #5c2320; color: #ff8a5c; }
-  #qnum { font: 600 13px ui-monospace, Menlo, monospace; color: #7a6fa3; margin-left: 8px; }
+  #qnum { font: 600 13px ui-monospace, Menlo, monospace; color: #82828c; margin-left: 8px; }
   #timer { float: right; font: 800 24px ui-monospace, Menlo, monospace; color: #ffd93d; }
   #qtext { margin: 10px 0 0; font-size: 19px; font-weight: 700; min-height: 3em; }
-  #alist { margin: 10px 0 0; padding-left: 24px; font-size: 15px; color: #9a90bd; }
+  #alist { margin: 10px 0 0; padding-left: 24px; font-size: 15px; color: #9a9aa2; }
   #alist li { margin: 4px 0; }
   #alist li.correct { color: #3ddc9a; font-weight: 800; }
   #alist li.correct::after { content: ' ✓'; }
@@ -45,36 +45,36 @@
   button {
     width: 100%; border: 0; border-radius: 16px; color: inherit;
     font: 800 22px/1 inherit; padding: 22px; margin-bottom: 12px;
-    background: #3a3157; touch-action: manipulation;
+    background: #333338; touch-action: manipulation;
   }
   button:active { transform: scale(0.98); filter: brightness(1.15); }
   button:disabled { opacity: .35; }
   #next { background: #2f7a5a; font-size: 26px; padding: 28px; }
-  #pause { background: #4d4177; }
+  #pause { background: #44444e; }
   #showdown { background: #5c2320; color: #ffb08a; }
   #menurow { display: flex; gap: 12px; }
   #menurow button { font-size: 16px; padding: 16px 12px; }
   #menu { background: #23324d; color: #9dc4ff; font-size: 17px; padding: 16px; }
   #playersBtn { background: #1f2b3c; color: #9db4d4; font-size: 16px; padding: 14px; }
   #plist {
-    background: #201a33; border: 1px solid #3a3157; border-radius: 16px;
+    background: #201a33; border: 1px solid #333338; border-radius: 16px;
     padding: 4px 14px; margin-bottom: 12px; max-height: 38vh; overflow: auto;
   }
   .prow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #2c2547; }
   .prow:last-child { border-bottom: 0; }
   .prow .swd { width: 14px; height: 14px; border-radius: 50%; flex: none; }
   .prow .nm { font-weight: 700; }
-  .prow.off .nm { color: #7a6fa3; text-decoration: line-through; }
-  .prow .meta { color: #7a6fa3; font-size: 13px; margin-left: auto; }
+  .prow.off .nm { color: #82828c; text-decoration: line-through; }
+  .prow .meta { color: #82828c; font-size: 13px; margin-left: auto; }
   .prow button { width: auto; margin: 0; padding: 8px 14px; font: 800 14px/1 inherit; background: #5c2320; color: #ffb08a; border-radius: 10px; }
-  #plist .none { color: #7a6fa3; font-size: 14px; padding: 12px 0; }
+  #plist .none { color: #82828c; font-size: 14px; padding: 12px 0; }
   #restart { background: #46213f; color: #ff9db0; font-size: 17px; padding: 16px; }
   #restart.armed { background: #a12f3d; color: #fff; }
 
   #gate {
     position: fixed; inset: 0; background: #14101f; display: flex;
     align-items: center; justify-content: center; text-align: center;
-    padding: 32px; font-size: 17px; color: #9a90bd;
+    padding: 32px; font-size: 17px; color: #9a9aa2;
   }
   #gate.hidden { display: none; }
   .spacer { flex: 1; }

@@ -4,37 +4,37 @@
 <meta charset="utf-8">
 <title>Avatar preview</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #332a52; color: #e6e0f5;
+    margin: 0; background: #f0f0f3; color: #26262e;
     font: 500 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
   }
   header {
-    padding: 14px 20px; background: #241d3c; border-bottom: 1px solid #443a68;
+    padding: 14px 20px; background: #f7f7f8; border-bottom: 1px solid #d8d8e0;
     display: flex; gap: 20px; align-items: baseline; flex-wrap: wrap;
     position: sticky; top: 0; z-index: 2;
   }
-  h1 { font-size: 15px; margin: 0; letter-spacing: .04em; color: #9ff5c9; }
-  header p { margin: 0; color: #9a90bd; font-size: 13px; }
+  h1 { font-size: 15px; margin: 0; letter-spacing: .04em; color: #047857; }
+  header p { margin: 0; color: #5c5c68; font-size: 13px; }
   kbd {
-    background: #443a68; border-radius: 4px; padding: 1px 6px;
+    background: #d8d8e0; border-radius: 4px; padding: 1px 6px;
     font: 600 12px ui-monospace, Menlo, monospace;
   }
   .grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
     gap: 14px; padding: 18px 20px;
   }
-  .card { background: #3b3160; border: 1px solid #4d4177; border-radius: 12px; padding: 12px 14px; }
-  .card.warn { border-color: #ff8a5c; }
+  .card { background: #e6e6ec; border: 1px solid #d8d8e0; border-radius: 12px; padding: 12px 14px; }
+  .card.warn { border-color: #d97706; }
   .name { font-weight: 800; font-size: 15px; }
-  .meta { color: #9a90bd; font-size: 12px; font-variant-numeric: tabular-nums; }
-  .warnmsg { color: #ffb08a; font-size: 12px; margin-top: 4px; }
+  .meta { color: #5c5c68; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .warnmsg { color: #b45309; font-size: 12px; margin-top: 4px; }
   .row { display: flex; align-items: flex-end; gap: 14px; margin-top: 10px; min-height: 92px; }
-  .sizes { color: #7a6fa3; font-size: 11px; margin-top: 2px; }
+  .sizes { color: #8a8a96; font-size: 11px; margin-top: 2px; }
   section > h2 {
     margin: 22px 20px 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
-    color: #9a90bd; font-weight: 700;
+    color: #5c5c68; font-weight: 700;
   }
 </style>
 </head>
@@ -88,7 +88,7 @@ const out = document.getElementById('out');
     for (const { s } of SCALES) {
       const w = Math.round(PLAYER_W * s);
       const h = Math.round(PLAYER_H * s);
-      const sprite = getAvatar('#2fc98d', 'flat', w, h, 'pill', true, acc.key);
+      const sprite = getAvatar('#059669', 'flat', w, h, 'pill', true, acc.key);
       const holder = document.createElement('div');
       const cv = document.createElement('canvas');
       cv.width = sprite.width;
