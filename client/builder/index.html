@@ -153,16 +153,27 @@
     position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0;
     color: #454b57;
   }
-  #mirror div { min-height: 1.8em; border-radius: 6px; }
+  /* :not(#blockHi) matters — a bare "#mirror > div" outranks "#blockHi" and
+     would drag the highlight rect back into the flow, inflating the mirror. */
+  #mirror > div:not(#blockHi) { min-height: 1.8em; }
   #mirror .mk { color: var(--acc); }                /* #, ✓, [on], true: */
   #mirror .mko { color: var(--warn); }              /* [off], false: */
   #mirror .mh, #mirror .mb { color: #12151c; }      /* question text, bucket names */
   #mirror .mchk { color: var(--acc); }              /* a checked answer's label */
   #mirror .md { color: var(--faint); }              /* directives, (starts on), (0-20, …) */
   #mirror .me { color: var(--err); }                /* lines the parser rejected */
-  #mirror div.sec { background: #eef1f4; color: var(--mut); }
-  /* the block the caret is in */
-  #mirror div.curb { background: #f0f6f2; box-shadow: inset 3px 0 0 var(--acc-line); }
+  #mirror div.sec { background: #eef1f4; color: var(--mut); border-radius: 6px; }
+  /* The block the caret is in: ONE rect behind the whole question rather
+     than a band per line, so it reads as a single card. It sits in the
+     mirror's left padding, clear of the text, and behind it (z-index -1
+     inside the mirror's own stacking context). */
+  #blockHi {
+    position: absolute; left: 2px; right: 6px; z-index: -1;
+    background: #f2f8f4; border-left: 3px solid var(--acc);
+    border-radius: 4px 10px 10px 4px;
+    display: none;
+  }
+  #blockHi.on { display: block; }
   .chip {
     appearance: none; -webkit-appearance: none;
     font: 700 9.5px/1.5 ui-sans-serif, system-ui, sans-serif; letter-spacing: .05em;
@@ -313,7 +324,7 @@
       <div id="editorArea">
         <textarea id="doc" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
         <div id="sugRail"><div id="sugInner"></div></div>
-        <div id="mirror" aria-hidden="true"></div>
+        <div id="mirror" aria-hidden="true"><div id="blockHi"></div></div>
       </div>
     </div>
     <div id="docHint">

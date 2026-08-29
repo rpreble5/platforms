@@ -150,6 +150,10 @@ let lineTops = [];
 /** @type {number[]} */
 let lineHeights = [];
 
+/** The active-block highlight rect. Held here because measure() clears the
+ *  mirror on every keystroke and re-appends it. */
+const hi = $('blockHi');
+
 function span(/** @type {string} */ t, /** @type {string} */ cls) {
   const s = document.createElement('span');
   s.textContent = t;
@@ -207,28 +211,40 @@ function paintLine(l, info) {
   return d;
 }
 
-/** Tint the mirror lines of the block the caret sits in. */
+/**
+ * Park the highlight rect behind the block the caret sits in — one shape
+ * spanning the whole question, sized from the measured line tops.
+ */
 function paintActiveBlock() {
   const b = parsed.blocks[caretIx];
-  const kids = $('mirror').children;
-  for (let i = 0; i < kids.length; i++) {
-    kids[i].classList.toggle('curb', !!b && i >= b.startLine && i <= b.endLine);
+  const top = b ? lineTops[b.startLine] : undefined;
+  const last = b ? lineTops[b.endLine] : undefined;
+  if (!b || top === undefined || last === undefined) {
+    hi.classList.remove('on');
+    return;
   }
+  hi.style.top = `${top - 3}px`;
+  hi.style.height = `${last + (lineHeights[b.endLine] ?? 0) - top + 6}px`;
+  hi.classList.add('on');
 }
 
 function measure() {
   const mirror = $('mirror');
   mirror.style.width = `${doc.clientWidth}px`;
-  mirror.replaceChildren();
+  mirror.replaceChildren(hi);
   const srcLines = docText.split('\n');
+  /** @type {HTMLElement[]} */
+  const lineEls = [];
   for (let i = 0; i < srcLines.length; i++) {
-    mirror.appendChild(paintLine(srcLines[i], parsed.lines[i]));
+    const el = paintLine(srcLines[i], parsed.lines[i]);
+    mirror.appendChild(el);
+    lineEls.push(el);
   }
   lineTops = [];
   lineHeights = [];
-  for (const child of mirror.children) {
-    lineTops.push(/** @type {HTMLElement} */ (child).offsetTop);
-    lineHeights.push(/** @type {HTMLElement} */ (child).offsetHeight);
+  for (const el of lineEls) {
+    lineTops.push(el.offsetTop);
+    lineHeights.push(el.offsetHeight);
   }
   paintActiveBlock();
 }
