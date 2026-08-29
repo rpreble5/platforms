@@ -5,13 +5,14 @@
  * problems panel → real-engine preview) reviews everything it writes, and
  * the human clicks the answer keys.
  *
- * Two modes share one endpoint and one system prompt:
+ * Two modes share one endpoint, each with its own system prompt:
  * - draft:   rough notes (+ optional instructions) → a fresh document
- * - tighten: the current document + the Studio's own length warnings →
- *            the same document with ONLY the flagged lines shortened
+ * - suggest: every piece of author text in the document → 1-3 shorter
+ *            phrasings per item, which the author picks from inline
  *
- * The system prompt is stable and sent with cache_control, so repeat
- * drafts hit the prompt cache. The uncertainty rule is the load-bearing
+ * Both prompts are stable and sent with cache_control, so repeat calls hit
+ * the prompt cache; anything that varies per request (the deck's mode)
+ * goes in the user turn instead. The uncertainty rule is the load-bearing
  * safety property: when the notes don't say which answer is correct, the
  * model leaves every answer unchecked and the Studio flags the question —
  * uncertainty becomes a visible task, never a silent guess.
@@ -63,14 +64,15 @@ RULES:
 - '# ' starts every question, whatever its type. No question declares its type: each one is inferred from the lines beneath it.
 - Choice: ${LIMITS.answers[0]}-${LIMITS.answers[1]} answers, one per line. '✓ ' before an answer marks it correct.
 - Select-all (two or more '✓' in one question, and at least one unchecked wrong answer) is a TEAMS-ONLY type: covering every correct platform is something a team does, and one player has one body. The deck's mode is stated with the notes — obey it exactly.
-- Range: 'range: LO-HI of MIN-MAX [unit]' — the answer band inside the number line. Use for numeric facts and estimates.
+- Range: 'range: LO-HI of MIN-MAX [unit]' — the answer band inside the number line. LO ≤ HI, both inside MIN < MAX, and the line should be wide enough that the band is not the whole of it. Use for numeric facts and estimates.
 - Sort: ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket → item, item' lines (a real arrow, or '->'), ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Two or more arrow lines ARE the sort question — nothing else declares it. Use for categorization.
 - Write DECK QUESTIONS ONLY. Never emit a '## Control Room' or '## Showdown' section, or any '[on]'/'[off]' control or 'true:'/'false:' statement line — the editor does not author those, and anything you write there is thrown away.
-- TEXT LIMITS (hard ceilings — text over these shrinks on the projector): question ≤ ${LIMITS.questionChars} chars, answer ≤ ${LIMITS.answerChars}, sort bucket/item ≤ ${LIMITS.sortLabelChars}, control label ≤ ${LIMITS.controlLabelChars}, statement ≤ ${LIMITS.statementChars}.
+- TEXT LIMITS (hard ceilings — text over these shrinks on the projector): question ≤ ${LIMITS.questionChars} chars, answer ≤ ${LIMITS.answerChars}, sort bucket/item ≤ ${LIMITS.sortLabelChars}.
 - BREVITY: the ceilings are not targets. This text is read across a room in seconds, so always choose the shortest faithful phrasing — aim for roughly two-thirds of each ceiling (question ~${Math.round(LIMITS.questionChars * 2 / 3)} chars, answer ~${Math.round(LIMITS.answerChars * 2 / 3)}). Cut preamble ("Which of the following…" → "Which…"), prefer common short names over formal ones (drug names without salts, "heart attack question" phrasing only when the notes use it), and never restate the question inside its answers. When the notes are wordy, condensing them IS the job — but never at the cost of clinical meaning.
-- THE UNCERTAINTY RULE: mark '✓' (or [on]/[off], true:/false:) ONLY when the notes state or clearly imply the answer. If the notes do not, leave every answer of that question unchecked — the editor flags it for the author. Never guess an answer key.
+- THE UNCERTAINTY RULE: mark '✓' ONLY when the notes state or clearly imply the answer. If the notes do not, leave every answer of that question unchecked — the editor flags it for the author. Never guess an answer key.
 - Do not invent medical facts that are not in the notes. Distractors (wrong answers) may be invented freely; answer keys may not.
-- Choose types with judgement: numeric fact → range; categorization → sort; criteria list → select-all; a myth or one-liner works as a two-answer choice ("True" / "False"); otherwise choice.
+- Choose types with judgement: numeric fact → range; categorization → sort; criteria list → select-all IN A TEAMS DECK ONLY (a free-for-all gets a single-answer choice instead); a myth or one-liner works as a two-answer choice ("True" / "False"); otherwise choice.
+- The document holds questions and nothing else. Never write 'pack:', 'theme:', 'time:', 'mode:' or 'order:' lines — those settings live in the editor's own fields — and never write 'type:', 'level:', 'img:' or 'layout:' lines, which are set with buttons. The only 'key: value' line you may write is 'range:'.
 - Output ONLY the document text. No markdown fences, no commentary, no '##' headings of any kind.`;
 }
 
@@ -79,7 +81,7 @@ RULES:
 export function buildSuggestPrompt() {
   return `You suggest SHORTER phrasings for quiz text that is drawn on platforms in a projected game, where short text reads best. The audience is physicians and residents.
 
-You receive a JSON array of items: {"id", "kind", "text", "limit"} — kind is one of question, answer, bucket, item, control, statement; limit is that kind's character ceiling.
+You receive a JSON array of items: {"id", "kind", "text", "limit"} — kind is one of question, answer, bucket, item; limit is that kind's character ceiling.
 
 For each item where a materially shorter phrasing exists (saving at least ~20% or 4+ characters), reply with 1-3 alternatives, best first. Standard medical abbreviations and symbols are welcome when unambiguous to physicians ("Gram positive" → "Gram pos", "Gram +"). Every alternative must preserve the exact meaning and stay within the item's limit. OMIT items that are already tight — do not pad the list.
 

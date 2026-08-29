@@ -15,18 +15,47 @@ import { buildSuggestPrompt, buildSystemPrompt, NOTES_CAP } from './ai-draft.js'
 import { LIMITS, validatePack } from '../shared/pack-validate.js';
 import { parseDoc } from '../client/builder/pack-text.js';
 
+test('the prompt teaches a document the editor actually parses', () => {
+  // The example the model is told to copy, run through the real parser and
+  // the real validator. If the document format changes and the prompt is
+  // not updated, this fails instead of the drafts silently going stale.
+  const p = buildSystemPrompt();
+  const example = p.slice(
+    p.indexOf('nothing else):') + 'nothing else):'.length,
+    p.indexOf('RULES:')
+  ).trim();
+
+  const { raw, blocks, problems } = parseDoc(example, { frontMatter: false });
+  assert.deepEqual(problems, [], 'the prompt example parses without complaint');
+  assert.deepEqual(blocks.map((b) => b.type), ['choice', 'range', 'sort']);
+  assert.deepEqual(validatePack(raw).problems, []);
+
+  // …and it teaches the current syntax, not the retired kind
+  assert.match(example, /Mammal → Bat/);
+  assert.doesNotMatch(example, /type:|#sort|## /);
+  // one ✓ per question: the example must not model a select-all, which is
+  // teams-only and forbidden in the free-for-all decks New creates
+  for (const q of raw.questions) assert.ok(!Array.isArray(q.correct));
+});
+
 test('the system prompt quotes the enforced limits and the output contract', () => {
   const p = buildSystemPrompt();
-  for (const n of [
-    LIMITS.questionChars, LIMITS.answerChars, LIMITS.sortLabelChars,
-    LIMITS.controlLabelChars, LIMITS.statementChars,
-  ]) {
+  // Only the limits the drafter can actually breach: it writes deck
+  // questions, never control labels or showdown statements.
+  for (const n of [LIMITS.questionChars, LIMITS.answerChars, LIMITS.sortLabelChars]) {
     assert.ok(p.includes(`${n}`), `prompt mentions limit ${n}`);
   }
+  // …and it must not be told limits for syntax it is forbidden to write.
+  assert.doesNotMatch(p, /control label|statement ≤/);
   assert.match(p, /ONLY the document text/i);
   assert.match(p, /Never guess an answer key/i);
   assert.match(p, /## Control Room/);
   assert.match(p, /BREVITY: the ceilings are not targets/);
+  // the format the editor actually reads today
+  assert.match(p, /Bucket → item/);
+  assert.doesNotMatch(p, /type: sort/);
+  assert.match(p, /never write 'type:', 'level:', 'img:' or 'layout:' lines/);
+  assert.match(p, /TEAMS-ONLY/);
   assert.ok(p.includes(`~${Math.round(LIMITS.questionChars * 2 / 3)}`), 'brevity target derived from LIMITS');
   // the suggestions prompt: JSON contract, opt-out allowed
   const sp = buildSuggestPrompt();
