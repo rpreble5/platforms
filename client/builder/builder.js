@@ -894,6 +894,17 @@ function adoptDoc(t, opts = {}) {
   }
 }
 
+/**
+ * The starter document: one worked example of every DECK question type,
+ * in the order the buttons offer them — multiple choice, select-all,
+ * range, lightning sort.
+ *
+ * Deliberately no Control Room and no Showdown. Those are whole sections
+ * with their own syntax, and carrying them in the starter meant everyone
+ * opening the Studio had two blocks to delete before writing anything.
+ * The '+ Case' and '+ T/F' buttons write those sections, headers and all,
+ * for the people who want them.
+ */
 const SAMPLE = {
   pack: 'Sample night',
   theme: 'blanc',
@@ -905,17 +916,6 @@ const SAMPLE = {
     { type: 'sort', text: 'Sort each animal by class', buckets: ['Mammal', 'Bird'], items: [
       { label: 'Bat', bucket: 0 }, { label: 'Penguin', bucket: 1 }, { label: 'Dolphin', bucket: 0 }] },
   ],
-  controlRoom: {
-    perTeam: 1,
-    answerMs: 40000,
-    questions: [{
-      text: 'New case: set the controls',
-      controls: Array.from({ length: 6 }, (_, i) => ({
-        label: `Control ${i + 1}`, kind: 'toggle', initial: false, answer: i % 2 === 0,
-      })),
-    }],
-  },
-  showdown: { answerMs: 6000, statements: [{ text: 'An octopus has three hearts', answer: true }] },
 };
 
 // ------------------------------------------------------------------ wiring
@@ -1090,7 +1090,7 @@ async function openPacksDlg() {
     s.textContent = 'No game server reachable from this page.';
     serverHolder.appendChild(s);
   }
-  row(serverHolder, 'Sample night', 'the built-in example — every question type', () => {
+  row(serverHolder, 'Sample night', 'the built-in example — one of every deck question type', () => {
     saveDraftEntry();
     adoptDoc(serializeDoc(SAMPLE));
   }, null);
