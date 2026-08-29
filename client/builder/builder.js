@@ -27,7 +27,7 @@ import { drawShowdown } from '../display/showdown-ui.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
-  splitSections,
+  splitSections, setOnlyCheck,
 } from './pack-text.js';
 
 // ------------------------------------------------------------------ state
@@ -306,7 +306,12 @@ function renderGutter(vproblems) {
       g.appendChild(b);
     };
     if (l.kind === 'answer') {
-      mk(l.checked ? '✓' : '☐', l.checked ? 'on' : '', () => setText(toggleCheck(docText, i)));
+      // Select-all is a teams question, so in a free-for-all deck the checks
+      // behave like radio buttons: marking one clears the rest, and a second
+      // correct answer simply cannot be produced by clicking.
+      mk(l.checked ? '✓' : '☐', l.checked ? 'on' : '', () => setText(
+        meta.mode === 'teams' ? toggleCheck(docText, i) : setOnlyCheck(docText, parsed, i)
+      ));
     } else if (l.kind === 'statement') {
       mk('T', l.verdict === true ? 'on' : '', () => setText(setVerdict(docText, i, 'statement', true)));
       mk('F', l.verdict === false ? 'off' : '', () => setText(setVerdict(docText, i, 'statement', false)));
@@ -373,7 +378,7 @@ function renderGutter(vproblems) {
       sel.title = 'question type';
       // A 2+-check question is "cover them all" only in a teams deck; one
       // player has one body, so in a free-for-all any correct platform pays.
-      const multiLabel = meta.mode === 'teams' ? 'all' : 'any';
+      const multiLabel = meta.mode === 'teams' ? 'all' : 'multi';
       for (const [v, label] of [['choice', b.type === 'multi' ? multiLabel : 'choice'], ['range', 'range'], ['sort', 'sort']]) {
         const o = document.createElement('option');
         o.value = v;
@@ -494,8 +499,20 @@ function renderPanel() {
     h.style.marginTop = '8px';
     h.textContent = meta.mode === 'teams'
       ? `${n} answers are marked correct. A player scores by standing on any one of them; a team that covers all ${n} at the buzzer earns a bonus on top — that is what makes "select every" worth asking.`
-      : `${n} answers are marked correct, and in a free-for-all one player can only stand on one platform — so any of the ${n} scores full marks. Word it as "which of these…", or switch the deck to Teams, where covering all ${n} earns the team a bonus.`;
+      : `${n} answers are marked correct, but select-all is a teams question — one player has one body. Leave a single check, or set the deck to Teams.`;
     body.appendChild(h);
+    if (meta.mode !== 'teams') {
+      const fix = document.createElement('button');
+      fix.className = 'small';
+      fix.style.marginTop = '8px';
+      fix.textContent = 'Keep only the first correct answer';
+      fix.onclick = () => {
+        const first = parsed.lines.findIndex((l, i) =>
+          l.kind === 'answer' && l.checked && i >= b.startLine && i <= b.endLine);
+        if (first >= 0) setText(setOnlyCheck(docText, parsed, first, { force: true }));
+      };
+      body.appendChild(fix);
+    }
   }
 
   if (b.type === 'choice' || b.type === 'multi') renderLevelPicker(body, b);
@@ -962,7 +979,21 @@ function adoptDoc(t, opts = {}) {
   if (!opts.boot || Object.keys(found).length) carried = found;
   Object.assign(meta, fm);
   if (meta.order !== 'suggested') meta.order = 'authored';
-  if (meta.mode !== 'teams') meta.mode = 'solo';
+  // The mode always comes from the pack being opened, never from whatever
+  // was open before. When the pack does not say, select-all decides it:
+  // only a teams deck can hold one, so a pack using them was written for
+  // teams — inferring that beats opening it as a free-for-all of complaints.
+  if (opts.boot) {
+    // Restoring your own document: the mode you chose came back with the
+    // saved meta, so nothing is inferred over the top of it.
+    if (meta.mode !== 'teams') meta.mode = 'solo';
+  } else if (fm.mode === undefined) {
+    const hasMulti = parseDoc(text, { frontMatter: false })
+      .raw.questions.some((/** @type {any} */ q) => Array.isArray(q.correct));
+    meta.mode = hasMulti ? 'teams' : 'solo';
+  } else if (meta.mode !== 'teams') {
+    meta.mode = 'solo';
+  }
   if (opts.boot) {
     doc.value = text;
     docText = text;
@@ -973,9 +1004,10 @@ function adoptDoc(t, opts = {}) {
 }
 
 /**
- * The starter document: one worked example of every DECK question type,
- * in the order the buttons offer them — multiple choice, select-all,
- * range, lightning sort.
+ * The starter document: one worked example of every question type a
+ * free-for-all deck can hold — multiple choice, range, lightning sort.
+ * Select-all is absent on purpose: it is a teams question (covering every
+ * correct platform is a team act), and this deck starts as a free-for-all.
  *
  * Deliberately no Control Room and no Showdown. Those are whole sections
  * with their own syntax, and carrying them in the starter meant everyone
@@ -989,9 +1021,7 @@ const SAMPLE = {
   answerMs: 12000,
   questions: [
     { text: 'Which planet has the most moons?', answers: ['Jupiter', 'Saturn', 'Uranus'], correct: 1 },
-    // Two right answers, worded so it is honest in BOTH modes: in a
-    // free-for-all any gas giant scores; in teams, covering both pays a bonus.
-    { text: 'Which of these is a gas giant?', answers: ['Jupiter', 'Mars', 'Saturn', 'Venus'], correct: [0, 2] },
+    { text: 'Which of these is a gas giant?', answers: ['Jupiter', 'Mars', 'Venus', 'Mercury'], correct: 0 },
     { type: 'range', text: 'Normal resting heart rate?', min: 0, max: 160, answer: [60, 100], unit: 'bpm' },
     { type: 'sort', text: 'Sort each animal by class', buckets: ['Mammal', 'Bird'], items: [
       { label: 'Bat', bucket: 0 }, { label: 'Penguin', bucket: 1 }, { label: 'Dolphin', bucket: 0 }] },
@@ -1024,7 +1054,15 @@ $('packName').oninput = () => { meta.pack = $('packName').value; metaChanged(); 
 // Not metaChanged(): the Details panel explains select-all in terms of the
 // deck's mode, so switching mode has to redraw it, and a button click has no
 // text field to steal focus from.
-const setMode = (/** @type {'solo'|'teams'} */ m) => { meta.mode = m; refresh(); };
+const setMode = (/** @type {'solo'|'teams'} */ m) => {
+  meta.mode = m;
+  refresh();
+  if (m !== 'solo') return;
+  const multis = parsed.raw.questions.filter((/** @type {any} */ q) => Array.isArray(q.correct)).length;
+  if (multis) {
+    toast(`${multis} question${multis === 1 ? ' has' : 's have'} more than one correct answer. Select-all is a teams question — each one now needs a single check, or switch back to Teams.`);
+  }
+};
 $('modeSolo').onclick = () => setMode('solo');
 $('modeTeams').onclick = () => setMode('teams');
 $('packAnswerMs').oninput = () => {
@@ -1294,7 +1332,9 @@ $('aiGo').onclick = async () => {
   if (typedCode) { try { localStorage.setItem(AI_CODE_KEY, typedCode); } catch { /* no store */ } }
   $('aiGo').disabled = true;
   $('aiStatus').textContent = 'Drafting… (a few seconds)';
-  const r = await callAi({ mode: 'draft', notes, instructions: $('aiInstructions').value });
+  const r = await callAi({
+    mode: 'draft', notes, instructions: $('aiInstructions').value, deckMode: meta.mode,
+  });
   $('aiGo').disabled = false;
   if (!r.ok) {
     if (r.status === 401) $('aiCodeRow').style.display = '';

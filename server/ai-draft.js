@@ -52,11 +52,6 @@ Jupiter
 ✓ Saturn
 Uranus
 
-# Select every gas giant
-✓ Jupiter
-Mars
-✓ Saturn
-
 # Normal resting heart rate?
 range: 60-100 of 0-160 bpm
 
@@ -67,7 +62,8 @@ Bird: Penguin
 
 RULES:
 - '# ' starts every question, whatever its type. A lightning sort adds a 'type: sort' line directly under the '# ' line; choice and range are inferred from the body.
-- Choice: ${LIMITS.answers[0]}-${LIMITS.answers[1]} answers, one per line. '✓ ' before an answer marks it correct. Two or more checks make a select-all (needs at least one unchecked wrong answer).
+- Choice: ${LIMITS.answers[0]}-${LIMITS.answers[1]} answers, one per line. '✓ ' before an answer marks it correct.
+- Select-all (two or more '✓' in one question, and at least one unchecked wrong answer) is a TEAMS-ONLY type: covering every correct platform is something a team does, and one player has one body. The deck's mode is stated with the notes — obey it exactly.
 - Range: 'range: LO-HI of MIN-MAX [unit]' — the answer band inside the number line. Use for numeric facts and estimates.
 - Sort: a 'type: sort' line, then ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket: item, item' lines, ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Use for categorization.
 - Write DECK QUESTIONS ONLY. Never emit a '## Control Room' or '## Showdown' section, or any '[on]'/'[off]' control or 'true:'/'false:' statement line — the editor does not author those, and anything you write there is thrown away.
@@ -165,7 +161,7 @@ export function underDailyLimit(/** @type {string} */ ip) {
 /**
  * mode 'draft': faculty notes -> a fresh document. Throws Anthropic SDK
  * errors upward; the route maps them to HTTP responses.
- * @param {{notes?: string, instructions?: string}} body
+ * @param {{notes?: string, instructions?: string, deckMode?: string}} body
  * @returns {Promise<{doc: string, usage: {input_tokens: number, output_tokens: number}}>}
  */
 export async function draftPack(body) {
@@ -177,7 +173,13 @@ export async function draftPack(body) {
   if (!notes.trim()) throw new RangeError('draft needs notes');
   if (notes.length > NOTES_CAP) throw new RangeError('notes too large');
   const instructions = String(body.instructions ?? '').slice(0, INSTRUCTIONS_CAP);
-  const user = `${instructions.trim() ? `AUTHOR INSTRUCTIONS: ${instructions.trim()}\n\n` : ''}NOTES:\n${notes}`;
+  // The deck's mode rides in the USER turn, not the system prompt, so the
+  // cached prompt stays byte-identical for every request.
+  const deckMode = body.deckMode === 'teams' ? 'teams' : 'solo';
+  const modeLine = deckMode === 'teams'
+    ? 'DECK MODE: teams. Select-all questions are allowed — use them where covering several correct answers is the point.'
+    : 'DECK MODE: free-for-all. Mark EXACTLY ONE \u2713 per question. Never mark two: select-all is a teams-only type and this deck is not a teams deck.';
+  const user = `${modeLine}\n\n${instructions.trim() ? `AUTHOR INSTRUCTIONS: ${instructions.trim()}\n\n` : ''}NOTES:\n${notes}`;
 
   const response = await client.messages.create({
     model,

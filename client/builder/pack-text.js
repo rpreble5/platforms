@@ -651,6 +651,30 @@ export function toggleCheck(text, i) {
 }
 
 /**
+ * Mark line i as the ONE correct answer in its block, clearing every other
+ * check there — the free-for-all rule, where select-all does not exist.
+ * Clicking the answer that is already checked still clears it, so a wrong
+ * key can be undone; it just can never produce a second check. Pass
+ * force:true to mean "make this the answer" regardless — used by the fix
+ * that turns a stray select-all back into a single-answer question.
+ * @param {string} text @param {ReturnType<typeof parseDoc>} parsed
+ * @param {number} i @param {{force?: boolean}} [opts]
+ */
+export function setOnlyCheck(text, parsed, i, opts = {}) {
+  const block = parsed.lines[i]?.block;
+  if (block === null || block === undefined) return toggleCheck(text, i);
+  const wasChecked = !opts.force && parsed.lines[i]?.checked === true;
+  const lines = text.split('\n');
+  parsed.lines.forEach((l, j) => {
+    if (l.kind !== 'answer' || l.block !== block) return;
+    const want = j === i && !wasChecked;
+    const bare = lines[j].replace(/^(\s*)[✓*]\s*/, '$1');
+    lines[j] = want ? bare.replace(/^(\s*)/, '$1✓ ') : bare;
+  });
+  return lines.join('\n');
+}
+
+/**
  * Set the verdict a gutter pill controls: TRUE/FALSE on a showdown
  * statement, ON/OFF on a control toggle.
  * @param {string} text @param {number} i

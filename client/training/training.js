@@ -222,7 +222,7 @@ for (const f of FITS) {
 
 const NUMBERS = [
   ['Answers per choice question', `${LIMITS.answers[0]} – ${LIMITS.answers[1]}`],
-  ['Select-all: correct answers', '2 or more, and at least one wrong answer must remain'],
+  ['Select-all: correct answers', '2 or more, at least one wrong answer remaining — teams decks only'],
   ['Sort buckets', `${LIMITS.buckets[0]} – ${LIMITS.buckets[1]}`],
   ['Sort items', `${LIMITS.items[0]} – ${LIMITS.items[1]}, each assigned to one bucket`],
   ['Seconds per sort item', `${LIMITS.sortItemSeconds[0]} – ${LIMITS.sortItemSeconds[1]} (default 6)`],

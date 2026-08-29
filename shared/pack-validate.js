@@ -94,6 +94,17 @@ export function validatePack(raw) {
     }
   };
 
+  // How the deck is meant to be played. The host can still switch modes on
+  // the display; this is the pack's own answer, so a teams deck arrives set
+  // up for teams instead of relying on someone remembering. Decided up here
+  // because select-all is a teams-only question type.
+  /** @type {'solo'|'teams'|undefined} */
+  let mode;
+  if (raw.mode !== undefined) {
+    if (raw.mode === 'solo' || raw.mode === 'teams') mode = raw.mode;
+    else problems.push(`mode "${raw.mode}" is unknown — use solo or teams`);
+  }
+
   const questions = (raw.questions ?? []).filter((/** @type {any} */ q, /** @type {number} */ i) => {
     const where = `Q${i + 1}`;
 
@@ -212,6 +223,14 @@ export function validatePack(raw) {
         problems.push(`${where}: select-all "correct" needs 2+ distinct in-range indexes and at least one wrong answer — skipped`);
         return false;
       }
+      // Select-all only means something in teams: covering every correct
+      // platform is a team act, and one player has one body. Flagged rather
+      // than skipped or rewritten — a pack that reaches the venue with this
+      // still plays (any correct platform scores), and silently dropping a
+      // question mid-game night would be worse than a noisy load.
+      if (mode === 'solo') {
+        problems.push(`${where}: select-all is a teams question — this deck is a free-for-all, so keep one correct answer or set the deck to teams`);
+      }
     } else if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.answers.length) {
       problems.push(`${where}: "correct" is out of range — skipped`);
       return false;
@@ -326,15 +345,6 @@ export function validatePack(raw) {
     } else {
       problems.push('showdown: no valid statements — block ignored');
     }
-  }
-
-  // How the deck is meant to be played. The host can still switch modes on
-  // the display; this is the pack's own answer, so a teams deck arrives set
-  // up for teams instead of relying on someone remembering.
-  let mode;
-  if (raw.mode !== undefined) {
-    if (raw.mode === 'solo' || raw.mode === 'teams') mode = raw.mode;
-    else problems.push(`mode "${raw.mode}" is unknown — use solo or teams`);
   }
 
   let theme = 'glass';

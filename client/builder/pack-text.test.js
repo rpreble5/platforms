@@ -4,6 +4,7 @@ import { validatePack } from '../../shared/pack-validate.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
+  setOnlyCheck,
 } from './pack-text.js';
 
 /** A pack exercising every type, matching what the Studio exports. */
@@ -319,6 +320,62 @@ test('level: pins a designed arena on choice questions, flagged elsewhere', () =
 
   const ctrl = parseDoc('## Control Room\n# c\nlevel: Moon Gate\n[on] A\n[on] B\n[on] C\n[on] D\n[on] E\n[on] F');
   assert.ok(ctrl.problems.some((p) => /control room/.test(p.msg)));
+});
+
+test('select-all is teams-only: flagged in a solo deck, fine in a teams deck', () => {
+  const multi = { text: 'Pick the giants', answers: ['Jupiter', 'Mars', 'Saturn'], correct: [0, 2] };
+  const rule = /select-all is a teams question/;
+
+  const solo = validatePack({ mode: 'solo', questions: [structuredClone(multi)] });
+  assert.ok(solo.problems.some((m) => rule.test(m)), 'a free-for-all deck flags it');
+  // …but the question still plays: a noisy load beats a question vanishing
+  // from the deck at the venue.
+  assert.equal(solo.pack.questions.length, 1);
+
+  const teams = validatePack({ mode: 'teams', questions: [structuredClone(multi)] });
+  assert.deepEqual(teams.problems, []);
+
+  // a pack that never declared a mode is left alone (existing packs)
+  const undeclared = validatePack({ questions: [structuredClone(multi)] });
+  assert.deepEqual(undeclared.problems, []);
+
+  // single-answer questions are fine in a free-for-all
+  const single = validatePack({ mode: 'solo', questions: [{ text: 'One?', answers: ['a', 'b'], correct: 0 }] });
+  assert.deepEqual(single.problems, []);
+});
+
+test('setOnlyCheck marks one answer and clears the rest of its block', () => {
+  const doc = [
+    '# First?',      // 0
+    '✓ a',           // 1
+    'b',             // 2
+    '✓ c',           // 3
+    '',              // 4
+    '# Second?',     // 5
+    '✓ d',           // 6
+    'e',             // 7
+  ].join('\n');
+  const p = () => parseDoc(doc, { frontMatter: false });
+
+  // checking an unchecked answer clears the other checks in THAT block only
+  const out = setOnlyCheck(doc, p(), 2).split('\n');
+  assert.deepEqual(out.slice(1, 4), ['a', '✓ b', 'c']);
+  assert.equal(out[6], '✓ d', 'the other question is untouched');
+  assert.equal(parseDoc(out.join('\n')).raw.questions[0].correct, 1);
+
+  // clicking the answer that is already checked clears it (undo a wrong key)
+  const cleared = setOnlyCheck(doc, p(), 1).split('\n');
+  assert.deepEqual(cleared.slice(1, 4), ['a', 'b', 'c']);
+
+  // it can never produce a select-all
+  const never = parseDoc(setOnlyCheck(doc, p(), 3), { frontMatter: false });
+  assert.equal(Array.isArray(never.raw.questions[0].correct), false);
+
+  // force: "make this the answer" — used to repair a stray select-all, where
+  // the target line is already checked and must STAY checked
+  const forced = setOnlyCheck(doc, p(), 1, { force: true }).split('\n');
+  assert.deepEqual(forced.slice(1, 4), ['✓ a', 'b', 'c']);
+  assert.equal(parseDoc(forced.join('\n')).raw.questions[0].correct, 0);
 });
 
 test('mode: rides the front matter and reaches the validated pack', () => {
