@@ -254,42 +254,6 @@ function syncScroll() {
   $('sugInner').style.transform = t;
 }
 
-// --------------------------------------------------------------- outline
-
-/** @param {string[]} vproblems */
-function renderOutline(vproblems) {
-  const holder = $('outline');
-  holder.replaceChildren();
-  /** @type {string|null} */
-  let lastBucket = null;
-  for (const [bi, b] of parsed.blocks.entries()) {
-    if (b.bucket !== lastBucket) {
-      lastBucket = b.bucket;
-      const s = document.createElement('div');
-      s.className = 'qrow section';
-      s.textContent = b.bucket === 'deck' ? 'Deck' : b.bucket === 'control' ? 'Control Room' : 'Showdown';
-      holder.appendChild(s);
-    }
-    const row = document.createElement('div');
-    row.className = 'qrow' + (bi === caretIx ? ' on' : '') + (blockBad(b, vproblems) ? ' bad' : '');
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    badge.textContent = b.bucket === 'control' ? 'case' : b.bucket === 'showdown' ? 't/f' : b.type;
-    const t = document.createElement('span');
-    t.className = 't';
-    t.textContent = b.text || '(untitled)';
-    row.append(badge, t);
-    row.onclick = () => { caretToLine(b.headLine); refresh({ keepPanel: false }); };
-    holder.appendChild(row);
-  }
-  if (!parsed.blocks.length) {
-    const s = document.createElement('span');
-    s.className = 'hint';
-    s.textContent = 'Type # and a question in the doc, or use the buttons below.';
-    holder.appendChild(s);
-  }
-}
-
 // -------------------------------------------------------------- problems
 
 /** @param {string[]} vproblems */
@@ -561,7 +525,6 @@ function refresh(opts = {}) {
   measure();
   renderGutter(vproblems);
   renderSugRail();
-  renderOutline(vproblems);
   renderProblems(vproblems);
   syncPackCard();
   $('aiShorten').disabled = !parsed.blocks.length;
@@ -581,7 +544,6 @@ function caretMoved() {
     const changed = ix !== caretIx;
     caretIx = ix;
     renderPanel();
-    renderOutline(validated().problems);
     if (changed) restartPreview();
   }
 }
