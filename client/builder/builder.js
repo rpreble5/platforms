@@ -371,7 +371,10 @@ function renderGutter(vproblems) {
       const sel = document.createElement('select');
       sel.className = 'chip' + bad;
       sel.title = 'question type';
-      for (const [v, label] of [['choice', b.type === 'multi' ? 'multi' : 'choice'], ['range', 'range'], ['sort', 'sort']]) {
+      // A 2+-check question is "cover them all" only in a teams deck; one
+      // player has one body, so in a free-for-all any correct platform pays.
+      const multiLabel = meta.mode === 'teams' ? 'all' : 'any';
+      for (const [v, label] of [['choice', b.type === 'multi' ? multiLabel : 'choice'], ['range', 'range'], ['sort', 'sort']]) {
         const o = document.createElement('option');
         o.value = v;
         o.textContent = label + (b.img && v === (b.type === 'multi' ? 'choice' : b.type) ? ' 🖼' : '');
@@ -483,6 +486,17 @@ function renderPanel() {
     const t = /** @type {'choice'|'range'|'sort'} */ (typeSel.value);
     if (t !== (b.type === 'multi' ? 'choice' : b.type)) setText(setBlockType(docText, b, t));
   };
+
+  if (b.type === 'multi') {
+    const n = parsed.raw.questions[b.ix]?.correct?.length ?? 2;
+    const h = document.createElement('div');
+    h.className = 'hint';
+    h.style.marginTop = '8px';
+    h.textContent = meta.mode === 'teams'
+      ? `${n} answers are marked correct. A player scores by standing on any one of them; a team that covers all ${n} at the buzzer earns a bonus on top — that is what makes "select every" worth asking.`
+      : `${n} answers are marked correct, and in a free-for-all one player can only stand on one platform — so any of the ${n} scores full marks. Word it as "which of these…", or switch the deck to Teams, where covering all ${n} earns the team a bonus.`;
+    body.appendChild(h);
+  }
 
   if (b.type === 'choice' || b.type === 'multi') renderLevelPicker(body, b);
 
@@ -975,7 +989,9 @@ const SAMPLE = {
   answerMs: 12000,
   questions: [
     { text: 'Which planet has the most moons?', answers: ['Jupiter', 'Saturn', 'Uranus'], correct: 1 },
-    { text: 'Select every gas giant', answers: ['Jupiter', 'Mars', 'Saturn', 'Venus'], correct: [0, 2] },
+    // Two right answers, worded so it is honest in BOTH modes: in a
+    // free-for-all any gas giant scores; in teams, covering both pays a bonus.
+    { text: 'Which of these is a gas giant?', answers: ['Jupiter', 'Mars', 'Saturn', 'Venus'], correct: [0, 2] },
     { type: 'range', text: 'Normal resting heart rate?', min: 0, max: 160, answer: [60, 100], unit: 'bpm' },
     { type: 'sort', text: 'Sort each animal by class', buckets: ['Mammal', 'Bird'], items: [
       { label: 'Bat', bucket: 0 }, { label: 'Penguin', bucket: 1 }, { label: 'Dolphin', bucket: 0 }] },
@@ -1005,7 +1021,10 @@ function metaChanged() {
   refresh({ keepPanel: true });
 }
 $('packName').oninput = () => { meta.pack = $('packName').value; metaChanged(); };
-const setMode = (/** @type {'solo'|'teams'} */ m) => { meta.mode = m; metaChanged(); };
+// Not metaChanged(): the Details panel explains select-all in terms of the
+// deck's mode, so switching mode has to redraw it, and a button click has no
+// text field to steal focus from.
+const setMode = (/** @type {'solo'|'teams'} */ m) => { meta.mode = m; refresh(); };
 $('modeSolo').onclick = () => setMode('solo');
 $('modeTeams').onclick = () => setMode('teams');
 $('packAnswerMs').oninput = () => {
