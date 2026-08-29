@@ -188,6 +188,19 @@
     border: 1px solid var(--line); border-radius: 999px; padding: 0 6px;
   }
   .meter.over { color: var(--err); border-color: var(--err-line); background: #fdf1f2; }
+
+  /* designed-level picker in the Details panel */
+  .lvlgrid { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+  .lvlbtn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 7px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--line);
+    color: var(--mut); font-size: 11px; font-weight: 650; line-height: 1.2;
+  }
+  .lvlbtn:hover { border-color: var(--acc); color: var(--acc); }
+  .lvlbtn.on { border-color: var(--acc); background: var(--acc-soft); color: var(--acc); }
+  .lvlbtn canvas { width: 84px; height: 47px; border-radius: 6px; display: block; }
+  .lvlbtn.autol { justify-content: center; min-width: 64px; min-height: 74px; }
   #sugInner { position: absolute; inset: 0 0 auto 0; }
   .sugrow { position: absolute; right: 8px; display: flex; gap: 4px; pointer-events: auto; }
   .sugrow button {

@@ -50,7 +50,7 @@ const STARTS_ON_RE = /\s*\(starts?\s+on\)\s*$/i;
 const NUMBER_RE = /^(.+?)\s*=\s*(-?[\d.]+)\s*(?:\((.*)\))?\s*$/;
 const STATEMENT_RE = /^(true|false)\s*:\s*(.*)$/i;
 const BUCKET_RE = /^([^:]{1,40}):\s*(.*)$/;
-const DIRECTIVE_RE = /^(img|image|layout|pace|time|context|turns)\s*:\s*(.*)$/i;
+const DIRECTIVE_RE = /^(img|image|layout|level|pace|time|context|turns)\s*:\s*(.*)$/i;
 
 /** Directive keys that make sense per location; anything else is flagged. */
 const FRONT_KEYS = ['pack', 'theme', 'time', 'order'];
@@ -200,6 +200,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
         lines[a.line] = { kind: 'unknown', block: blocks.length };
       }
       if (b.rangeLine !== undefined) flag(b.rangeLine, 'a range: line in a sort block was ignored');
+      if (b.directives.level) flag(b.directives.level.line, 'level picks a choice-question arena — sort plays its own');
     } else if (type === 'range') {
       q.type = 'range';
       if (b.rangeLine === undefined) {
@@ -213,6 +214,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
         lines[a.line] = { kind: 'unknown', block: blocks.length };
       }
       if (b.directives.pace) flag(b.directives.pace.line, 'pace applies to sort questions only');
+      if (b.directives.level) flag(b.directives.level.line, 'level picks a choice-question arena — range plays the number line');
     } else {
       // choice / select-all
       type = 'choice';
@@ -230,6 +232,10 @@ export function parseDoc(text, { frontMatter = true } = {}) {
       }
       if (b.rangeLine !== undefined && b.tag === 'choice') flag(b.rangeLine, 'a range: line in a choice block was ignored');
       if (b.directives.pace) flag(b.directives.pace.line, 'pace applies to sort questions only');
+      if (b.directives.level) {
+        if (q.image) flag(b.directives.level.line, 'picture questions play the flat row — the level is ignored');
+        else q.level = b.directives.level.value;
+      }
     }
     if (b.directives.time) flag(b.directives.time.line, 'time is set for the whole deck in the front matter (time: 12s)');
     if (b.directives.context) flag(b.directives.context.line, 'context is a Control Room setting');
@@ -257,6 +263,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
       else q.answerMs = ms;
     }
     if (b.directives.img) flag(b.directives.img.line, 'pictures are a standard-deck feature');
+    if (b.directives.level) flag(b.directives.level.line, 'level is a deck-question setting — cases play the control room');
     blocks.push({
       bucket: 'control', ix: control.questions.length, type: 'case',
       text: b.text, headLine: b.headLine, startLine: b.startLine, endLine: b.endLine,
@@ -516,6 +523,7 @@ export function serializeDoc(p) {
     } else {
       out.push(`# ${q?.text ?? ''}`);
       if (q?.image) out.push(`img: ${q.image}`);
+      if (typeof q?.level === 'string' && q.level && !q.image) out.push(`level: ${q.level}`);
       if (q?.layout && q.layout !== 'islands' && !(q.image && q.layout === 'row')) out.push(`layout: ${q.layout}`);
       const correct = new Set(Array.isArray(q?.correct) ? q.correct : [q?.correct]);
       (Array.isArray(q?.answers) ? q.answers : []).forEach((/** @type {any} */ a, /** @type {number} */ ai) => {

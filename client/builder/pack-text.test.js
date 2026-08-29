@@ -13,7 +13,7 @@ const FULL_PACK = {
   answerMs: 15000,
   order: 'suggested',
   questions: [
-    { text: 'Which planet has the most moons?', answers: ['Jupiter', 'Saturn', 'Uranus'], correct: 1 },
+    { text: 'Which planet has the most moons?', answers: ['Jupiter', 'Saturn', 'Uranus'], correct: 1, level: 'Rising Tide' },
     { text: 'Select every gas giant', answers: ['Jupiter', 'Mars', 'Saturn'], correct: [0, 2] },
     { type: 'range', text: 'Normal resting heart rate?', min: 0, max: 160, answer: [60, 100], unit: 'bpm' },
     { type: 'sort', text: 'Sort each animal by class', buckets: ['Mammal', 'Bird'], itemMs: 8000,
@@ -292,6 +292,32 @@ test('setLabel swaps just the label, preserving line structure', () => {
   assert.equal(line(setLabel(doc, p(), 12, 'Octopus: 3 hearts'), 12), 'true: Octopus: 3 hearts');
   // a non-label line is left alone
   assert.equal(setLabel(doc, p(), 2, 'nope'), doc);
+});
+
+test('level: pins a designed arena on choice questions, flagged elsewhere', () => {
+  const ok = parseDoc('# Q?\nlevel: Moon Gate\n✓ a\nb');
+  assert.deepEqual(ok.problems, []);
+  assert.equal(ok.raw.questions[0].level, 'Moon Gate');
+
+  // serialize -> parse keeps it
+  const text = serializeDoc({ questions: [{ text: 'Q?', answers: ['a', 'b'], correct: 0, level: 'Moon Gate' }] });
+  assert.match(text, /level: Moon Gate/);
+  assert.equal(parseDoc(text).raw.questions[0].level, 'Moon Gate');
+
+  // ignored (and explained) where it can't apply
+  const img = parseDoc('# Q?\nimg: x.png\nlevel: Moon Gate\n✓ a\nb');
+  assert.equal(img.raw.questions[0].level, undefined);
+  assert.ok(img.problems.some((p) => p.line === 3 && /flat row/.test(p.msg)));
+
+  const range = parseDoc('# How many?\nlevel: Moon Gate\nrange: 4-6 of 0-10');
+  assert.equal(range.raw.questions[0].level, undefined);
+  assert.ok(range.problems.some((p) => /number line/.test(p.msg)));
+
+  const sort = parseDoc('#sort S\nlevel: Moon Gate\nA: one, two\nB: three');
+  assert.ok(sort.problems.some((p) => /sort plays its own/.test(p.msg)));
+
+  const ctrl = parseDoc('## Control Room\n# c\nlevel: Moon Gate\n[on] A\n[on] B\n[on] C\n[on] D\n[on] E\n[on] F');
+  assert.ok(ctrl.problems.some((p) => /control room/.test(p.msg)));
 });
 
 test('insertTemplate deck kinds: range and sort bodies', () => {

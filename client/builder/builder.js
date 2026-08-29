@@ -16,6 +16,7 @@
 import { LIMITS, PACK_THEMES, validatePack } from '../../shared/pack-validate.js';
 import { STEP_MS, MAX_FRAME_DT_MS, MAX_STEPS_PER_FRAME } from '../../shared/tuning.js';
 import { createWorld } from '../../sim/world.js';
+import { buildCustomArena } from '../../sim/levels.js';
 import { PHASE, configureControlRounds, createGame, startGame, stepRound } from '../../sim/round.js';
 import { createShowdown, stepShowdown } from '../../sim/showdown.js';
 import { setTheme } from '../display/themes.js';
@@ -452,22 +453,7 @@ function renderPanel() {
     if (t !== (b.type === 'multi' ? 'choice' : b.type)) setText(setBlockType(docText, b, t));
   };
 
-  if (b.type === 'choice' || b.type === 'multi') {
-    const laySel = document.createElement('select');
-    for (const l of ['islands', 'row', 'pyramid', 'reverse-pyramid']) {
-      const o = document.createElement('option');
-      o.value = l;
-      o.textContent = l;
-      if ((b.directives.layout?.value ?? 'islands') === l) o.selected = true;
-      laySel.appendChild(o);
-    }
-    laySel.onchange = () => {
-      setText(setDirective(docText, b, 'layout', laySel.value === 'islands' ? null : laySel.value), { keepPanel: true });
-    };
-    const ll = document.createElement('label');
-    ll.textContent = 'Layout (picture questions always play the row)';
-    body.append(ll, laySel);
-  }
+  if (b.type === 'choice' || b.type === 'multi') renderLevelPicker(body, b);
 
   if (b.type === 'sort') {
     numField(body, 'Seconds per item (3-15)', directiveSeconds(b, 'pace', 6), (v) => {
@@ -515,6 +501,112 @@ function renderPanel() {
   body.appendChild(note);
 
   dangerDelete(body, b, 'Delete question');
+}
+
+/**
+ * A tiny painting of a designed level: the floor, the answer boards in
+ * green, the stepping-stone rungs in gray — enough to pick a shape at a
+ * glance. Drawn at 2x for crisp text-size rendering.
+ * @param {any} spec @returns {HTMLCanvasElement}
+ */
+function levelThumb(spec) {
+  const c = document.createElement('canvas');
+  c.width = 168;
+  c.height = 94;
+  const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+  const sx = c.width / 1920;
+  const sy = c.height / 1080;
+  g.fillStyle = '#eef1f5';
+  g.fillRect(0, 0, c.width, c.height);
+  for (const p of buildCustomArena(spec)) {
+    const ans = String(p.id).startsWith('ans');
+    g.fillStyle = p.id === 'floor' ? '#d8dde4' : ans ? '#059669' : '#a8b1be';
+    g.fillRect(p.x * sx, p.y * sy, Math.max(2, p.w * sx), Math.max(ans ? 3 : 2, p.h * sy));
+  }
+  return c;
+}
+
+/**
+ * The arena picker for a choice question: Auto (the game rotates through
+ * every designed level with a matching board count) plus one toggle per
+ * matching level from the library. Picking one writes a `level:` line into
+ * the block; Auto removes it. When the library has nothing for this answer
+ * count, the old generated layouts are offered instead.
+ * @param {HTMLElement} body @param {import('./pack-text.js').BlockInfo} b
+ */
+function renderLevelPicker(body, b) {
+  const ll = document.createElement('label');
+  ll.textContent = 'Layout';
+  body.appendChild(ll);
+
+  if (b.img) {
+    const h = document.createElement('div');
+    h.className = 'hint';
+    h.textContent = 'Picture questions always play the flat row — the image needs the airspace.';
+    body.appendChild(h);
+    return;
+  }
+
+  const n = parsed.raw.questions[b.ix]?.answers?.length ?? 0;
+  const fits = levelPool.filter((l) => l.boards.length === n);
+  const cur = b.directives.level?.value ?? null;
+
+  // Two surgeries on one text: re-parse between them so the second uses
+  // fresh line numbers (removing layout: shifts everything below it).
+  const write = (/** @type {string|null} */ name) => {
+    let t = setDirective(docText, b, 'layout', null);
+    const b2 = parseDoc(t, { frontMatter: false }).blocks[caretIx];
+    if (b2) t = setDirective(t, b2, 'level', name);
+    setText(t); // full panel rerender, so the toggles' on-states follow
+  };
+
+  if (!fits.length) {
+    // No designed level has this board count (or no server): the generated
+    // layout tables carry the round, so offer those.
+    const laySel = document.createElement('select');
+    for (const l of ['islands', 'row', 'pyramid', 'reverse-pyramid']) {
+      const o = document.createElement('option');
+      o.value = l;
+      o.textContent = l;
+      if ((b.directives.layout?.value ?? 'islands') === l) o.selected = true;
+      laySel.appendChild(o);
+    }
+    laySel.onchange = () => {
+      setText(setDirective(docText, b, 'layout', laySel.value === 'islands' ? null : laySel.value), { keepPanel: true });
+    };
+    body.appendChild(laySel);
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'lvlgrid';
+  body.appendChild(grid);
+
+  const auto = document.createElement('button');
+  auto.className = 'lvlbtn autol' + (cur === null ? ' on' : '');
+  auto.textContent = 'Auto';
+  auto.title = 'the game rotates through every layout shown here';
+  auto.onclick = () => write(null);
+  grid.appendChild(auto);
+
+  for (const spec of fits) {
+    const btn = document.createElement('button');
+    btn.className = 'lvlbtn' + (cur === spec.name ? ' on' : '');
+    btn.title = `this question always plays "${spec.name}"`;
+    btn.appendChild(levelThumb(spec));
+    const t = document.createElement('span');
+    t.textContent = spec.name;
+    btn.appendChild(t);
+    btn.onclick = () => write(cur === spec.name ? null : spec.name);
+    grid.appendChild(btn);
+  }
+
+  if (cur && !fits.some((l) => l.name === cur)) {
+    const h = document.createElement('div');
+    h.className = 'hint';
+    h.textContent = `"${cur}" is not a ${n}-answer layout, so the game falls back to Auto — pick one above or change the answer count.`;
+    body.appendChild(h);
+  }
 }
 
 /**
