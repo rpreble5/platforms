@@ -170,7 +170,7 @@ test('extractFrontMatter absorbs the meta block and strips it from the doc', () 
 test('parseDoc with frontMatter:false flags typed meta lines instead of absorbing', () => {
   const { raw, problems } = parseDoc('theme: noir\n\n# Q?\n✓ a\nb', { frontMatter: false });
   assert.equal(raw.theme, 'blanc'); // the default — the typed line was NOT absorbed
-  assert.ok(problems.some((p) => p.line === 1 && /Pack panel/.test(p.msg)));
+  assert.ok(problems.some((p) => p.line === 1 && /bar above the document/.test(p.msg)));
 });
 
 test('unmarked verdicts and stray lines produce 1-based line problems', () => {
@@ -319,6 +319,24 @@ test('level: pins a designed arena on choice questions, flagged elsewhere', () =
 
   const ctrl = parseDoc('## Control Room\n# c\nlevel: Moon Gate\n[on] A\n[on] B\n[on] C\n[on] D\n[on] E\n[on] F');
   assert.ok(ctrl.problems.some((p) => /control room/.test(p.msg)));
+});
+
+test('mode: rides the front matter and reaches the validated pack', () => {
+  const { meta, text } = extractFrontMatter('pack: A\nmode: teams\n\n# Q?\n✓ a\nb');
+  assert.equal(meta.mode, 'teams');
+  assert.equal(text, '# Q?\n✓ a\nb');
+
+  assert.match(serializeDoc({ mode: 'teams', questions: [] }), /mode: teams/);
+  assert.doesNotMatch(serializeDoc({ questions: [] }), /mode:/); // absent unless set
+
+  assert.equal(parseDoc('mode: teams\n\n# Q?\n✓ a\nb').raw.mode, 'teams');
+  assert.equal(validatePack({ mode: 'teams', questions: [] }).pack.mode, 'teams');
+  assert.equal(validatePack({ mode: 'solo', questions: [] }).pack.mode, 'solo');
+  assert.equal(validatePack({ questions: [] }).pack.mode, undefined);
+
+  const bad = validatePack({ mode: 'cohort', questions: [] });
+  assert.equal(bad.pack.mode, undefined);
+  assert.ok(bad.problems.some((m) => /use solo or teams/.test(m)));
 });
 
 test('type: sort declares the type off the question line, legacy #sort still parses', () => {

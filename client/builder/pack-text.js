@@ -54,7 +54,7 @@ const BUCKET_RE = /^([^:]{1,40}):\s*(.*)$/;
 const DIRECTIVE_RE = /^(img|image|layout|level|type|pace|time|context|turns)\s*:\s*(.*)$/i;
 
 /** Directive keys that make sense per location; anything else is flagged. */
-const FRONT_KEYS = ['pack', 'theme', 'time', 'order'];
+const FRONT_KEYS = ['pack', 'theme', 'time', 'order', 'mode'];
 
 /** @param {string} v e.g. "12s", "12", "6.5s" @returns {number|null} ms */
 function parseSeconds(v) {
@@ -95,23 +95,24 @@ const fmtSeconds = (/** @type {number} */ ms) => `${ms / 1000}s`;
  * and drafts from the front-matter era migrate into the Pack panel and
  * the doc itself holds only questions.
  * @param {string} text
- * @returns {{ meta: {pack?:string, theme?:string, answerMs?:number, order?:string}, text: string }}
+ * @returns {{ meta: {pack?:string, theme?:string, answerMs?:number, order?:string, mode?:string}, text: string }}
  */
 export function extractFrontMatter(text) {
   const lines = text.split('\n');
-  /** @type {{pack?:string, theme?:string, answerMs?:number, order?:string}} */
+  /** @type {{pack?:string, theme?:string, answerMs?:number, order?:string, mode?:string}} */
   const meta = {};
   let i = 0;
   while (i < lines.length) {
     const t = lines[i].trim();
     if (!t) { i++; continue; } // leading/interleaved blanks go with the block
-    const m = /^(pack|theme|time|order)\s*:\s*(.*)$/i.exec(t);
+    const m = /^(pack|theme|time|order|mode)\s*:\s*(.*)$/i.exec(t);
     if (!m) break;
     const key = m[1].toLowerCase();
     const v = m[2].trim();
     if (key === 'pack') meta.pack = v;
     else if (key === 'theme') meta.theme = v;
     else if (key === 'order') meta.order = v;
+    else if (key === 'mode') meta.mode = v;
     else {
       const ms = parseSeconds(v);
       if (ms !== null) meta.answerMs = ms;
@@ -355,7 +356,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
       const m = /^(\w[\w-]*)\s*:\s*(.*)$/.exec(t);
       if (m && FRONT_KEYS.includes(m[1].toLowerCase())) {
         if (!frontMatter) {
-          flag(i, 'name, theme, time and order live in the Pack panel — this line is ignored');
+          flag(i, 'name, theme, time, mode and order live in the bar above the document — this line is ignored');
           lines[i] = { kind: 'unknown', block: null };
           continue;
         }
@@ -364,6 +365,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
         if (key === 'pack') raw.pack = v;
         else if (key === 'theme') raw.theme = v;
         else if (key === 'order') raw.order = v;
+        else if (key === 'mode') raw.mode = v;
         else {
           const ms = parseSeconds(v);
           if (ms === null) flag(i, `time "${v}" is not a number of seconds (try: time: 12s)`);
@@ -372,7 +374,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
         lines[i] = { kind: 'front', block: null };
       } else {
         flag(i, frontMatter
-          ? 'before the first # question, only pack: / theme: / time: / order: lines are recognized'
+          ? 'before the first # question, only pack: / theme: / time: / order: / mode: lines are recognized'
           : 'this line belongs to no question — start one with #');
         lines[i] = { kind: 'unknown', block: null };
       }
@@ -523,6 +525,7 @@ export function serializeDoc(p) {
   out.push(`pack: ${typeof p?.pack === 'string' ? p.pack : 'New pack'}`);
   out.push(`theme: ${typeof p?.theme === 'string' ? p.theme : 'blanc'}`);
   out.push(`time: ${fmtSeconds(Number.isFinite(p?.answerMs) ? p.answerMs : 12000)}`);
+  if (p?.mode === 'solo' || p?.mode === 'teams') out.push(`mode: ${p.mode}`);
   if (p?.order === 'suggested') out.push('order: suggested');
   out.push('');
 

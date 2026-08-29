@@ -474,6 +474,9 @@ async function selectPack(index) {
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
       game.levelPool = levelPool;
+      // A pack that states how it is meant to play presets the menu; the
+      // host can still flip the Mode row afterwards.
+      if (pack.mode === 'solo' || pack.mode === 'teams') menu.mode = pack.mode;
       applyMode();
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
       controlSpec = pack.controlRoom?.questions?.length ? pack.controlRoom : null;
@@ -997,6 +1000,7 @@ async function init() {
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
     } else hud.note = 'no questions loaded — check questions/default.json';
+    if (pack?.mode === 'solo' || pack?.mode === 'teams') menu.mode = pack.mode;
     applyMode();
     await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
@@ -1038,6 +1042,7 @@ async function init() {
       world, bus, roster, net, PHYS, flash,
       get game() { return game; },
       get showdown() { return showdown; },
+      get menu() { return menu; },
     },
   });
 

@@ -67,6 +67,7 @@ export function suggestOrder(questions) {
  * @param {any} raw the parsed pack JSON
  * @returns {{ pack: {
  *   pack: string, answerMs: number, theme: string, questions: any[],
+ *   mode?: 'solo'|'teams',
  *   showdown: {statements:any[], answerMs?:number} | null,
  *   controlRoom: {questions:any[], perTeam:number, answerMs:number} | null,
  * }, problems: string[] }}
@@ -327,6 +328,15 @@ export function validatePack(raw) {
     }
   }
 
+  // How the deck is meant to be played. The host can still switch modes on
+  // the display; this is the pack's own answer, so a teams deck arrives set
+  // up for teams instead of relying on someone remembering.
+  let mode;
+  if (raw.mode !== undefined) {
+    if (raw.mode === 'solo' || raw.mode === 'teams') mode = raw.mode;
+    else problems.push(`mode "${raw.mode}" is unknown — use solo or teams`);
+  }
+
   let theme = 'glass';
   if (raw.theme !== undefined) {
     if (PACK_THEMES.includes(raw.theme)) theme = raw.theme;
@@ -346,6 +356,7 @@ export function validatePack(raw) {
     pack: {
       pack: raw.pack ?? 'default',
       answerMs: raw.answerMs ?? 12000,
+      mode,
       theme,
       questions: deck,
       showdown,

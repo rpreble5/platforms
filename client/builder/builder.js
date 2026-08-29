@@ -43,7 +43,7 @@ const doc = $('doc');
 let docText = '';
 /** The always-there pack settings live in the pack bar, never the doc.
  *  order has no UI — an imported pack's value survives the round trip. */
-let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored' };
+let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
 /** @type {ReturnType<typeof parseDoc>} */
 let parsed = parseDoc('');
 /** Block index the caret sits in (-1 = none). */
@@ -73,6 +73,7 @@ function exportable() {
     answerMs: meta.answerMs,
     questions: raw.questions,
   };
+  out.mode = meta.mode === 'teams' ? 'teams' : 'solo';
   if (meta.order === 'suggested') out.order = 'suggested';
   if (raw.controlRoom) out.controlRoom = raw.controlRoom;
   if (raw.showdown) out.showdown = raw.showdown;
@@ -717,15 +718,16 @@ function numField(/** @type {HTMLElement} */ into, /** @type {string} */ label, 
 // ------------------------------------------------------------ plays strip
 
 /**
- * What this document adds up to, and which game mode each part needs —
- * the one thing the Studio never said out loud. Nothing here is a
- * setting: free-for-all vs teams is chosen on the display at game time,
- * and the pack just decides what is AVAILABLE to play.
+ * One line under the pack fields: what this deck is and how it plays.
  *
- * Deck questions play in both modes. Control Room cases play in teams
- * mode only (sim/round.js hands out control turns when mode === 'teams'),
- * and only in full rounds — one case per team — so leftovers sit unused.
- * The showdown is a separate finale the host launches from the menu.
+ * Free-for-all vs teams is now the deck's own setting (exported as
+ * pack.mode, which the display reads when the pack loads), so faculty
+ * make that call once, here, instead of someone remembering at game time.
+ *
+ * The Control Room and Showdown sections still parse, still export and
+ * still play — the builder just does not offer to create them any more.
+ * A pack opened with those sections says so quietly, so nothing a faculty
+ * member loaded looks like it silently vanished.
  */
 function renderPlays() {
   const holder = $('plays');
@@ -735,34 +737,18 @@ function renderPlays() {
   const sd = parsed.raw.showdown?.statements.length ?? 0;
   const s = (/** @type {number} */ n) => (n === 1 ? '' : 's');
 
-  const chip = (/** @type {string} */ n, /** @type {string} */ label, /** @type {string} */ cls, /** @type {string} */ title) => {
-    const c = document.createElement('span');
-    c.className = 'pchip' + (cls ? ` ${cls}` : '');
-    c.title = title;
-    const b = document.createElement('b');
-    b.textContent = n;
-    const t = document.createElement('span');
-    t.textContent = label;
-    c.append(b, t);
-    holder.appendChild(c);
-  };
-
-  chip(String(deck), `question${s(deck)} · everyone plays`, '',
-    'Standard questions run in both free-for-all and teams mode.');
-  if (cases) {
-    chip(String(cases), `Control Room case${s(cases)} · teams only`, 'teams',
-      'Control Room cases are dealt one per team; a free-for-all night skips them entirely.');
-  }
-  if (sd) {
-    chip(String(sd), `showdown statement${s(sd)} · finale`, '',
-      'The showdown is a separate sudden-death finale the host starts from the menu.');
-  }
-
   const note = document.createElement('p');
   note.className = 'pnote';
-  note.textContent = cases
-    ? `Free-for-all or teams is chosen on the display at game time. The ${cases} case${s(cases)} only come out in teams mode, one per team in complete rounds — with 3 teams that is ${Math.floor(cases / 3)} round${s(Math.floor(cases / 3))} and ${cases % 3} left over, so aim for a multiple of your team count.`
-    : 'Plays as either a free-for-all or a teams night — the host picks on the display at game time. Add team cases to give each team its own turn.';
+  const extra = [
+    cases ? `${cases} Control Room case${s(cases)}` : '',
+    sd ? `${sd} showdown statement${s(sd)}` : '',
+  ].filter(Boolean).join(' and ');
+  note.textContent =
+    `${deck} question${s(deck)} — ` +
+    (meta.mode === 'teams'
+      ? 'players pick a team on their phone and score together; select-all questions need the team to cover every right answer.'
+      : 'everyone plays every question for themselves.') +
+    (extra ? ` This pack also carries ${extra} from an earlier edit — still exported, still playable.` : '');
   holder.appendChild(note);
 }
 
@@ -776,6 +762,9 @@ function syncPackCard() {
   set('packName', meta.pack);
   set('packTheme', meta.theme);
   set('packAnswerMs', String(Math.round(meta.answerMs / 1000)));
+  const teams = meta.mode === 'teams';
+  $('modeSolo').classList.toggle('on', !teams);
+  $('modeTeams').classList.toggle('on', teams);
 }
 
 // ------------------------------------------------------------------ refresh
@@ -938,6 +927,7 @@ function adoptDoc(t, opts = {}) {
   const { meta: fm, text } = extractFrontMatter(t);
   Object.assign(meta, fm);
   if (meta.order !== 'suggested') meta.order = 'authored';
+  if (meta.mode !== 'teams') meta.mode = 'solo';
   if (opts.boot) {
     doc.value = text;
     docText = text;
@@ -983,8 +973,6 @@ window.addEventListener('resize', () => refresh({ keepPanel: true }));
 $('addQ').onclick = () => addBlock('deck', 'choice');
 $('addRange').onclick = () => addBlock('deck', 'range');
 $('addSort').onclick = () => addBlock('deck', 'sort');
-$('addC').onclick = () => addBlock('control');
-$('addS').onclick = () => addBlock('showdown');
 /** @param {'deck'|'control'|'showdown'} bucket @param {'choice'|'range'|'sort'} [kind] */
 function addBlock(bucket, kind) {
   const { text, line } = insertTemplate(docText, parsed, bucket, kind);
@@ -996,6 +984,9 @@ function metaChanged() {
   refresh({ keepPanel: true });
 }
 $('packName').oninput = () => { meta.pack = $('packName').value; metaChanged(); };
+const setMode = (/** @type {'solo'|'teams'} */ m) => { meta.mode = m; metaChanged(); };
+$('modeSolo').onclick = () => setMode('solo');
+$('modeTeams').onclick = () => setMode('teams');
 $('packAnswerMs').oninput = () => {
   const v = Number($('packAnswerMs').value);
   if (Number.isFinite(v) && v > 0) { meta.answerMs = Math.round(v * 1000); metaChanged(); }
@@ -1157,7 +1148,7 @@ $('packsClose').onclick = () => $('packsDlg').close();
 $('newPack').onclick = () => {
   if (!window.confirm('Start a new pack? The current one stays available under Packs…')) return;
   saveDraftEntry();
-  meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored' };
+  meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
   setText('# \n', { caret: 2 });
 };
 // The preview, near-fullscreen: the canvas already renders at 1920x1080,

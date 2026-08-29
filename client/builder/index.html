@@ -87,16 +87,19 @@
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     border-top: 1px solid var(--line-soft); margin-top: 12px; padding: 9px 0 11px;
   }
-  .pchip {
-    display: inline-flex; align-items: baseline; gap: 5px;
-    border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
-    font-size: 12px; font-weight: 650; color: var(--text); background: var(--card);
+  #plays .pnote { font-size: 11.5px; color: var(--faint); margin: 0; }
+  /* the one thing a deck decides about itself: how it is played */
+  .modeSeg { display: flex; gap: 0; }
+  .modeSeg button {
+    border-radius: 0; padding: 8px 12px; font-size: 13px; font-weight: 650;
+    border-color: var(--line); color: var(--mut); background: var(--bg);
   }
-  .pchip b { font-weight: 750; }
-  .pchip span { font-weight: 600; font-size: 11px; color: var(--mut); }
-  .pchip.teams { border-color: var(--acc-line); background: var(--acc-soft); }
-  .pchip.teams span, .pchip.teams b { color: var(--acc); }
-  #plays .pnote { font-size: 11.5px; color: var(--faint); flex-basis: 100%; margin: 0; }
+  .modeSeg button:first-child { border-radius: 9px 0 0 9px; }
+  .modeSeg button:last-child { border-radius: 0 9px 9px 0; margin-left: -1px; }
+  .modeSeg button.on {
+    background: var(--acc); border-color: var(--acc); color: #fff; position: relative; z-index: 1;
+  }
+  .modeSeg button:not(.on):hover { color: var(--acc); border-color: var(--acc-line); }
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
     box-shadow: var(--shadow);
@@ -324,6 +327,13 @@
         <label for="packAnswerMs">Answer (s)</label>
         <input type="number" id="packAnswerMs" min="5" max="60" step="1" value="12">
       </div>
+      <div class="f mode">
+        <label>How it's played</label>
+        <div class="modeSeg">
+          <button id="modeSolo" type="button" title="everyone plays for themselves">Free-for-all</button>
+          <button id="modeTeams" type="button" title="players pick a team on their phone and score together">Teams</button>
+        </div>
+      </div>
       </div>
       <div id="plays"></div>
     </div>
@@ -335,8 +345,6 @@
       <button id="addQ" class="small primary">+ Question</button>
       <button id="addRange" class="small ghost">+ Range</button>
       <button id="addSort" class="small ghost">+ Sort</button>
-      <button id="addC" class="small ghost" title="a Control Room case — plays in teams mode only">+ Team case</button>
-      <button id="addS" class="small ghost" title="a true/false statement for the showdown finale">+ Showdown</button>
     </div>
     <div id="docwrap">
       <div id="gutter"><div id="gutterInner"></div></div>
@@ -350,8 +358,7 @@
       Click the box beside an answer to mark it correct (or type “✓ ” / “* ”) ·
       two marks = select-all · on a <code>#</code> line the margin chip switches the type
       and dragging the number reorders ·
-      <code>## Control Room</code> and <code>## Showdown</code> open those sections ·
-      name, theme &amp; timing live in the bar above
+      name, theme, timing &amp; how it's played live in the bar above
     </div>
   </div>
   </section>
