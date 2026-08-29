@@ -924,6 +924,22 @@ $('newPack').onclick = () => {
   meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored' };
   setText('# \n', { caret: 2 });
 };
+// The preview, near-fullscreen: the canvas already renders at 1920x1080,
+// so scaling up is free sharpness. Esc or the backdrop closes.
+$('pvExpand').onclick = () => {
+  const big = $('previewCard').classList.toggle('big');
+  $('pvBackdrop').classList.toggle('on', big);
+  $('pvExpand').textContent = big ? '✕' : '⛶';
+  $('pvExpand').title = big ? 'close (Esc)' : 'expand the preview (Esc closes)';
+};
+$('pvBackdrop').onclick = () => $('pvExpand').click();
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('previewCard').classList.contains('big')) {
+    $('pvExpand').click();
+    e.preventDefault();
+  }
+});
+
 $('replay').onclick = () => {
   // Rotate the designed-level pool so replays show the variety the game has.
   if (levelPool.length > 1) levelPool.push(levelPool.shift());
