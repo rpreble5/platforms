@@ -714,6 +714,58 @@ function numField(/** @type {HTMLElement} */ into, /** @type {string} */ label, 
   into.append(l, i);
 }
 
+// ------------------------------------------------------------ plays strip
+
+/**
+ * What this document adds up to, and which game mode each part needs —
+ * the one thing the Studio never said out loud. Nothing here is a
+ * setting: free-for-all vs teams is chosen on the display at game time,
+ * and the pack just decides what is AVAILABLE to play.
+ *
+ * Deck questions play in both modes. Control Room cases play in teams
+ * mode only (sim/round.js hands out control turns when mode === 'teams'),
+ * and only in full rounds — one case per team — so leftovers sit unused.
+ * The showdown is a separate finale the host launches from the menu.
+ */
+function renderPlays() {
+  const holder = $('plays');
+  holder.replaceChildren();
+  const deck = parsed.raw.questions.length;
+  const cases = parsed.raw.controlRoom?.questions.length ?? 0;
+  const sd = parsed.raw.showdown?.statements.length ?? 0;
+  const s = (/** @type {number} */ n) => (n === 1 ? '' : 's');
+
+  const chip = (/** @type {string} */ n, /** @type {string} */ label, /** @type {string} */ cls, /** @type {string} */ title) => {
+    const c = document.createElement('span');
+    c.className = 'pchip' + (cls ? ` ${cls}` : '');
+    c.title = title;
+    const b = document.createElement('b');
+    b.textContent = n;
+    const t = document.createElement('span');
+    t.textContent = label;
+    c.append(b, t);
+    holder.appendChild(c);
+  };
+
+  chip(String(deck), `question${s(deck)} · everyone plays`, '',
+    'Standard questions run in both free-for-all and teams mode.');
+  if (cases) {
+    chip(String(cases), `Control Room case${s(cases)} · teams only`, 'teams',
+      'Control Room cases are dealt one per team; a free-for-all night skips them entirely.');
+  }
+  if (sd) {
+    chip(String(sd), `showdown statement${s(sd)} · finale`, '',
+      'The showdown is a separate sudden-death finale the host starts from the menu.');
+  }
+
+  const note = document.createElement('p');
+  note.className = 'pnote';
+  note.textContent = cases
+    ? `Free-for-all or teams is chosen on the display at game time. The ${cases} case${s(cases)} only come out in teams mode, one per team in complete rounds — with 3 teams that is ${Math.floor(cases / 3)} round${s(Math.floor(cases / 3))} and ${cases % 3} left over, so aim for a multiple of your team count.`
+    : 'Plays as either a free-for-all or a teams night — the host picks on the display at game time. Add team cases to give each team its own turn.';
+  holder.appendChild(note);
+}
+
 // -------------------------------------------------------------- pack card
 
 function syncPackCard() {
@@ -744,6 +796,7 @@ function refresh(opts = {}) {
   renderGutter(vproblems);
   renderSugRail();
   renderProblems(vproblems);
+  renderPlays();
   syncPackCard();
   $('aiShorten').disabled = !parsed.blocks.length;
   if (!opts.keepPanel) renderPanel();

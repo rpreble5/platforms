@@ -73,7 +73,8 @@
   }
   #center { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
   /* the pack bar: every pack-level setting in one slim strip above the doc */
-  #packBar { display: flex; gap: 14px; align-items: flex-end; padding: 12px 16px 14px; }
+  #packBar { display: flex; flex-direction: column; padding: 12px 16px 0; }
+  #packBar .fields { display: flex; gap: 14px; align-items: flex-end; }
   #packBar .f { display: flex; flex-direction: column; gap: 4px; }
   #packBar .f label { margin: 0; font-size: 11px; }
   #packBar .f.name { flex: 2; min-width: 160px; }
@@ -81,6 +82,21 @@
   #packBar .f.time { width: 92px; flex: none; }
   #docHead .hint { margin-right: auto; }
   #docHead button { flex: none; }
+  /* what the doc adds up to, and which game mode each part needs */
+  #plays {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    border-top: 1px solid var(--line-soft); margin-top: 12px; padding: 9px 0 11px;
+  }
+  .pchip {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+    font-size: 12px; font-weight: 650; color: var(--text); background: var(--card);
+  }
+  .pchip b { font-weight: 750; }
+  .pchip span { font-weight: 600; font-size: 11px; color: var(--mut); }
+  .pchip.teams { border-color: var(--acc-line); background: var(--acc-soft); }
+  .pchip.teams span, .pchip.teams b { color: var(--acc); }
+  #plays .pnote { font-size: 11.5px; color: var(--faint); flex-basis: 100%; margin: 0; }
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
     box-shadow: var(--shadow);
@@ -295,6 +311,7 @@
 <main>
   <section id="center">
     <div class="card" id="packBar">
+      <div class="fields">
       <div class="f name">
         <label for="packName">Pack name</label>
         <input type="text" id="packName" placeholder="Cardiology night">
@@ -307,6 +324,8 @@
         <label for="packAnswerMs">Answer (s)</label>
         <input type="number" id="packAnswerMs" min="5" max="60" step="1" value="12">
       </div>
+      </div>
+      <div id="plays"></div>
     </div>
 
   <div class="card" id="docCard">
@@ -316,8 +335,8 @@
       <button id="addQ" class="small primary">+ Question</button>
       <button id="addRange" class="small ghost">+ Range</button>
       <button id="addSort" class="small ghost">+ Sort</button>
-      <button id="addC" class="small ghost">+ Case</button>
-      <button id="addS" class="small ghost">+ T/F</button>
+      <button id="addC" class="small ghost" title="a Control Room case — plays in teams mode only">+ Team case</button>
+      <button id="addS" class="small ghost" title="a true/false statement for the showdown finale">+ Showdown</button>
     </div>
     <div id="docwrap">
       <div id="gutter"><div id="gutterInner"></div></div>
