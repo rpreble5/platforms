@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { validatePack } from '../../shared/pack-validate.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
-  setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock,
+  setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
 } from './pack-text.js';
 
 /** A pack exercising every type, matching what the Studio exports. */
@@ -292,6 +292,71 @@ test('setLabel swaps just the label, preserving line structure', () => {
   assert.equal(line(setLabel(doc, p(), 12, 'Octopus: 3 hearts'), 12), 'true: Octopus: 3 hearts');
   // a non-label line is left alone
   assert.equal(setLabel(doc, p(), 2, 'nope'), doc);
+});
+
+test('insertTemplate deck kinds: range and sort bodies', () => {
+  const base = '# Q?\n✓ a\nb\n';
+  const range = insertTemplate(base, parseDoc(base), 'deck', 'range');
+  const rp = parseDoc(range.text);
+  assert.equal(rp.raw.questions[1].type, 'range');
+  assert.match(range.text.split('\n')[range.line], /^# New range question\?/);
+
+  const sort = insertTemplate(base, parseDoc(base), 'deck', 'sort');
+  const sp = parseDoc(sort.text);
+  assert.equal(sp.raw.questions[1].type, 'sort');
+  assert.deepEqual(sp.raw.questions[1].buckets, ['Bucket A', 'Bucket B']);
+});
+
+test('moveBlock reorders within a bucket and refuses cross-bucket moves', () => {
+  const doc = [
+    '# One?',          // block 0
+    '✓ a',
+    'b',
+    '',
+    '# Two?',          // block 1
+    'range: 4-6 of 0-10',
+    '',
+    '# Three?',        // block 2
+    '✓ c',
+    'd',
+    '',
+    '## Showdown',
+    'true: First statement',   // block 3
+    'false: Second statement', // block 4
+  ].join('\n');
+  const p = () => parseDoc(doc);
+
+  // drag Three up onto One: it takes One's position
+  const up = moveBlock(doc, p(), 2, 0);
+  const upQ = parseDoc(up.text).raw.questions.map((/** @type {any} */ q) => q.text);
+  assert.deepEqual(upQ, ['Three?', 'One?', 'Two?']);
+  assert.equal(up.text.split('\n')[up.line], '# Three?');
+  assert.equal(parseDoc(up.text).problems.length, 0);
+  // the range line and checks travelled intact
+  assert.deepEqual(parseDoc(up.text).raw.questions[2], { text: 'Two?', type: 'range', answer: [4, 6], min: 0, max: 10 });
+
+  // drag One down onto Two: it lands after Two
+  const down = moveBlock(doc, p(), 0, 1);
+  assert.deepEqual(parseDoc(down.text).raw.questions.map((/** @type {any} */ q) => q.text), ['Two?', 'One?', 'Three?']);
+  assert.equal(parseDoc(down.text).problems.length, 0);
+
+  // showdown statements reorder too, without gaining blank lines
+  const st = moveBlock(doc, p(), 4, 3);
+  assert.deepEqual(parseDoc(st.text).raw.showdown.statements.map((/** @type {any} */ s) => s.text),
+    ['Second statement', 'First statement']);
+  assert.equal(st.text.split('\n').length, doc.split('\n').length);
+
+  // cross-bucket: refused, text unchanged
+  assert.equal(moveBlock(doc, p(), 3, 0).text, doc);
+  assert.equal(moveBlock(doc, p(), 0, 0).text, doc);
+});
+
+test('moveBlock: last block (no trailing blank) moves up cleanly', () => {
+  const doc = '# One?\n✓ a\nb\n\n# Two?\n✓ c\nd';
+  const moved = moveBlock(doc, parseDoc(doc), 1, 0);
+  const q = parseDoc(moved.text).raw.questions.map((/** @type {any} */ x) => x.text);
+  assert.deepEqual(q, ['Two?', 'One?']);
+  assert.equal(parseDoc(moved.text).problems.length, 0);
 });
 
 test('removeBlock deletes the block and its trailing blank', () => {

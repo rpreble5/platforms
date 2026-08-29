@@ -76,10 +76,9 @@
   #packBar { display: flex; gap: 14px; align-items: flex-end; padding: 12px 16px 14px; }
   #packBar .f { display: flex; flex-direction: column; gap: 4px; }
   #packBar .f label { margin: 0; font-size: 11px; }
-  #packBar .f.name { flex: 1.6; min-width: 140px; }
+  #packBar .f.name { flex: 2; min-width: 160px; }
   #packBar .f.theme { flex: 1; min-width: 110px; }
   #packBar .f.time { width: 92px; flex: none; }
-  #packBar .f.order { flex: 1.6; min-width: 170px; }
   #docHead .hint { margin-right: auto; }
   #docHead button { flex: none; }
   .card {
@@ -113,9 +112,19 @@
   /* ------------------------------------------------------------ the doc */
   #docCard { padding: 0; overflow: hidden; }
   #docwrap { display: flex; position: relative; border-top: 1px solid var(--line-soft); }
-  #gutter { width: 66px; flex-shrink: 0; position: relative; overflow: hidden; background: #fbfbfc; border-right: 1px solid var(--line-soft); }
+  #gutter { width: 92px; flex-shrink: 0; position: relative; overflow: hidden; background: #fbfbfc; border-right: 1px solid var(--line-soft); }
   #gutterInner { position: absolute; inset: 0 0 auto 0; }
-  #gutterInner .g { position: absolute; left: 5px; display: flex; gap: 2px; align-items: center; }
+  #gutterInner .g { position: absolute; left: 5px; display: flex; gap: 3px; align-items: center; }
+  /* the question number doubles as the drag handle for reordering */
+  #gutterInner .qnum {
+    min-width: 13px; text-align: center; padding: 1px 4px; font-size: 10.5px; line-height: 1.5;
+    border-radius: 6px; font-weight: 700; font-variant-numeric: tabular-nums;
+    background: var(--card); border: 1px solid var(--line); color: var(--faint);
+    cursor: grab; user-select: none;
+  }
+  #gutterInner .qnum:active { cursor: grabbing; }
+  #gutterInner .g.dropHint .qnum,
+  #gutterInner .g.dropHint .chip { border-color: var(--acc); background: var(--acc-soft); color: var(--acc); }
   #gutterInner button {
     padding: 1px 5px; font-size: 11px; line-height: 1.4; border-radius: 6px;
     background: var(--card); border-color: var(--line); color: var(--faint);
@@ -249,13 +258,6 @@
         <label for="packAnswerMs">Answer (s)</label>
         <input type="number" id="packAnswerMs" min="5" max="60" step="1" value="12">
       </div>
-      <div class="f order">
-        <label for="packOrder">Deck order</label>
-        <select id="packOrder">
-          <option value="authored">authored — plays as listed</option>
-          <option value="suggested">suggested — warmups first, sorts last</option>
-        </select>
-      </div>
     </div>
 
   <div class="card" id="docCard">
@@ -263,6 +265,8 @@
       <h2>The document</h2>
       <span class="headHint hint"># starts a question · answers on their own lines</span>
       <button id="addQ" class="small primary">+ Question</button>
+      <button id="addRange" class="small ghost">+ Range</button>
+      <button id="addSort" class="small ghost">+ Sort</button>
       <button id="addC" class="small ghost">+ Case</button>
       <button id="addS" class="small ghost">+ T/F</button>
     </div>
@@ -276,7 +280,8 @@
     </div>
     <div id="docHint">
       Click the box beside an answer to mark it correct (or type “✓ ” / “* ”) ·
-      two marks = select-all · the margin chip on a <code>#</code> line switches the type ·
+      two marks = select-all · on a <code>#</code> line the margin chip switches the type
+      and dragging the number reorders ·
       <code>## Control Room</code> and <code>## Showdown</code> open those sections ·
       name, theme &amp; timing live in the bar above
     </div>

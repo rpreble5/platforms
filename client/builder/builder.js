@@ -25,7 +25,7 @@ import { drawRoundOverlay, registerPreviewImage } from '../display/round-ui.js';
 import { drawShowdown } from '../display/showdown-ui.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
-  setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock,
+  setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
 } from './pack-text.js';
 
 // ------------------------------------------------------------------ state
@@ -40,7 +40,8 @@ const doc = $('doc');
 
 /** The document — the single source of truth for the QUESTIONS. */
 let docText = '';
-/** The always-there pack settings live in the Pack panel, never the doc. */
+/** The always-there pack settings live in the pack bar, never the doc.
+ *  order has no UI — an imported pack's value survives the round trip. */
 let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored' };
 /** @type {ReturnType<typeof parseDoc>} */
 let parsed = parseDoc('');
@@ -180,6 +181,13 @@ function blockBad(/** @type {import('./pack-text.js').BlockInfo} */ b, vproblems
     || parsed.problems.some((p) => p.line !== null && p.line - 1 >= b.startLine && p.line - 1 <= b.endLine);
 }
 
+/** Block index being dragged by its gutter number (-1 = none). */
+let dragBlockIx = -1;
+
+function clearDropHints() {
+  for (const el of document.querySelectorAll('#gutterInner .g.dropHint')) el.classList.remove('dropHint');
+}
+
 /** @param {string[]} vproblems */
 function renderGutter(vproblems) {
   const inner = $('gutterInner');
@@ -213,13 +221,50 @@ function renderGutter(vproblems) {
   });
 
   // Type chips ride the head line's margin row (it carries no checkbox).
-  // For deck questions the chip IS the type toggle — a tiny select.
-  for (const b of parsed.blocks) {
+  // For deck questions the chip IS the type toggle — a tiny select. The
+  // number in front is the drag handle: drop it on another number in the
+  // same section and the whole block moves there.
+  for (const [bi, b] of parsed.blocks.entries()) {
     if (b.bucket === 'showdown') continue; // the T/F pill says it all
     const g = document.createElement('div');
     g.className = 'g';
     g.style.top = `${(lineTops[b.headLine] ?? 0) + 2}px`;
     const bad = blockBad(b, vproblems) ? ' bad' : '';
+
+    const num = document.createElement('span');
+    num.className = 'qnum';
+    num.textContent = String(b.ix + 1);
+    num.title = 'drag to reorder';
+    num.draggable = true;
+    num.ondragstart = (ev) => {
+      dragBlockIx = bi;
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', String(bi));
+      }
+    };
+    num.ondragend = () => { dragBlockIx = -1; clearDropHints(); };
+    g.appendChild(num);
+
+    // The whole margin row accepts a drop from a same-section number.
+    g.ondragover = (ev) => {
+      if (dragBlockIx < 0 || dragBlockIx === bi) return;
+      if (parsed.blocks[dragBlockIx]?.bucket !== b.bucket) return;
+      ev.preventDefault();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+      g.classList.add('dropHint');
+    };
+    g.ondragleave = () => g.classList.remove('dropHint');
+    g.ondrop = (ev) => {
+      ev.preventDefault();
+      const from = dragBlockIx;
+      dragBlockIx = -1;
+      clearDropHints();
+      if (from < 0 || from === bi) return;
+      const { text, line } = moveBlock(docText, parsed, from, bi);
+      if (text !== docText) setText(text, { line });
+    };
+
     if (b.bucket === 'control') {
       const c = document.createElement('span');
       c.className = 'chip' + bad;
@@ -505,7 +550,6 @@ function syncPackCard() {
   set('packName', meta.pack);
   set('packTheme', meta.theme);
   set('packAnswerMs', String(Math.round(meta.answerMs / 1000)));
-  set('packOrder', meta.order === 'suggested' ? 'suggested' : 'authored');
 }
 
 // ------------------------------------------------------------------ refresh
@@ -708,11 +752,14 @@ document.addEventListener('selectionchange', () => {
 });
 window.addEventListener('resize', () => refresh({ keepPanel: true }));
 
-$('addQ').onclick = () => addBlock('deck');
+$('addQ').onclick = () => addBlock('deck', 'choice');
+$('addRange').onclick = () => addBlock('deck', 'range');
+$('addSort').onclick = () => addBlock('deck', 'sort');
 $('addC').onclick = () => addBlock('control');
 $('addS').onclick = () => addBlock('showdown');
-function addBlock(/** @type {'deck'|'control'|'showdown'} */ bucket) {
-  const { text, line } = insertTemplate(docText, parsed, bucket);
+/** @param {'deck'|'control'|'showdown'} bucket @param {'choice'|'range'|'sort'} [kind] */
+function addBlock(bucket, kind) {
+  const { text, line } = insertTemplate(docText, parsed, bucket, kind);
   setText(text, { line });
 }
 
@@ -725,7 +772,6 @@ $('packAnswerMs').oninput = () => {
   const v = Number($('packAnswerMs').value);
   if (Number.isFinite(v) && v > 0) { meta.answerMs = Math.round(v * 1000); metaChanged(); }
 };
-$('packOrder').onchange = () => { meta.order = $('packOrder').value === 'suggested' ? 'suggested' : 'authored'; metaChanged(); };
 const themeSel = $('packTheme');
 for (const t of PACK_THEMES) {
   const o = document.createElement('option');

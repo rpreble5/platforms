@@ -678,7 +678,11 @@ export function setBlockType(text, block, type) {
 }
 
 const TEMPLATES = {
-  deck: '# New question?\n✓ Answer 1\nAnswer 2\nAnswer 3',
+  deck: {
+    choice: '# New question?\n✓ Answer 1\nAnswer 2\nAnswer 3',
+    range: '# New range question?\nrange: 40-60 of 0-100',
+    sort: '#sort New sort question?\nBucket A: Item 1, Item 2\nBucket B: Item 3',
+  },
   control: '# New case: set the controls\n'
     + Array.from({ length: 6 }, (_, i) => `[${i % 2 ? 'off' : 'on'}] Control ${i + 1}`).join('\n'),
   showdown: 'true: A true statement',
@@ -690,9 +694,10 @@ const TEMPLATES = {
  * of the inserted block's first line (for focusing).
  * @param {string} text @param {ReturnType<typeof parseDoc>} parsed
  * @param {'deck'|'control'|'showdown'} bucket
+ * @param {'choice'|'range'|'sort'} [kind] deck template flavour
  * @returns {{text: string, line: number}}
  */
-export function insertTemplate(text, parsed, bucket) {
+export function insertTemplate(text, parsed, bucket, kind = 'choice') {
   const lines = text.split('\n');
   const sectionBlocks = parsed.blocks.filter((b) => b.bucket === bucket);
 
@@ -725,7 +730,7 @@ export function insertTemplate(text, parsed, bucket) {
     }
   }
 
-  const body = TEMPLATES[bucket].split('\n');
+  const body = (bucket === 'deck' ? TEMPLATES.deck[kind] : TEMPLATES[bucket]).split('\n');
   if (!prefix.length && (lines[at - 1] ?? '').trim()) prefix = [''];
   lines.splice(at, 0, ...prefix, ...body, '');
   return { text: lines.join('\n'), line: at + prefix.length };
@@ -776,6 +781,47 @@ export function setLabel(text, parsed, lineIx, newLabel, itemIx) {
     return text; // not a labelled line — leave the doc untouched
   }
   return lines.join('\n');
+}
+
+/**
+ * Move a block to another block's position within the SAME bucket — the
+ * gutter's drag-to-reorder. Dragging up inserts before the target; dragging
+ * down inserts after it, so the dragged block always lands where the target
+ * sat. Cross-bucket moves are refused (the sections have different syntax).
+ * Returns the new text plus the moved block's new head line (for focusing).
+ * @param {string} text @param {ReturnType<typeof parseDoc>} parsed
+ * @param {number} fromIx @param {number} toIx block indexes
+ * @returns {{text: string, line: number}}
+ */
+export function moveBlock(text, parsed, fromIx, toIx) {
+  const a = parsed.blocks[fromIx];
+  const b = parsed.blocks[toIx];
+  if (!a || !b || a === b || a.bucket !== b.bucket) {
+    return { text, line: a?.headLine ?? 0 };
+  }
+  const lines = text.split('\n');
+  const span = (/** @type {BlockInfo} */ blk) => {
+    let end = blk.endLine;
+    if (end + 1 < lines.length && !lines[end + 1].trim()) end++; // its blank separator travels with it
+    return end;
+  };
+  const aEnd = span(a);
+  const chunk = lines.splice(a.startLine, aEnd - a.startLine + 1);
+  // Multi-line blocks keep a blank between neighbours even when the moved
+  // one had none (e.g. it was the last block in the doc).
+  if (a.bucket !== 'showdown' && chunk[chunk.length - 1].trim()) chunk.push('');
+  const removed = aEnd - a.startLine + 1;
+  let at;
+  if (fromIx < toIx) {
+    // Moving DOWN: the target's lines shifted up by the removal.
+    let tEnd = b.endLine - removed;
+    if (tEnd + 1 < lines.length && !lines[tEnd + 1].trim()) tEnd++;
+    at = tEnd + 1;
+  } else {
+    at = b.startLine;
+  }
+  lines.splice(at, 0, ...chunk);
+  return { text: lines.join('\n'), line: at + (a.headLine - a.startLine) };
 }
 
 /**
