@@ -131,20 +131,38 @@
   }
   #gutterInner button.on { border-color: var(--acc-line); color: var(--acc); background: var(--acc-soft); }
   #gutterInner button.off { border-color: #f3d9b0; color: var(--warn); background: #fdf6ea; }
-  #editorArea { position: relative; flex: 1; min-width: 0; }
+  #editorArea { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+  /* The mirror IS the visible text: the textarea above it is transparent and
+     contributes only the caret and selection. Both layers share identical
+     metrics (font, padding, width), so wraps line up glyph for glyph — which
+     is why every style below changes ONLY color/background, never metrics. */
+  textarea#doc, #mirror {
+    font: 450 15px/1.8 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding: 14px 16px 40vh 14px;
+    white-space: pre-wrap; overflow-wrap: break-word;
+  }
   textarea#doc {
     display: block; width: 100%; height: calc(100vh - 200px); min-height: 480px; resize: vertical;
     background: transparent; border: 0; border-radius: 0; outline: none; box-shadow: none;
-    font: 450 13.5px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    padding: 14px 16px 40vh 14px;
-    white-space: pre-wrap; overflow-wrap: break-word; overflow-y: auto;
+    overflow-y: auto;
+    color: transparent; caret-color: var(--text);
+    position: relative; z-index: 1;
   }
+  textarea#doc::selection { background: rgba(4, 120, 87, 0.16); color: transparent; }
   #mirror {
-    position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none;
-    font: 450 13.5px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    padding: 14px 16px 40vh 14px; white-space: pre-wrap; overflow-wrap: break-word;
+    position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0;
+    color: #454b57;
   }
-  #mirror div { min-height: 1.9em; }
+  #mirror div { min-height: 1.8em; border-radius: 6px; }
+  #mirror .mk { color: var(--acc); }                /* #, ✓, [on], true: */
+  #mirror .mko { color: var(--warn); }              /* [off], false: */
+  #mirror .mh, #mirror .mb { color: #12151c; }      /* question text, bucket names */
+  #mirror .mchk { color: var(--acc); }              /* a checked answer's label */
+  #mirror .md { color: var(--faint); }              /* directives, (starts on), (0-20, …) */
+  #mirror .me { color: var(--err); }                /* lines the parser rejected */
+  #mirror div.sec { background: #eef1f4; color: var(--mut); }
+  /* the block the caret is in */
+  #mirror div.curb { background: #f0f6f2; box-shadow: inset 3px 0 0 var(--acc-line); }
   .chip {
     appearance: none; -webkit-appearance: none;
     font: 700 9.5px/1.5 ui-sans-serif, system-ui, sans-serif; letter-spacing: .05em;
@@ -161,8 +179,15 @@
   }
   code { background: var(--line-soft); border-radius: 5px; padding: 1px 5px; font-size: .92em; color: var(--mut); }
 
-  /* inline shorter-phrasing suggestions */
-  #sugRail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  /* inline shorter-phrasing suggestions (and character-limit meters) */
+  #sugRail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+  .meter {
+    position: absolute; right: 8px; pointer-events: none;
+    font: 650 10px/1.7 ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums;
+    color: var(--faint); background: rgba(255, 255, 255, 0.88);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0 6px;
+  }
+  .meter.over { color: var(--err); border-color: var(--err-line); background: #fdf1f2; }
   #sugInner { position: absolute; inset: 0 0 auto 0; }
   .sugrow { position: absolute; right: 8px; display: flex; gap: 4px; pointer-events: auto; }
   .sugrow button {

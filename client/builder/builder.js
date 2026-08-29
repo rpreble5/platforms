@@ -149,15 +149,79 @@ let lineTops = [];
 /** @type {number[]} */
 let lineHeights = [];
 
+function span(/** @type {string} */ t, /** @type {string} */ cls) {
+  const s = document.createElement('span');
+  s.textContent = t;
+  if (cls) s.className = cls;
+  return s;
+}
+
+/**
+ * One styled mirror line. The mirror is also the VISIBLE text -- the
+ * textarea over it is transparent and shows only the caret and selection --
+ * so each line is colored by its parsed role. Styling is color/background
+ * ONLY: any metric change (weight, size, italics) would break the
+ * glyph-for-glyph alignment. The spans' text concatenates to EXACTLY the
+ * source line, so wrapping matches the textarea character for character.
+ * @param {string} l @param {import('./pack-text.js').LineInfo|undefined} info
+ */
+function paintLine(l, info) {
+  const d = document.createElement('div');
+  if (!l) { d.textContent = ' '; return d; }
+  const kind = info?.kind;
+  const put = (/** @type {[string, string][]} */ ...parts) => {
+    for (const [t, c] of parts) if (t) d.appendChild(span(t, c));
+  };
+  /** @type {RegExpExecArray|null} */
+  let m;
+  if (kind === 'section') {
+    d.className = 'sec';
+    d.textContent = l;
+  } else if (kind === 'head' && (m = /^(\s*#\w*\s*)([\s\S]*)$/.exec(l))) {
+    put([m[1], 'mk'], [m[2], 'mh']);
+  } else if (kind === 'answer' && (m = /^(\s*[✓*]\s*)([\s\S]*)$/.exec(l))) {
+    put([m[1], 'mk'], [m[2], 'mchk']);
+  } else if (kind === 'statement' && (m = /^(\s*(true|false)\s*:\s*)([\s\S]*)$/i.exec(l))) {
+    put([m[1], m[2].toLowerCase() === 'true' ? 'mk' : 'mko'], [m[3], '']);
+  } else if (kind === 'toggle' && (m = /^(\s*\[(on|off)\]\s*)([\s\S]*)$/i.exec(l))) {
+    const tail = /^([\s\S]*?)(\s*\(starts?\s+on\)\s*)$/i.exec(m[3]);
+    put(
+      [m[1], m[2].toLowerCase() === 'on' ? 'mk' : 'mko'],
+      [tail ? tail[1] : m[3], ''],
+      [tail ? tail[2] : '', 'md']
+    );
+  } else if (kind === 'number' && (m = /^([\s\S]*?=\s*-?[\d.]+\s*)(\([\s\S]*\))?([\s\S]*)$/.exec(l))) {
+    put([m[1], 'mb'], [m[2] ?? '', 'md'], [m[3] ?? '', '']);
+  } else if (kind === 'range' && (m = /^(\s*range\s*:)([\s\S]*)$/i.exec(l))) {
+    put([m[1], 'md'], [m[2], '']);
+  } else if (kind === 'bucket' && (m = /^(\s*[^:]+:)([\s\S]*)$/.exec(l))) {
+    put([m[1], 'mb'], [m[2], '']);
+  } else if (kind === 'directive') {
+    d.appendChild(span(l, 'md'));
+  } else if (kind === 'unknown' || kind === 'front') {
+    d.appendChild(span(l, 'me'));
+  } else {
+    d.textContent = l;
+  }
+  return d;
+}
+
+/** Tint the mirror lines of the block the caret sits in. */
+function paintActiveBlock() {
+  const b = parsed.blocks[caretIx];
+  const kids = $('mirror').children;
+  for (let i = 0; i < kids.length; i++) {
+    kids[i].classList.toggle('curb', !!b && i >= b.startLine && i <= b.endLine);
+  }
+}
+
 function measure() {
   const mirror = $('mirror');
   mirror.style.width = `${doc.clientWidth}px`;
   mirror.replaceChildren();
   const srcLines = docText.split('\n');
-  for (const l of srcLines) {
-    const d = document.createElement('div');
-    d.textContent = l || ' ';
-    mirror.appendChild(d);
+  for (let i = 0; i < srcLines.length; i++) {
+    mirror.appendChild(paintLine(srcLines[i], parsed.lines[i]));
   }
   lineTops = [];
   lineHeights = [];
@@ -165,6 +229,7 @@ function measure() {
     lineTops.push(/** @type {HTMLElement} */ (child).offsetTop);
     lineHeights.push(/** @type {HTMLElement} */ (child).offsetHeight);
   }
+  paintActiveBlock();
 }
 
 // ---------------------------------------------------------------- gutter
@@ -297,6 +362,7 @@ function syncScroll() {
   const t = `translateY(${-doc.scrollTop}px)`;
   $('gutterInner').style.transform = t;
   $('sugInner').style.transform = t;
+  $('mirror').style.transform = t;
 }
 
 // -------------------------------------------------------------- problems
@@ -588,6 +654,7 @@ function caretMoved() {
     const changed = ix !== caretIx;
     caretIx = ix;
     renderPanel();
+    paintActiveBlock();
     if (changed) restartPreview();
   }
 }
@@ -1106,9 +1173,37 @@ function suggestibleItems() {
   return items;
 }
 
+/**
+ * Character-limit meters: a small "len/limit" pill on any line whose text
+ * is at 80%+ of its game limit, red once it's over. Rides the suggestion
+ * rail (suggestion chips take over that space while they're up).
+ * @param {HTMLElement} inner
+ */
+function renderMeters(inner) {
+  /** @type {Map<number, ReturnType<typeof suggestibleItems>[number]>} */
+  const worst = new Map();
+  for (const it of suggestibleItems()) {
+    const cur = worst.get(it.line);
+    if (!cur || it.text.length / it.limit > cur.text.length / cur.limit) worst.set(it.line, it);
+  }
+  for (const it of worst.values()) {
+    const len = it.text.length;
+    if (len < it.limit * 0.8) continue;
+    const d = document.createElement('div');
+    d.className = 'meter' + (len > it.limit ? ' over' : '');
+    d.textContent = `${len}/${it.limit}`;
+    d.title = len > it.limit
+      ? `"${it.text}" is ${len - it.limit} character${len - it.limit === 1 ? '' : 's'} over the limit for a ${it.kind} — it will be cut off in the game`
+      : `${it.limit - len} character${it.limit - len === 1 ? '' : 's'} left for this ${it.kind}`;
+    d.style.top = `${(lineTops[it.line] ?? 0) + 4}px`;
+    inner.appendChild(d);
+  }
+}
+
 function renderSugRail() {
   const inner = $('sugInner');
   inner.replaceChildren();
+  if (!sugs.length) renderMeters(inner);
   $('aiShorten').textContent = sugs.length ? '✕ Clear suggestions' : '✨ Shorter phrasings…';
   for (const sg of sugs) {
     const row = document.createElement('div');
