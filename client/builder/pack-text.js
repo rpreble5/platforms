@@ -123,6 +123,41 @@ export function extractFrontMatter(text) {
 }
 
 /**
+ * Split a document into the deck part and whatever lives in the
+ * '## Control Room' / '## Showdown' sections.
+ *
+ * The Studio authors decks only, so it loads the deck text and carries the
+ * rest as DATA — invisible in the editor, still attached on export, never
+ * lost. The syntax itself is untouched: these sections still parse, still
+ * validate and still play; the editor simply does not show them.
+ *
+ * @param {string} text
+ * @returns {{ text: string, carried: {controlRoom?: any, showdown?: any} }}
+ */
+export function splitSections(text) {
+  const { raw } = parseDoc(text, { frontMatter: false });
+  /** @type {{controlRoom?: any, showdown?: any}} */
+  const carried = {};
+  if (raw.controlRoom) carried.controlRoom = raw.controlRoom;
+  if (raw.showdown) carried.showdown = raw.showdown;
+  if (!raw.controlRoom && !raw.showdown && !/^##\s*(control|showdown)/im.test(text)) {
+    return { text, carried };
+  }
+  const kept = [];
+  let dropping = false;
+  for (const line of text.split('\n')) {
+    const sec = SECTION_RE.exec(line.trim());
+    if (sec) {
+      const name = sec[1].trim().toLowerCase();
+      dropping = name.startsWith('control') || name === 'showdown';
+      if (dropping) continue;
+    }
+    if (!dropping) kept.push(line);
+  }
+  return { text: kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '\n'), carried };
+}
+
+/**
  * Parse the document into the raw pack (for validatePack) plus the line
  * and block maps the Studio UI hangs its gutter, outline and panel on.
  *

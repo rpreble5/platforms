@@ -65,32 +65,18 @@ type: sort
 Mammal: Bat, Dolphin
 Bird: Penguin
 
-## Control Room
-
-# DKA, hour one — set the first orders
-context: Glucose 480 - pH 7.12 - K 3.1
-[on] Replete K first
-[off] Insulin drip now
-NS bolus = 1 (0-3, L)
-
-## Showdown
-
-true: An octopus has three hearts
-false: Cracking knuckles causes arthritis
-
 RULES:
 - '# ' starts every question, whatever its type. A lightning sort adds a 'type: sort' line directly under the '# ' line; choice and range are inferred from the body.
 - Choice: ${LIMITS.answers[0]}-${LIMITS.answers[1]} answers, one per line. '✓ ' before an answer marks it correct. Two or more checks make a select-all (needs at least one unchecked wrong answer).
 - Range: 'range: LO-HI of MIN-MAX [unit]' — the answer band inside the number line. Use for numeric facts and estimates.
 - Sort: a 'type: sort' line, then ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket: item, item' lines, ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Use for categorization.
-- '## Control Room' opens the teams-only bucket: each case is '# title', optional 'context: ...', then ${LIMITS.controls[0]}-${LIMITS.controls[1]} controls — '[on] Label' / '[off] Label' toggles (the verdict is the correct setting) or 'Label = ANSWER (MIN-MAX[, step N][, unit])' numbers. Use for scenario management, e.g. first-hour orders. Write at least 3 cases if you write any (one per team).
-- '## Showdown' opens the finale: one 'true: ...' or 'false: ...' statement per line. Use for myths and quick facts.
+- Write DECK QUESTIONS ONLY. Never emit a '## Control Room' or '## Showdown' section, or any '[on]'/'[off]' control or 'true:'/'false:' statement line — the editor does not author those, and anything you write there is thrown away.
 - TEXT LIMITS (hard ceilings — text over these shrinks on the projector): question ≤ ${LIMITS.questionChars} chars, answer ≤ ${LIMITS.answerChars}, sort bucket/item ≤ ${LIMITS.sortLabelChars}, control label ≤ ${LIMITS.controlLabelChars}, statement ≤ ${LIMITS.statementChars}.
 - BREVITY: the ceilings are not targets. This text is read across a room in seconds, so always choose the shortest faithful phrasing — aim for roughly two-thirds of each ceiling (question ~${Math.round(LIMITS.questionChars * 2 / 3)} chars, answer ~${Math.round(LIMITS.answerChars * 2 / 3)}). Cut preamble ("Which of the following…" → "Which…"), prefer common short names over formal ones (drug names without salts, "heart attack question" phrasing only when the notes use it), and never restate the question inside its answers. When the notes are wordy, condensing them IS the job — but never at the cost of clinical meaning.
 - THE UNCERTAINTY RULE: mark '✓' (or [on]/[off], true:/false:) ONLY when the notes state or clearly imply the answer. If the notes do not, leave every answer of that question unchecked — the editor flags it for the author. Never guess an answer key.
 - Do not invent medical facts that are not in the notes. Distractors (wrong answers) may be invented freely; answer keys may not.
-- Choose types with judgement: numeric fact → range; categorization → sort; criteria list → select-all; scenario orders → Control Room case; myth or one-liner → showdown statement; otherwise choice.
-- Output ONLY the document text. No markdown fences, no commentary, no headings other than ## Control Room / ## Showdown.`;
+- Choose types with judgement: numeric fact → range; categorization → sort; criteria list → select-all; a myth or one-liner works as a two-answer choice ("True" / "False"); otherwise choice.
+- Output ONLY the document text. No markdown fences, no commentary, no '##' headings of any kind.`;
 }
 
 /** The shorter-phrasings picker: per-item alternatives, never rewrites.

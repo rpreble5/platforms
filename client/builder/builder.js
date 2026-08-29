@@ -27,12 +27,14 @@ import { drawShowdown } from '../display/showdown-ui.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
+  splitSections,
 } from './pack-text.js';
 
 // ------------------------------------------------------------------ state
 
 const DOC_KEY = 'packstudio-doc';
 const META_KEY = 'packstudio-meta';
+const CARRIED_KEY = 'packstudio-carried';
 const OLD_DRAFT_KEY = 'packstudio-draft'; // the form-era JSON draft, migrated once
 
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
@@ -44,6 +46,14 @@ let docText = '';
 /** The always-there pack settings live in the pack bar, never the doc.
  *  order has no UI — an imported pack's value survives the round trip. */
 let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
+/**
+ * Control Room cases and Showdown statements belonging to a pack that was
+ * opened here. The Studio authors decks only, so they never enter the
+ * document — they ride along and are re-attached on export, so editing a
+ * pack that has them and downloading it again gives the pack back whole.
+ * @type {{controlRoom?: any, showdown?: any}}
+ */
+let carried = {};
 /** @type {ReturnType<typeof parseDoc>} */
 let parsed = parseDoc('');
 /** Block index the caret sits in (-1 = none). */
@@ -75,8 +85,12 @@ function exportable() {
   };
   out.mode = meta.mode === 'teams' ? 'teams' : 'solo';
   if (meta.order === 'suggested') out.order = 'suggested';
-  if (raw.controlRoom) out.controlRoom = raw.controlRoom;
-  if (raw.showdown) out.showdown = raw.showdown;
+  // The doc holds deck questions only; anything the opened pack carried is
+  // put back exactly as it came in.
+  const cr = raw.controlRoom ?? carried.controlRoom;
+  const sd = raw.showdown ?? carried.showdown;
+  if (cr) out.controlRoom = cr;
+  if (sd) out.showdown = sd;
   return out;
 }
 
@@ -733,8 +747,8 @@ function renderPlays() {
   const holder = $('plays');
   holder.replaceChildren();
   const deck = parsed.raw.questions.length;
-  const cases = parsed.raw.controlRoom?.questions.length ?? 0;
-  const sd = parsed.raw.showdown?.statements.length ?? 0;
+  const cases = carried.controlRoom?.questions.length ?? 0;
+  const sd = carried.showdown?.statements.length ?? 0;
   const s = (/** @type {number} */ n) => (n === 1 ? '' : 's');
 
   const note = document.createElement('p');
@@ -748,7 +762,7 @@ function renderPlays() {
     (meta.mode === 'teams'
       ? 'players pick a team on their phone and score together; select-all questions need the team to cover every right answer.'
       : 'everyone plays every question for themselves.') +
-    (extra ? ` This pack also carries ${extra} from an earlier edit — still exported, still playable.` : '');
+    (extra ? ` This pack also carries ${extra} — kept in the file and exported with it, edited elsewhere.` : '');
   holder.appendChild(note);
 }
 
@@ -900,6 +914,7 @@ function save() {
   try {
     localStorage.setItem(DOC_KEY, docText);
     localStorage.setItem(META_KEY, JSON.stringify(meta));
+    localStorage.setItem(CARRIED_KEY, JSON.stringify(carried));
   } catch { /* full/blocked: drafts are a convenience */ }
   saveDraftEntry();
 }
@@ -908,6 +923,8 @@ function loadDraft() {
   try {
     const m = localStorage.getItem(META_KEY);
     if (m) Object.assign(meta, JSON.parse(m));
+    const c = localStorage.getItem(CARRIED_KEY);
+    if (c) carried = JSON.parse(c) ?? {};
     const raw = localStorage.getItem(DOC_KEY);
     if (raw !== null) return raw;
     // One-time migration from the form era: the old draft was pack JSON.
@@ -917,73 +934,6 @@ function loadDraft() {
   return null;
 }
 
-// The built-in demo used to ship a Control Room case and a Showdown
-// statement. Browsers that opened the Studio before that changed still have
-// them in their saved document, so the starter looks unchanged no matter
-// what the code says. These two signatures are the untouched templates —
-// nothing a person wrote looks like this.
-const DEMO_CASE = 'New case: set the controls';
-const DEMO_CASE_CONTROLS = Array.from({ length: 6 }, (_, i) => `Control ${i + 1}`);
-const DEMO_STATEMENT = 'An octopus has three hearts';
-
-/**
- * Drop leftover demo sections from a restored document — and ONLY those.
- * A case keeps its place unless its title AND all six control labels are
- * still the template's; a statement unless it is the template's word for
- * word. Any real Control Room or Showdown content, including a pack opened
- * from the server, passes through untouched.
- * @param {string} text @returns {string}
- */
-function stripDemoSections(text) {
-  const isDemoCase = (/** @type {any} */ p, /** @type {any} */ b) => {
-    if (b.bucket !== 'control' || b.text !== DEMO_CASE) return false;
-    const labels = (p.raw.controlRoom?.questions[b.ix]?.controls ?? [])
-      .map((/** @type {any} */ c) => c.label);
-    return labels.length === DEMO_CASE_CONTROLS.length
-      && labels.every((/** @type {string} */ l, /** @type {number} */ i) => l === DEMO_CASE_CONTROLS[i]);
-  };
-  const isDemoStatement = (/** @type {any} */ b) =>
-    b.bucket === 'showdown' && b.text === DEMO_STATEMENT;
-
-  let p = parseDoc(text, { frontMatter: false });
-  const control = p.blocks.filter((b) => b.bucket === 'control');
-  const show = p.blocks.filter((b) => b.bucket === 'showdown');
-  // All or nothing per section: a demo case sitting next to real ones stays.
-  const dropCases = control.length > 0 && control.every((b) => isDemoCase(p, b));
-  const dropShow = show.length > 0 && show.every(isDemoStatement);
-  if (!dropCases && !dropShow) return text;
-
-  let out = text;
-  for (;;) {
-    p = parseDoc(out, { frontMatter: false });
-    const target = p.blocks.find((b) =>
-      (dropCases && isDemoCase(p, b)) || (dropShow && isDemoStatement(b)));
-    if (!target) break;
-    out = removeBlock(out, target);
-  }
-
-  // Then the headers those sections leave behind, plus their preamble
-  // directives (turns:/time:), which would otherwise become stray lines.
-  p = parseDoc(out, { frontMatter: false });
-  const lines = out.split('\n');
-  /** @type {boolean[]} */
-  const keep = lines.map(() => true);
-  lines.forEach((l, i) => {
-    if (p.lines[i]?.kind !== 'section') return;
-    const isControl = /^##\s*control/i.test(l.trim());
-    const isShow = /^##\s*showdown/i.test(l.trim());
-    if (!isControl && !isShow) return;
-    const bucket = isControl ? 'control' : 'showdown';
-    if (p.blocks.some((b) => b.bucket === bucket)) return; // still has content
-    keep[i] = false;
-    for (let j = i + 1; j < lines.length; j++) {
-      if (p.lines[j]?.kind === 'section' || p.lines[j]?.kind === 'head') break;
-      if (p.lines[j]?.kind === 'directive' && p.lines[j].block === null) keep[j] = false;
-    }
-  });
-  return lines.filter((_, i) => keep[i]).join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '\n');
-}
-
 /**
  * Adopt a document wholesale (boot, Open, Paste, Load sample): any
  * front-matter block on top is absorbed into the Pack panel and stripped,
@@ -991,7 +941,11 @@ function stripDemoSections(text) {
  * @param {string} t @param {{boot?: boolean}} [opts]
  */
 function adoptDoc(t, opts = {}) {
-  const { meta: fm, text } = extractFrontMatter(t);
+  const { meta: fm, text: whole } = extractFrontMatter(t);
+  const { text, carried: found } = splitSections(whole);
+  // On boot the restored document is already deck-only, so keep whatever
+  // was carried alongside it; every other load replaces it.
+  if (!opts.boot || Object.keys(found).length) carried = found;
   Object.assign(meta, fm);
   if (meta.order !== 'suggested') meta.order = 'authored';
   if (meta.mode !== 'teams') meta.mode = 'solo';
@@ -1106,7 +1060,7 @@ $('pasteGo').onclick = () => {
 
 const DRAFTS_KEY = 'packstudio-drafts';
 
-/** @returns {Record<string, {doc: string, meta: any, at: number}>} */
+/** @returns {Record<string, {doc: string, meta: any, carried?: any, at: number}>} */
 function loadDrafts() {
   try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
@@ -1116,7 +1070,7 @@ function saveDraftEntry() {
   if (!name) return;
   try {
     const drafts = loadDrafts();
-    drafts[name] = { doc: docText, meta: { ...meta }, at: Date.now() };
+    drafts[name] = { doc: docText, meta: { ...meta }, carried, at: Date.now() };
     localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
   } catch { /* full/blocked: drafts are a convenience */ }
 }
@@ -1174,7 +1128,9 @@ async function openPacksDlg() {
     row(draftsHolder, name, `${current ? 'open now · ' : ''}${new Date(d.at).toLocaleString()}`, () => {
       saveDraftEntry();
       meta = { ...d.meta };
-      setText(stripDemoSections(d.doc), { caret: 0 });
+      const { text, carried: found } = splitSections(d.doc);
+      carried = Object.keys(found).length ? found : (d.carried ?? {});
+      setText(text, { caret: 0 });
     }, () => {
       const all = loadDrafts();
       delete all[name];
@@ -1216,6 +1172,7 @@ $('newPack').onclick = () => {
   if (!window.confirm('Start a new pack? The current one stays available under Packs…')) return;
   saveDraftEntry();
   meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
+  carried = {};
   setText('# \n', { caret: 2 });
 };
 // The preview, near-fullscreen: the canvas already renders at 1920x1080,
@@ -1497,8 +1454,7 @@ $('aiShorten').onclick = async () => {
 };
 
 // boot
-const restored = loadDraft();
-adoptDoc(restored === null ? serializeDoc(SAMPLE) : stripDemoSections(restored), { boot: true });
+adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
 void fetch('/api/levels')
   .then((r) => (r.ok ? r.json() : Promise.reject()))
   .then((list) => {
