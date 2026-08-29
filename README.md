@@ -137,9 +137,8 @@ Uranus
 range: 60-100 of 0-160 bpm    a range: line makes a number-line question
 
 # Sort each animal by class
-type: sort
-Mammal: Bat, Dolphin          buckets are "Name: item, item" lines
-Bird: Penguin
+Mammal → Bat, Dolphin         two or more arrow lines make a sort question
+Bird → Penguin
 
 # What does this EKG show?
 img: sample-ekg.png           attach with the panel button, or type it

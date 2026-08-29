@@ -21,10 +21,9 @@
  *   range: 60-100 of 0-160 bpm    <- answer lo-hi of min-max [unit]
  *
  *   # Sort each animal by class
- *   type: sort                    <- sort says so on its own line; every
- *   Mammal: Bat, Dolphin             other type is inferred from the body
- *   Bird: Penguin                 <- bucket: item, item
- *   pace: 6s                      <- seconds per item
+ *   Mammal → Bat, Dolphin         <- two or more arrow lines ARE a sort
+ *   Bird → Penguin                   block; every type is inferred from
+ *   pace: 6s                         the body, none is declared
  *
  *   ## Control Room               <- section headers split the buckets
  *   # Post-op: set the vent
@@ -51,6 +50,8 @@ const STARTS_ON_RE = /\s*\(starts?\s+on\)\s*$/i;
 const NUMBER_RE = /^(.+?)\s*=\s*(-?[\d.]+)\s*(?:\((.*)\))?\s*$/;
 const STATEMENT_RE = /^(true|false)\s*:\s*(.*)$/i;
 const BUCKET_RE = /^([^:]{1,40}):\s*(.*)$/;
+/** "Mammal → Bat, Dolphin" — the arrow makes a sort block self-declaring. */
+const BUCKET_ARROW_RE = /^(.{1,40}?)\s*(?:→|->)\s*(.*)$/;
 const DIRECTIVE_RE = /^(img|image|layout|level|type|pace|time|context|turns)\s*:\s*(.*)$/i;
 
 /** Directive keys that make sense per location; anything else is flagged. */
@@ -158,6 +159,43 @@ export function splitSections(text) {
 }
 
 /**
+ * Pull 'level:' lines out of a document, keyed by the question they belong
+ * to. The arena a question plays on is picked with the thumbnail buttons in
+ * the Details panel, so it has no business being typed — it rides beside the
+ * text and is re-attached on export, exactly like the Control Room and
+ * Showdown sections. Keyed by question TEXT so reordering questions keeps
+ * every pin; rewriting a question's words drops its pin back to Auto, which
+ * is the game's own default.
+ * @param {string} text
+ * @returns {{ text: string, levels: Record<string, string> }}
+ */
+export function extractLevels(text) {
+  /** @type {Record<string, string>} */
+  const levels = {};
+  if (!/^\s*level\s*:/im.test(text)) return { text, levels };
+  /** @type {string[]} */
+  const kept = [];
+  let head = null;
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    const h = HEAD_RE.exec(t);
+    if (h && !SECTION_RE.test(t)) {
+      const tag = HEAD_TAG_RE.exec(t);
+      head = (tag ? tag[2] : h[1]).trim();
+      kept.push(line);
+      continue;
+    }
+    const lvl = /^level\s*:\s*(.*)$/i.exec(t);
+    if (lvl && head) {
+      if (lvl[1].trim()) levels[head] = lvl[1].trim();
+      continue; // the line itself never reaches the editor
+    }
+    kept.push(line);
+  }
+  return { text: kept.join('\n'), levels };
+}
+
+/**
  * Parse the document into the raw pack (for validatePack) plus the line
  * and block maps the Studio UI hangs its gutter, outline and panel on.
  *
@@ -212,6 +250,14 @@ export function parseDoc(text, { frontMatter = true } = {}) {
     if (b.directives.layout) q.layout = b.directives.layout.value;
     let type = b.tag ?? null;
 
+    // Two or more arrow lines ARE a sort block — the type needs no line of
+    // its own in the document.
+    if (!type && b.arrowLines.length >= 2) {
+      type = 'sort';
+      b.bucketLines = b.arrowLines;
+      const onArrow = new Set(b.arrowLines.map((/** @type {any} */ a) => a.line));
+      b.answers = b.answers.filter((/** @type {any} */ a) => !onArrow.has(a.line));
+    }
     if (!type && b.rangeLine !== undefined) type = 'range';
     if (type === 'sort') {
       q.type = 'sort';
@@ -376,7 +422,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
         tag: tag ? tag[1].toLowerCase() : null,
         text: (tag ? tag[2] : /** @type {RegExpExecArray} */ (HEAD_RE.exec(t))[1]).trim(),
         headLine: i, startLine: i, endLine: i,
-        directives: {}, answers: [], bucketLines: [], controls: [],
+        directives: {}, answers: [], bucketLines: [], arrowLines: [], controls: [],
         rangeLine: undefined, range: undefined,
       };
       if (cur.tag && section === 'control') {
@@ -471,12 +517,13 @@ export function parseDoc(text, { frontMatter = true } = {}) {
     if (d) {
       const key = d[1].toLowerCase() === 'image' ? 'img' : d[1].toLowerCase();
       if (key === 'turns') { flag(i, 'turns is a Control Room section setting — put it right under ## Control Room'); lines[i] = { kind: 'unknown', block: null }; continue; }
-      // "type: sort" declares the question type on its own line, so the
-      // head line stays plain prose like every other type's does.
+      // "type: sort" is the LEGACY way to declare a sort block (documents
+      // written before arrow buckets). Still honoured on the way in; the
+      // Studio never writes one.
       if (key === 'type' && cur.bucket === 'deck') {
         const v = d[2].trim().toLowerCase();
         if (['choice', 'range', 'sort'].includes(v)) cur.tag = v;
-        else flag(i, `unknown type "${d[2].trim()}" — use type: sort (choice and range are inferred)`);
+        else flag(i, `unknown type "${d[2].trim()}" — every type is inferred from the lines beneath the question`);
       }
       cur.directives[key] = { line: i, value: d[2].trim() };
       continue; // line kind assigned when the block finishes
@@ -502,6 +549,16 @@ export function parseDoc(text, { frontMatter = true } = {}) {
           });
           continue;
         }
+      }
+      // Arrow lines are remembered as candidates AND kept as answers: two or
+      // more of them make the block a sort (see finishDeck), one on its own
+      // is just an answer that happens to contain an arrow.
+      const am = BUCKET_ARROW_RE.exec(t);
+      if (am && !CHECK_RE.test(t)) {
+        cur.arrowLines.push({
+          line: i, name: am[1].trim(),
+          items: am[2].split(',').map((s) => s.trim()).filter(Boolean),
+        });
       }
       const checked = CHECK_RE.test(t);
       cur.answers.push({ line: i, checked, label: t.replace(CHECK_RE, '').trim() });
@@ -567,14 +624,13 @@ export function serializeDoc(p) {
   for (const q of Array.isArray(p?.questions) ? p.questions : []) {
     if (q?.type === 'sort') {
       out.push(`# ${q.text ?? ''}`);
-      out.push('type: sort');
       if (q.image) out.push(`img: ${q.image}`);
       const buckets = Array.isArray(q.buckets) ? q.buckets : [];
       buckets.forEach((/** @type {string} */ b, /** @type {number} */ bi) => {
         const items = (Array.isArray(q.items) ? q.items : [])
           .filter((/** @type {any} */ it) => it.bucket === bi)
           .map((/** @type {any} */ it) => it.label);
-        out.push(`${b}: ${items.join(', ')}`);
+        out.push(`${b} → ${items.join(', ')}`);
       });
       if (Number.isFinite(q.itemMs) && q.itemMs !== 6000) out.push(`pace: ${fmtSeconds(q.itemMs)}`);
     } else if (q?.type === 'range') {
@@ -764,7 +820,7 @@ export function setBlockType(text, block, type) {
   const lines = text.split('\n');
   const head = `# ${block.text}`;
   const body = type === 'range' ? ['range: 40-60 of 0-100']
-    : type === 'sort' ? ['type: sort', 'Bucket A: Item 1', 'Bucket B: Item 2']
+    : type === 'sort' ? ['Bucket A → Item 1', 'Bucket B → Item 2']
     : ['✓ Answer 1', 'Answer 2', 'Answer 3'];
   const img = block.img ? [`img: ${block.img}`] : [];
   lines.splice(block.startLine, block.endLine - block.startLine + 1, head, ...img, ...body);
@@ -775,7 +831,7 @@ const TEMPLATES = {
   deck: {
     choice: '# New question?\n✓ Answer 1\nAnswer 2\nAnswer 3',
     range: '# New range question?\nrange: 40-60 of 0-100',
-    sort: '# New sort question?\ntype: sort\nBucket A: Item 1, Item 2\nBucket B: Item 3',
+    sort: '# New sort question?\nBucket A → Item 1, Item 2\nBucket B → Item 3',
   },
   control: '# New case: set the controls\n'
     + Array.from({ length: 6 }, (_, i) => `[${i % 2 ? 'off' : 'on'}] Control ${i + 1}`).join('\n'),
@@ -862,14 +918,16 @@ export function setLabel(text, parsed, lineIx, newLabel, itemIx) {
   } else if (kind === 'number') {
     lines[lineIx] = t.replace(/^.+?(\s*=)/, `${label}$1`);
   } else if (kind === 'bucket') {
-    const bm = BUCKET_RE.exec(t);
+    const arrow = BUCKET_ARROW_RE.exec(t);
+    const bm = arrow ?? BUCKET_RE.exec(t);
+    const sep = arrow ? ' → ' : ': ';
     if (bm) {
       const items = bm[2].split(',').map((s) => s.trim()).filter(Boolean);
       if (itemIx === undefined) {
-        lines[lineIx] = `${label}: ${items.join(', ')}`;
+        lines[lineIx] = `${label}${sep}${items.join(', ')}`;
       } else if (itemIx >= 0 && itemIx < items.length) {
         items[itemIx] = label;
-        lines[lineIx] = `${bm[1].trim()}: ${items.join(', ')}`;
+        lines[lineIx] = `${bm[1].trim()}${sep}${items.join(', ')}`;
       }
     }
   } else {

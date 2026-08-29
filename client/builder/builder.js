@@ -27,7 +27,7 @@ import { drawShowdown } from '../display/showdown-ui.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
-  splitSections, setOnlyCheck,
+  splitSections, setOnlyCheck, extractLevels,
 } from './pack-text.js';
 
 // ------------------------------------------------------------------ state
@@ -35,6 +35,7 @@ import {
 const DOC_KEY = 'packstudio-doc';
 const META_KEY = 'packstudio-meta';
 const CARRIED_KEY = 'packstudio-carried';
+const LEVELS_KEY = 'packstudio-levels';
 const OLD_DRAFT_KEY = 'packstudio-draft'; // the form-era JSON draft, migrated once
 
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
@@ -54,6 +55,13 @@ let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored
  * @type {{controlRoom?: any, showdown?: any}}
  */
 let carried = {};
+/**
+ * The arena each question is pinned to, keyed by question text. Chosen with
+ * the thumbnail buttons in Details, never typed — so it lives here instead
+ * of in the document, and is re-attached on export.
+ * @type {Record<string, string>}
+ */
+let levels = {};
 /** @type {ReturnType<typeof parseDoc>} */
 let parsed = parseDoc('');
 /** Block index the caret sits in (-1 = none). */
@@ -85,6 +93,12 @@ function exportable() {
   };
   out.mode = meta.mode === 'teams' ? 'teams' : 'solo';
   if (meta.order === 'suggested') out.order = 'suggested';
+  for (const q of out.questions) {
+    const pin = levels[q.text];
+    // A pinned arena only applies to a choice question without a picture —
+    // the same rule the parser used when level: was a line.
+    if (pin && !q.image && (q.type === undefined || q.type === 'choice')) q.level = pin;
+  }
   // The doc holds deck questions only; anything the opened pack carried is
   // put back exactly as it came in.
   const cr = raw.controlRoom ?? carried.controlRoom;
@@ -169,6 +183,12 @@ let lineHeights = [];
  *  mirror on every keystroke and re-appends it. */
 const hi = $('blockHi');
 
+/** Split a bucket line into [name, separator, items], arrow or legacy colon. */
+function splitBucket(/** @type {string} */ t) {
+  const m = /^(.{1,40}?)(\s*(?:→|->)\s*)([\s\S]*)$/.exec(t) ?? /^([^:]{1,40})(:\s*)([\s\S]*)$/.exec(t);
+  return m ? { name: m[1], sep: m[2], items: m[3] } : null;
+}
+
 function span(/** @type {string} */ t, /** @type {string} */ cls) {
   const s = document.createElement('span');
   s.textContent = t;
@@ -214,8 +234,9 @@ function paintLine(l, info) {
     put([m[1], 'mb'], [m[2] ?? '', 'md'], [m[3] ?? '', '']);
   } else if (kind === 'range' && (m = /^(\s*range\s*:)([\s\S]*)$/i.exec(l))) {
     put([m[1], 'md'], [m[2], '']);
-  } else if (kind === 'bucket' && (m = /^(\s*[^:]+:)([\s\S]*)$/.exec(l))) {
-    put([m[1], 'mb'], [m[2], '']);
+  } else if (kind === 'bucket' && splitBucket(l)) {
+    const bk = /** @type {any} */ (splitBucket(l));
+    put([bk.name, 'mb'], [bk.sep, 'mk'], [bk.items, '']);
   } else if (kind === 'directive') {
     d.appendChild(span(l, 'md'));
   } else if (kind === 'unknown' || kind === 'front') {
@@ -611,15 +632,16 @@ function renderLevelPicker(body, b) {
 
   const n = parsed.raw.questions[b.ix]?.answers?.length ?? 0;
   const fits = levelPool.filter((l) => l.boards.length === n);
-  const cur = b.directives.level?.value ?? null;
+  const cur = levels[b.text] ?? null;
 
-  // Two surgeries on one text: re-parse between them so the second uses
-  // fresh line numbers (removing layout: shifts everything below it).
+  // The pin lives beside the document, not in it — picking one never edits
+  // the author's text.
   const write = (/** @type {string|null} */ name) => {
-    let t = setDirective(docText, b, 'layout', null);
-    const b2 = parseDoc(t, { frontMatter: false }).blocks[caretIx];
-    if (b2) t = setDirective(t, b2, 'level', name);
-    setText(t); // full panel rerender, so the toggles' on-states follow
+    if (name) levels[b.text] = name;
+    else delete levels[b.text];
+    const t = setDirective(docText, b, 'layout', null); // legacy line, if any
+    if (t !== docText) setText(t);
+    else { save(); refresh(); }
   };
 
   if (!fits.length) {
@@ -904,7 +926,10 @@ function restartPreview() {
   }
 
   const src = parsed.raw.questions[b.ix];
-  const vetted = validatePack({ questions: src ? [structuredClone(src)] : [] });
+  const pinned = src && levels[b.text] && !src.image && (src.type === undefined || src.type === 'choice')
+    ? { ...structuredClone(src), level: levels[b.text] }
+    : src && structuredClone(src);
+  const vetted = validatePack({ questions: pinned ? [pinned] : [] });
   const q = vetted.pack.questions[0];
   pvGame = createGame(q ? [q] : [], meta.answerMs);
   pvGame.levelPool = levelPool;
@@ -946,6 +971,7 @@ function save() {
     localStorage.setItem(DOC_KEY, docText);
     localStorage.setItem(META_KEY, JSON.stringify(meta));
     localStorage.setItem(CARRIED_KEY, JSON.stringify(carried));
+    localStorage.setItem(LEVELS_KEY, JSON.stringify(levels));
   } catch { /* full/blocked: drafts are a convenience */ }
   saveDraftEntry();
 }
@@ -956,6 +982,8 @@ function loadDraft() {
     if (m) Object.assign(meta, JSON.parse(m));
     const c = localStorage.getItem(CARRIED_KEY);
     if (c) carried = JSON.parse(c) ?? {};
+    const lv = localStorage.getItem(LEVELS_KEY);
+    if (lv) levels = JSON.parse(lv) ?? {};
     const raw = localStorage.getItem(DOC_KEY);
     if (raw !== null) return raw;
     // One-time migration from the form era: the old draft was pack JSON.
@@ -973,10 +1001,15 @@ function loadDraft() {
  */
 function adoptDoc(t, opts = {}) {
   const { meta: fm, text: whole } = extractFrontMatter(t);
-  const { text, carried: found } = splitSections(whole);
+  const { text: deckText, carried: found } = splitSections(whole);
+  const restoredPins = levels; // loadDraft() filled these in before boot
+  const { text, levels: pins } = extractLevels(deckText);
   // On boot the restored document is already deck-only, so keep whatever
   // was carried alongside it; every other load replaces it.
   if (!opts.boot || Object.keys(found).length) carried = found;
+  // A saved document has no level: lines in it — its pins came back from
+  // storage, so boot keeps those; every other load takes the pack's own.
+  levels = Object.keys(pins).length || !opts.boot ? pins : restoredPins;
   Object.assign(meta, fm);
   if (meta.order !== 'suggested') meta.order = 'authored';
   // The mode always comes from the pack being opened, never from whatever
@@ -1117,7 +1150,7 @@ $('pasteGo').onclick = () => {
 
 const DRAFTS_KEY = 'packstudio-drafts';
 
-/** @returns {Record<string, {doc: string, meta: any, carried?: any, at: number}>} */
+/** @returns {Record<string, {doc: string, meta: any, carried?: any, levels?: any, at: number}>} */
 function loadDrafts() {
   try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
@@ -1127,7 +1160,7 @@ function saveDraftEntry() {
   if (!name) return;
   try {
     const drafts = loadDrafts();
-    drafts[name] = { doc: docText, meta: { ...meta }, carried, at: Date.now() };
+    drafts[name] = { doc: docText, meta: { ...meta }, carried, levels, at: Date.now() };
     localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
   } catch { /* full/blocked: drafts are a convenience */ }
 }
@@ -1185,8 +1218,10 @@ async function openPacksDlg() {
     row(draftsHolder, name, `${current ? 'open now · ' : ''}${new Date(d.at).toLocaleString()}`, () => {
       saveDraftEntry();
       meta = { ...d.meta };
-      const { text, carried: found } = splitSections(d.doc);
+      const { text: deckOnly, carried: found } = splitSections(d.doc);
+      const { text, levels: pins } = extractLevels(deckOnly);
       carried = Object.keys(found).length ? found : (d.carried ?? {});
+      levels = Object.keys(pins).length ? pins : (d.levels ?? {});
       setText(text, { caret: 0 });
     }, () => {
       const all = loadDrafts();
@@ -1230,6 +1265,7 @@ $('newPack').onclick = () => {
   saveDraftEntry();
   meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
   carried = {};
+  levels = {};
   setText('# \n', { caret: 2 });
 };
 // The preview, near-fullscreen: the canvas already renders at 1920x1080,
@@ -1367,10 +1403,10 @@ function extractLabel(/** @type {number} */ lineIx, /** @type {number|undefined}
   if (kind === 'toggle') return t.replace(/^\[(on|off)\]\s*/i, '').replace(/\s*\(starts?\s+on\)\s*$/i, '').trim();
   if (kind === 'number') return t.split('=')[0].trim();
   if (kind === 'bucket') {
-    const m = /^([^:]+):\s*(.*)$/.exec(t);
-    if (!m) return null;
-    if (itemIx === undefined) return m[1].trim();
-    const items = m[2].split(',').map((x) => x.trim()).filter(Boolean);
+    const bk = splitBucket(t);
+    if (!bk) return null;
+    if (itemIx === undefined) return bk.name.trim();
+    const items = bk.items.split(',').map((x) => x.trim()).filter(Boolean);
     return items[itemIx] ?? null;
   }
   return null;
@@ -1397,9 +1433,9 @@ function suggestibleItems() {
     } else if (l.kind === 'bucket') {
       const name = extractLabel(i, undefined);
       if (name) items.push({ id: `b${i}`, kind: 'bucket', text: name, limit: LIMITS.sortLabelChars, line: i });
-      const m = /^([^:]+):\s*(.*)$/.exec((src[i] ?? '').trim());
-      if (m) {
-        m[2].split(',').map((x) => x.trim()).filter(Boolean).forEach((it, j) => {
+      const bk = splitBucket((src[i] ?? '').trim());
+      if (bk) {
+        bk.items.split(',').map((x) => x.trim()).filter(Boolean).forEach((it, j) => {
           items.push({ id: `i${i}_${j}`, kind: 'item', text: it, limit: LIMITS.sortLabelChars, line: i, itemIx: j });
         });
       }
@@ -1525,6 +1561,13 @@ void fetch('/api/levels')
   .catch(() => { /* no server (GitHub Pages): generated arenas only */ });
 // Debug handle for harnesses — mirrors the display's __platforms.
 Object.defineProperty(globalThis, '__studio', {
-  value: { get pvGame() { return pvGame; }, get pvWorld() { return pvWorld; }, get levelPool() { return levelPool; } },
+  value: {
+    get pvGame() { return pvGame; },
+    get pvWorld() { return pvWorld; },
+    get levelPool() { return levelPool; },
+    // What Download/Copy would write — the doc plus everything carried
+    // beside it (arena pins, Control Room, Showdown).
+    get pack() { return exportable(); },
+  },
 });
 requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });

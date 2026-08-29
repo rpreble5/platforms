@@ -56,16 +56,15 @@ Uranus
 range: 60-100 of 0-160 bpm
 
 # Sort each animal by class
-type: sort
-Mammal: Bat, Dolphin
-Bird: Penguin
+Mammal → Bat, Dolphin
+Bird → Penguin
 
 RULES:
-- '# ' starts every question, whatever its type. A lightning sort adds a 'type: sort' line directly under the '# ' line; choice and range are inferred from the body.
+- '# ' starts every question, whatever its type. No question declares its type: each one is inferred from the lines beneath it.
 - Choice: ${LIMITS.answers[0]}-${LIMITS.answers[1]} answers, one per line. '✓ ' before an answer marks it correct.
 - Select-all (two or more '✓' in one question, and at least one unchecked wrong answer) is a TEAMS-ONLY type: covering every correct platform is something a team does, and one player has one body. The deck's mode is stated with the notes — obey it exactly.
 - Range: 'range: LO-HI of MIN-MAX [unit]' — the answer band inside the number line. Use for numeric facts and estimates.
-- Sort: a 'type: sort' line, then ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket: item, item' lines, ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Use for categorization.
+- Sort: ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket → item, item' lines (a real arrow, or '->'), ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Two or more arrow lines ARE the sort question — nothing else declares it. Use for categorization.
 - Write DECK QUESTIONS ONLY. Never emit a '## Control Room' or '## Showdown' section, or any '[on]'/'[off]' control or 'true:'/'false:' statement line — the editor does not author those, and anything you write there is thrown away.
 - TEXT LIMITS (hard ceilings — text over these shrinks on the projector): question ≤ ${LIMITS.questionChars} chars, answer ≤ ${LIMITS.answerChars}, sort bucket/item ≤ ${LIMITS.sortLabelChars}, control label ≤ ${LIMITS.controlLabelChars}, statement ≤ ${LIMITS.statementChars}.
 - BREVITY: the ceilings are not targets. This text is read across a room in seconds, so always choose the shortest faithful phrasing — aim for roughly two-thirds of each ceiling (question ~${Math.round(LIMITS.questionChars * 2 / 3)} chars, answer ~${Math.round(LIMITS.answerChars * 2 / 3)}). Cut preamble ("Which of the following…" → "Which…"), prefer common short names over formal ones (drug names without salts, "heart attack question" phrasing only when the notes use it), and never restate the question inside its answers. When the notes are wordy, condensing them IS the job — but never at the cost of clinical meaning.

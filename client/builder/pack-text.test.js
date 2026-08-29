@@ -4,7 +4,7 @@ import { validatePack } from '../../shared/pack-validate.js';
 import {
   parseDoc, serializeDoc, extractFrontMatter, toggleCheck, setVerdict, setStartsOn,
   setLineFields, setDirective, setBlockType, setLabel, insertTemplate, removeBlock, moveBlock,
-  setOnlyCheck,
+  setOnlyCheck, extractLevels,
 } from './pack-text.js';
 
 /** A pack exercising every type, matching what the Studio exports. */
@@ -241,7 +241,7 @@ test('setBlockType re-templates the body but keeps text and image', () => {
   const asRange = setBlockType(doc, blocks[0], 'range');
   assert.equal(asRange, '# The question?\nimg: pic.png\nrange: 40-60 of 0-100');
   const asSort = setBlockType(doc, blocks[0], 'sort');
-  assert.match(asSort, /^# The question\?\nimg: pic\.png\ntype: sort\n/);
+  assert.match(asSort, /^# The question\?\nimg: pic\.png\nBucket A → Item 1\n/);
   const backToChoice = setBlockType(asRange, parseDoc(asRange).blocks[0], 'choice');
   assert.equal(backToChoice, '# The question?\nimg: pic.png\n✓ Answer 1\nAnswer 2\nAnswer 3');
 });
@@ -396,38 +396,65 @@ test('mode: rides the front matter and reaches the validated pack', () => {
   assert.ok(bad.problems.some((m) => /use solo or teams/.test(m)));
 });
 
-test('type: sort declares the type off the question line, legacy #sort still parses', () => {
-  const modern = parseDoc('# Sort each animal by class\ntype: sort\nMammal: Bat\nBird: Penguin');
+test('a sort block declares itself with arrows — no type line in the text', () => {
+  const modern = parseDoc('# Sort each animal by class\nMammal → Bat\nBird → Penguin');
   assert.deepEqual(modern.problems, []);
   assert.equal(modern.raw.questions[0].type, 'sort');
-  assert.equal(modern.raw.questions[0].text, 'Sort each animal by class'); // no tag in the text
   assert.deepEqual(modern.raw.questions[0].buckets, ['Mammal', 'Bird']);
-  assert.equal(modern.lines[1].kind, 'directive'); // painted muted, like img:/pace:
-  assert.equal(modern.blocks[0].headLine, 0);
+  assert.equal(modern.lines[1].kind, 'bucket');
+  assert.doesNotMatch(serializeDoc({ questions: [modern.raw.questions[0]] }), /type:/);
 
-  // the legacy tag keeps working, and means exactly the same thing
-  const legacy = parseDoc('#sort Sort each animal by class\nMammal: Bat\nBird: Penguin');
-  assert.deepEqual(legacy.raw.questions[0], modern.raw.questions[0]);
+  // '->' is accepted for anyone who types it
+  const ascii = parseDoc('# S\nA -> one, two\nB -> three');
+  assert.equal(ascii.raw.questions[0].type, 'sort');
+  assert.deepEqual(ascii.raw.questions[0].items.map((/** @type {any} */ i) => i.label), ['one', 'two', 'three']);
 
-  // serialize now writes the new form
+  // ONE arrow line is just an answer that contains an arrow, not a sort
+  const notSort = parseDoc('# Which step comes first?\n✓ Fluids -> pressors\nPressors alone');
+  assert.equal(notSort.raw.questions[0].type, undefined);
+  assert.equal(notSort.raw.questions[0].answers.length, 2);
+
+  // legacy documents still parse: the tag and colon buckets both work
+  for (const doc of [
+    '#sort Sort each animal by class\nMammal: Bat\nBird: Penguin',
+    '# Sort each animal by class\ntype: sort\nMammal: Bat\nBird: Penguin',
+  ]) {
+    const legacy = parseDoc(doc);
+    assert.equal(legacy.raw.questions[0].type, 'sort');
+    assert.deepEqual(legacy.raw.questions[0].buckets, ['Mammal', 'Bird']);
+  }
+
+  // serializing writes the arrow form, which round-trips
   const text = serializeDoc({ questions: [{ type: 'sort', text: 'S', buckets: ['A', 'B'],
     items: [{ label: 'x', bucket: 0 }, { label: 'y', bucket: 1 }] }] });
-  assert.match(text, /^# S\ntype: sort\nA: x\nB: y/m);
+  assert.match(text, /^# S\nA → x\nB → y/m);
   assert.equal(parseDoc(text).raw.questions[0].type, 'sort');
+});
 
-  // order-independent: the marker below the buckets still reads them
-  const below = parseDoc('# S\nA: one, two\nB: three\ntype: sort');
-  assert.deepEqual(below.problems, []);
-  assert.deepEqual(below.raw.questions[0].buckets, ['A', 'B']);
-  assert.equal(below.lines[1].kind, 'bucket');
+test('extractLevels lifts the arena pin out of the text, keyed by question', () => {
+  const doc = [
+    '# Which planet?',
+    'level: Rising Tide',
+    '✓ Saturn',
+    'Uranus',
+    '',
+    '# Another?',
+    '✓ a',
+    'b',
+  ].join('\n');
+  const { text, levels } = extractLevels(doc);
+  assert.deepEqual(levels, { 'Which planet?': 'Rising Tide' });
+  assert.equal(text, '# Which planet?\n✓ Saturn\nUranus\n\n# Another?\n✓ a\nb');
+  assert.deepEqual(parseDoc(text).problems, []);
 
-  // a bad value says what to do
-  const bad = parseDoc('# S\ntype: lightning\n✓ a\nb');
-  assert.ok(bad.problems.some((p) => p.line === 2 && /type: sort/.test(p.msg)));
+  // nothing to lift: the text comes back untouched
+  const none = extractLevels('# Q?\n✓ a\nb');
+  assert.deepEqual(none.levels, {});
+  assert.equal(none.text, '# Q?\n✓ a\nb');
 
-  // and it is a deck-only setting
-  const ctrl = parseDoc('## Control Room\n# c\ntype: sort\n[on] A\n[on] B\n[on] C\n[on] D\n[on] E\n[on] F');
-  assert.ok(ctrl.problems.some((p) => /every Control Room block is a case/.test(p.msg)));
+  // a legacy tagged head keys by the question's words, not the tag
+  assert.deepEqual(extractLevels('#choice Tagged?\nlevel: Skybridge\n✓ a\nb').levels,
+    { 'Tagged?': 'Skybridge' });
 });
 
 test('insertTemplate deck kinds: range and sort bodies', () => {
