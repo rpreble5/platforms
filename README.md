@@ -136,7 +136,8 @@ Uranus
 # Normal resting heart rate?
 range: 60-100 of 0-160 bpm    a range: line makes a number-line question
 
-#sort Sort each animal by class
+# Sort each animal by class
+type: sort
 Mammal: Bat, Dolphin          buckets are "Name: item, item" lines
 Bird: Penguin
 

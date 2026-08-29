@@ -20,9 +20,10 @@
  *   # Normal resting heart rate?
  *   range: 60-100 of 0-160 bpm    <- answer lo-hi of min-max [unit]
  *
- *   #sort Sort each animal        <- explicit type tag (sort needs one)
- *   Mammal: Bat, Dolphin          <- bucket: item, item
- *   Bird: Penguin
+ *   # Sort each animal by class
+ *   type: sort                    <- sort says so on its own line; every
+ *   Mammal: Bat, Dolphin             other type is inferred from the body
+ *   Bird: Penguin                 <- bucket: item, item
  *   pace: 6s                      <- seconds per item
  *
  *   ## Control Room               <- section headers split the buckets
@@ -50,7 +51,7 @@ const STARTS_ON_RE = /\s*\(starts?\s+on\)\s*$/i;
 const NUMBER_RE = /^(.+?)\s*=\s*(-?[\d.]+)\s*(?:\((.*)\))?\s*$/;
 const STATEMENT_RE = /^(true|false)\s*:\s*(.*)$/i;
 const BUCKET_RE = /^([^:]{1,40}):\s*(.*)$/;
-const DIRECTIVE_RE = /^(img|image|layout|level|pace|time|context|turns)\s*:\s*(.*)$/i;
+const DIRECTIVE_RE = /^(img|image|layout|level|type|pace|time|context|turns)\s*:\s*(.*)$/i;
 
 /** Directive keys that make sense per location; anything else is flagged. */
 const FRONT_KEYS = ['pack', 'theme', 'time', 'order'];
@@ -178,6 +179,20 @@ export function parseDoc(text, { frontMatter = true } = {}) {
     if (!type && b.rangeLine !== undefined) type = 'range';
     if (type === 'sort') {
       q.type = 'sort';
+      // A "type: sort" line placed BELOW the buckets means those lines were
+      // read as answers; re-read them as buckets so line order never
+      // changes the meaning of a block.
+      if (!b.bucketLines.length && b.answers.length) {
+        for (const a of b.answers) {
+          const bm = BUCKET_RE.exec(a.label);
+          if (!bm) continue;
+          b.bucketLines.push({
+            line: a.line, name: bm[1].trim(),
+            items: bm[2].split(',').map((/** @type {string} */ s) => s.trim()).filter(Boolean),
+          });
+        }
+        b.answers = b.answers.filter((/** @type {any} */ a) => !b.bucketLines.some((/** @type {any} */ bl) => bl.line === a.line));
+      }
       /** @type {string[]} */
       const buckets = [];
       /** @type {{label:string, bucket:number}[]} */
@@ -264,6 +279,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
     }
     if (b.directives.img) flag(b.directives.img.line, 'pictures are a standard-deck feature');
     if (b.directives.level) flag(b.directives.level.line, 'level is a deck-question setting — cases play the control room');
+    if (b.directives.type) flag(b.directives.type.line, 'type is a deck-question setting — every Control Room block is a case');
     blocks.push({
       bucket: 'control', ix: control.questions.length, type: 'case',
       text: b.text, headLine: b.headLine, startLine: b.startLine, endLine: b.endLine,
@@ -418,6 +434,13 @@ export function parseDoc(text, { frontMatter = true } = {}) {
     if (d) {
       const key = d[1].toLowerCase() === 'image' ? 'img' : d[1].toLowerCase();
       if (key === 'turns') { flag(i, 'turns is a Control Room section setting — put it right under ## Control Room'); lines[i] = { kind: 'unknown', block: null }; continue; }
+      // "type: sort" declares the question type on its own line, so the
+      // head line stays plain prose like every other type's does.
+      if (key === 'type' && cur.bucket === 'deck') {
+        const v = d[2].trim().toLowerCase();
+        if (['choice', 'range', 'sort'].includes(v)) cur.tag = v;
+        else flag(i, `unknown type "${d[2].trim()}" — use type: sort (choice and range are inferred)`);
+      }
       cur.directives[key] = { line: i, value: d[2].trim() };
       continue; // line kind assigned when the block finishes
     }
@@ -505,7 +528,8 @@ export function serializeDoc(p) {
 
   for (const q of Array.isArray(p?.questions) ? p.questions : []) {
     if (q?.type === 'sort') {
-      out.push(`#sort ${q.text ?? ''}`);
+      out.push(`# ${q.text ?? ''}`);
+      out.push('type: sort');
       if (q.image) out.push(`img: ${q.image}`);
       const buckets = Array.isArray(q.buckets) ? q.buckets : [];
       buckets.forEach((/** @type {string} */ b, /** @type {number} */ bi) => {
@@ -676,9 +700,9 @@ function frontMatterEnd(/** @type {string[]} */ lines) {
  */
 export function setBlockType(text, block, type) {
   const lines = text.split('\n');
-  const head = type === 'sort' ? `#sort ${block.text}` : `# ${block.text}`;
+  const head = `# ${block.text}`;
   const body = type === 'range' ? ['range: 40-60 of 0-100']
-    : type === 'sort' ? ['Bucket A: Item 1', 'Bucket B: Item 2']
+    : type === 'sort' ? ['type: sort', 'Bucket A: Item 1', 'Bucket B: Item 2']
     : ['✓ Answer 1', 'Answer 2', 'Answer 3'];
   const img = block.img ? [`img: ${block.img}`] : [];
   lines.splice(block.startLine, block.endLine - block.startLine + 1, head, ...img, ...body);
@@ -689,7 +713,7 @@ const TEMPLATES = {
   deck: {
     choice: '# New question?\n✓ Answer 1\nAnswer 2\nAnswer 3',
     range: '# New range question?\nrange: 40-60 of 0-100',
-    sort: '#sort New sort question?\nBucket A: Item 1, Item 2\nBucket B: Item 3',
+    sort: '# New sort question?\ntype: sort\nBucket A: Item 1, Item 2\nBucket B: Item 3',
   },
   control: '# New case: set the controls\n'
     + Array.from({ length: 6 }, (_, i) => `[${i % 2 ? 'off' : 'on'}] Control ${i + 1}`).join('\n'),
@@ -746,7 +770,8 @@ export function insertTemplate(text, parsed, bucket, kind = 'choice') {
 
 /**
  * Replace just the LABEL of a line while preserving its structure: the ✓ on
- * an answer, the #/#sort tag on a head, the [on]/[off] and "(starts on)" on
+ * an answer, the # (or a legacy #sort tag) on a head, the [on]/[off] and
+ * "(starts on)" on
  * a toggle, the true:/false: prefix on a statement, the "= N (…)" tail on a
  * number control, the item list after a bucket name — or one ITEM inside a
  * bucket line when itemIx is given. Used by the shorter-phrasings picker.

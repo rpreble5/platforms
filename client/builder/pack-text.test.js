@@ -78,7 +78,8 @@ test('type inference: checks, star alias, range line, sort tag', () => {
     '# How many?',
     'range: 4-6 of 0-10 things',
     '',
-    '#sort Sort these',
+    '# Sort these',
+    'type: sort',
     'Left: one, two',
     'Right: three',
   ].join('\n'));
@@ -239,7 +240,7 @@ test('setBlockType re-templates the body but keeps text and image', () => {
   const asRange = setBlockType(doc, blocks[0], 'range');
   assert.equal(asRange, '# The question?\nimg: pic.png\nrange: 40-60 of 0-100');
   const asSort = setBlockType(doc, blocks[0], 'sort');
-  assert.match(asSort, /^#sort The question\?/);
+  assert.match(asSort, /^# The question\?\nimg: pic\.png\ntype: sort\n/);
   const backToChoice = setBlockType(asRange, parseDoc(asRange).blocks[0], 'choice');
   assert.equal(backToChoice, '# The question?\nimg: pic.png\n✓ Answer 1\nAnswer 2\nAnswer 3');
 });
@@ -265,7 +266,7 @@ test('insertTemplate appends to sections, creating headers in order', () => {
 
 test('setLabel swaps just the label, preserving line structure', () => {
   const doc = [
-    '#sort Sort each bug by stain',   // 0 head with tag
+    '#sort Sort each bug by stain',   // 0 head with a LEGACY tag
     'Gram positive: Staph aureus, Listeria', // 1 bucket
     '',                               // 2
     '# Which nerve?',                 // 3 head
@@ -313,11 +314,45 @@ test('level: pins a designed arena on choice questions, flagged elsewhere', () =
   assert.equal(range.raw.questions[0].level, undefined);
   assert.ok(range.problems.some((p) => /number line/.test(p.msg)));
 
-  const sort = parseDoc('#sort S\nlevel: Moon Gate\nA: one, two\nB: three');
+  const sort = parseDoc('# S\ntype: sort\nlevel: Moon Gate\nA: one, two\nB: three');
   assert.ok(sort.problems.some((p) => /sort plays its own/.test(p.msg)));
 
   const ctrl = parseDoc('## Control Room\n# c\nlevel: Moon Gate\n[on] A\n[on] B\n[on] C\n[on] D\n[on] E\n[on] F');
   assert.ok(ctrl.problems.some((p) => /control room/.test(p.msg)));
+});
+
+test('type: sort declares the type off the question line, legacy #sort still parses', () => {
+  const modern = parseDoc('# Sort each animal by class\ntype: sort\nMammal: Bat\nBird: Penguin');
+  assert.deepEqual(modern.problems, []);
+  assert.equal(modern.raw.questions[0].type, 'sort');
+  assert.equal(modern.raw.questions[0].text, 'Sort each animal by class'); // no tag in the text
+  assert.deepEqual(modern.raw.questions[0].buckets, ['Mammal', 'Bird']);
+  assert.equal(modern.lines[1].kind, 'directive'); // painted muted, like img:/pace:
+  assert.equal(modern.blocks[0].headLine, 0);
+
+  // the legacy tag keeps working, and means exactly the same thing
+  const legacy = parseDoc('#sort Sort each animal by class\nMammal: Bat\nBird: Penguin');
+  assert.deepEqual(legacy.raw.questions[0], modern.raw.questions[0]);
+
+  // serialize now writes the new form
+  const text = serializeDoc({ questions: [{ type: 'sort', text: 'S', buckets: ['A', 'B'],
+    items: [{ label: 'x', bucket: 0 }, { label: 'y', bucket: 1 }] }] });
+  assert.match(text, /^# S\ntype: sort\nA: x\nB: y/m);
+  assert.equal(parseDoc(text).raw.questions[0].type, 'sort');
+
+  // order-independent: the marker below the buckets still reads them
+  const below = parseDoc('# S\nA: one, two\nB: three\ntype: sort');
+  assert.deepEqual(below.problems, []);
+  assert.deepEqual(below.raw.questions[0].buckets, ['A', 'B']);
+  assert.equal(below.lines[1].kind, 'bucket');
+
+  // a bad value says what to do
+  const bad = parseDoc('# S\ntype: lightning\n✓ a\nb');
+  assert.ok(bad.problems.some((p) => p.line === 2 && /type: sort/.test(p.msg)));
+
+  // and it is a deck-only setting
+  const ctrl = parseDoc('## Control Room\n# c\ntype: sort\n[on] A\n[on] B\n[on] C\n[on] D\n[on] E\n[on] F');
+  assert.ok(ctrl.problems.some((p) => /every Control Room block is a case/.test(p.msg)));
 });
 
 test('insertTemplate deck kinds: range and sort bodies', () => {

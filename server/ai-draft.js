@@ -60,7 +60,8 @@ Mars
 # Normal resting heart rate?
 range: 60-100 of 0-160 bpm
 
-#sort Sort each animal by class
+# Sort each animal by class
+type: sort
 Mammal: Bat, Dolphin
 Bird: Penguin
 
@@ -78,10 +79,10 @@ true: An octopus has three hearts
 false: Cracking knuckles causes arthritis
 
 RULES:
-- '# ' starts a standard question; '#sort ' starts a lightning sort.
+- '# ' starts every question, whatever its type. A lightning sort adds a 'type: sort' line directly under the '# ' line; choice and range are inferred from the body.
 - Choice: ${LIMITS.answers[0]}-${LIMITS.answers[1]} answers, one per line. '✓ ' before an answer marks it correct. Two or more checks make a select-all (needs at least one unchecked wrong answer).
 - Range: 'range: LO-HI of MIN-MAX [unit]' — the answer band inside the number line. Use for numeric facts and estimates.
-- Sort: ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket: item, item' lines, ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Use for categorization.
+- Sort: a 'type: sort' line, then ${LIMITS.buckets[0]}-${LIMITS.buckets[1]} 'Bucket: item, item' lines, ${LIMITS.items[0]}-${LIMITS.items[1]} items total. Use for categorization.
 - '## Control Room' opens the teams-only bucket: each case is '# title', optional 'context: ...', then ${LIMITS.controls[0]}-${LIMITS.controls[1]} controls — '[on] Label' / '[off] Label' toggles (the verdict is the correct setting) or 'Label = ANSWER (MIN-MAX[, step N][, unit])' numbers. Use for scenario management, e.g. first-hour orders. Write at least 3 cases if you write any (one per team).
 - '## Showdown' opens the finale: one 'true: ...' or 'false: ...' statement per line. Use for myths and quick facts.
 - TEXT LIMITS (hard ceilings — text over these shrinks on the projector): question ≤ ${LIMITS.questionChars} chars, answer ≤ ${LIMITS.answerChars}, sort bucket/item ≤ ${LIMITS.sortLabelChars}, control label ≤ ${LIMITS.controlLabelChars}, statement ≤ ${LIMITS.statementChars}.
