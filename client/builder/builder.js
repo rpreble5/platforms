@@ -917,6 +917,73 @@ function loadDraft() {
   return null;
 }
 
+// The built-in demo used to ship a Control Room case and a Showdown
+// statement. Browsers that opened the Studio before that changed still have
+// them in their saved document, so the starter looks unchanged no matter
+// what the code says. These two signatures are the untouched templates —
+// nothing a person wrote looks like this.
+const DEMO_CASE = 'New case: set the controls';
+const DEMO_CASE_CONTROLS = Array.from({ length: 6 }, (_, i) => `Control ${i + 1}`);
+const DEMO_STATEMENT = 'An octopus has three hearts';
+
+/**
+ * Drop leftover demo sections from a restored document — and ONLY those.
+ * A case keeps its place unless its title AND all six control labels are
+ * still the template's; a statement unless it is the template's word for
+ * word. Any real Control Room or Showdown content, including a pack opened
+ * from the server, passes through untouched.
+ * @param {string} text @returns {string}
+ */
+function stripDemoSections(text) {
+  const isDemoCase = (/** @type {any} */ p, /** @type {any} */ b) => {
+    if (b.bucket !== 'control' || b.text !== DEMO_CASE) return false;
+    const labels = (p.raw.controlRoom?.questions[b.ix]?.controls ?? [])
+      .map((/** @type {any} */ c) => c.label);
+    return labels.length === DEMO_CASE_CONTROLS.length
+      && labels.every((/** @type {string} */ l, /** @type {number} */ i) => l === DEMO_CASE_CONTROLS[i]);
+  };
+  const isDemoStatement = (/** @type {any} */ b) =>
+    b.bucket === 'showdown' && b.text === DEMO_STATEMENT;
+
+  let p = parseDoc(text, { frontMatter: false });
+  const control = p.blocks.filter((b) => b.bucket === 'control');
+  const show = p.blocks.filter((b) => b.bucket === 'showdown');
+  // All or nothing per section: a demo case sitting next to real ones stays.
+  const dropCases = control.length > 0 && control.every((b) => isDemoCase(p, b));
+  const dropShow = show.length > 0 && show.every(isDemoStatement);
+  if (!dropCases && !dropShow) return text;
+
+  let out = text;
+  for (;;) {
+    p = parseDoc(out, { frontMatter: false });
+    const target = p.blocks.find((b) =>
+      (dropCases && isDemoCase(p, b)) || (dropShow && isDemoStatement(b)));
+    if (!target) break;
+    out = removeBlock(out, target);
+  }
+
+  // Then the headers those sections leave behind, plus their preamble
+  // directives (turns:/time:), which would otherwise become stray lines.
+  p = parseDoc(out, { frontMatter: false });
+  const lines = out.split('\n');
+  /** @type {boolean[]} */
+  const keep = lines.map(() => true);
+  lines.forEach((l, i) => {
+    if (p.lines[i]?.kind !== 'section') return;
+    const isControl = /^##\s*control/i.test(l.trim());
+    const isShow = /^##\s*showdown/i.test(l.trim());
+    if (!isControl && !isShow) return;
+    const bucket = isControl ? 'control' : 'showdown';
+    if (p.blocks.some((b) => b.bucket === bucket)) return; // still has content
+    keep[i] = false;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (p.lines[j]?.kind === 'section' || p.lines[j]?.kind === 'head') break;
+      if (p.lines[j]?.kind === 'directive' && p.lines[j].block === null) keep[j] = false;
+    }
+  });
+  return lines.filter((_, i) => keep[i]).join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '\n');
+}
+
 /**
  * Adopt a document wholesale (boot, Open, Paste, Load sample): any
  * front-matter block on top is absorbed into the Pack panel and stripped,
@@ -1107,7 +1174,7 @@ async function openPacksDlg() {
     row(draftsHolder, name, `${current ? 'open now · ' : ''}${new Date(d.at).toLocaleString()}`, () => {
       saveDraftEntry();
       meta = { ...d.meta };
-      setText(d.doc, { caret: 0 });
+      setText(stripDemoSections(d.doc), { caret: 0 });
     }, () => {
       const all = loadDrafts();
       delete all[name];
@@ -1430,7 +1497,8 @@ $('aiShorten').onclick = async () => {
 };
 
 // boot
-adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
+const restored = loadDraft();
+adoptDoc(restored === null ? serializeDoc(SAMPLE) : stripDemoSections(restored), { boot: true });
 void fetch('/api/levels')
   .then((r) => (r.ok ? r.json() : Promise.reject()))
   .then((list) => {
