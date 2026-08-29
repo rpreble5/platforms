@@ -839,7 +839,12 @@ function syncPackCard() {
 /** @param {{keepPanel?: boolean}} [opts] */
 function refresh(opts = {}) {
   parsed = parseDoc(docText, { frontMatter: false });
-  caretLn = document.activeElement === doc ? caretLine() : caretLn;
+  // When the textarea is not focused the caret line is whatever it last was,
+  // which can now point past a document that got shorter — clamp it, or the
+  // Details panel goes blank until the next click.
+  caretLn = document.activeElement === doc
+    ? caretLine()
+    : Math.max(0, Math.min(caretLn, docText.split('\n').length - 1));
   caretIx = blockAt(caretLn);
   const { problems: vproblems } = validated();
   // Inline suggestions are addressed by line number; any edit that changes
@@ -1037,16 +1042,18 @@ function adoptDoc(t, opts = {}) {
 }
 
 /**
- * The starter document: one worked example of every question type a
- * free-for-all deck can hold — multiple choice, range, lightning sort.
- * Select-all is absent on purpose: it is a teams question (covering every
- * correct platform is a team act), and this deck starts as a free-for-all.
+ * The starter: three questions, one of each type a free-for-all deck can
+ * hold — multiple choice, lightning sort, range. It is what the Studio
+ * opens with, what "Sample night" loads, and what New starts you from, so
+ * there is one starter to know rather than several.
  *
- * Deliberately no Control Room and no Showdown. Those are whole sections
- * with their own syntax, and carrying them in the starter meant everyone
- * opening the Studio had two blocks to delete before writing anything.
- * The '+ Case' and '+ T/F' buttons write those sections, headers and all,
- * for the people who want them.
+ * Select-all is absent on purpose: it is a teams question (covering every
+ * correct platform is a team act), and a new deck is a free-for-all.
+ *
+ * Deliberately no Control Room and no Showdown either. Those are whole
+ * sections with their own syntax, and carrying them in the starter meant
+ * everyone opening the Studio had two blocks to delete before writing
+ * anything of their own.
  */
 const SAMPLE = {
   pack: 'Sample night',
@@ -1054,10 +1061,9 @@ const SAMPLE = {
   answerMs: 12000,
   questions: [
     { text: 'Which planet has the most moons?', answers: ['Jupiter', 'Saturn', 'Uranus'], correct: 1 },
-    { text: 'Which of these is a gas giant?', answers: ['Jupiter', 'Mars', 'Venus', 'Mercury'], correct: 0 },
-    { type: 'range', text: 'Normal resting heart rate?', min: 0, max: 160, answer: [60, 100], unit: 'bpm' },
     { type: 'sort', text: 'Sort each animal by class', buckets: ['Mammal', 'Bird'], items: [
       { label: 'Bat', bucket: 0 }, { label: 'Penguin', bucket: 1 }, { label: 'Dolphin', bucket: 0 }] },
+    { type: 'range', text: 'Normal resting heart rate?', min: 0, max: 160, answer: [60, 100], unit: 'bpm' },
   ],
 };
 
@@ -1249,7 +1255,7 @@ async function openPacksDlg() {
     s.textContent = 'No game server reachable from this page.';
     serverHolder.appendChild(s);
   }
-  row(serverHolder, 'Sample night', 'the built-in example — one of every deck question type', () => {
+  row(serverHolder, 'Sample night', 'the built-in starter — one of each question type', () => {
     saveDraftEntry();
     adoptDoc(serializeDoc(SAMPLE));
   }, null);
@@ -1263,10 +1269,9 @@ $('packsClose').onclick = () => $('packsDlg').close();
 $('newPack').onclick = () => {
   if (!window.confirm('Start a new pack? The current one stays available under Packs…')) return;
   saveDraftEntry();
-  meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
-  carried = {};
-  levels = {};
-  setText('# \n', { caret: 2 });
+  // Three worked questions to edit over beats an empty page: adoptDoc
+  // resets the arena pins and carried sections along the way.
+  adoptDoc(serializeDoc({ ...SAMPLE, pack: 'New pack' }));
 };
 // The preview, near-fullscreen: the canvas already renders at 1920x1080,
 // so scaling up is free sharpness. Esc or the backdrop closes.
@@ -1555,7 +1560,10 @@ void fetch('/api/levels')
   .then((list) => {
     if (Array.isArray(list) && list.length) {
       levelPool = list;
-      restartPreview(); // the first preview ran before the pool arrived
+      // Both the first preview AND the first Details panel were built before
+      // the library arrived — without this the panel keeps showing the
+      // no-designed-levels fallback until you click another question.
+      refresh({ keepPanel: false });
     }
   })
   .catch(() => { /* no server (GitHub Pages): generated arenas only */ });
