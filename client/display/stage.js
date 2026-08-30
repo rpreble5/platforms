@@ -311,7 +311,11 @@ export function drawSignText(cx, p, text, opts = {}) {
   const cxp = box.x + box.w / 2;
 
   if (oneSize >= 30 || !text.includes(' ')) {
-    cx.font = `800 ${Math.max(14, oneSize)}px ${FONT.display}`;
+    // The floor is a legibility floor for a room, not a screen: 14px read
+    // fine at a desk and vanished from five metres. A single word longer
+    // than ~21 chars can now nose past the board edge instead — that is an
+    // authoring problem the Studio's length meter already flags.
+    cx.font = `800 ${Math.max(22, oneSize)}px ${FONT.display}`;
     cx.fillText(text, cxp, midY);
   } else {
     const words = text.split(' ');
@@ -324,7 +328,7 @@ export function drawSignText(cx, p, text, opts = {}) {
       if (w < best.w) best = { a, b, w };
     }
     const size = Math.max(
-      12,
+      20,
       Math.min(34, Math.floor((34 * boxW) / Math.max(1, best.w)), Math.floor((boxH - 6) / 2.15))
     );
     cx.font = `800 ${size}px ${FONT.display}`;
@@ -397,7 +401,11 @@ export function drawNumberLine(cx, q) {
   const way = activeWay();
   const lineColor = inky ? 'rgba(23,20,42,0.18)' : 'rgba(244,241,232,0.30)';
   const guideColor = inky ? 'rgba(23,20,42,0.08)' : 'rgba(244,241,232,0.08)';
-  const numColor = inky ? 'rgba(23,20,42,0.78)' : 'rgba(244,241,232,0.85)';
+  const numColor = inky ? 'rgba(23,20,42,0.94)' : 'rgba(244,241,232,0.96)';
+  // The values float over open sky with nothing behind them, so they take
+  // the name-label recipe: a contrast halo in the opposite polarity. On a
+  // panel the panel does this job; out here the stroke is the panel.
+  const numHalo = inky ? 'rgba(255,255,255,0.85)' : 'rgba(8,10,22,0.7)';
   const markColor = inky ? way.top : UI.paper;
 
   cx.save();
@@ -431,8 +439,13 @@ export function drawNumberLine(cx, q) {
     const label = v === q.max && q.unit ? `${fmtValue(v)} ${q.unit}` : fmtValue(v);
     // Numbers above the line, endpoints nudged inward so nothing crops.
     const half = cx.measureText(label).width / 2;
+    const lx = Math.max(half + 10, Math.min(WORLD_W - half - 10, x));
+    cx.lineJoin = 'round';
+    cx.lineWidth = 5;
+    cx.strokeStyle = numHalo;
+    cx.strokeText(label, lx, RAIL_Y - 16);
     cx.fillStyle = numColor;
-    cx.fillText(label, Math.max(half + 10, Math.min(WORLD_W - half - 10, x)), RAIL_Y - 16);
+    cx.fillText(label, lx, RAIL_Y - 16);
 
     // The exact mark: one small triangle just below the line, one colour.
     cx.fillStyle = markColor;

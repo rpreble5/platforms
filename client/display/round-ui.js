@@ -590,7 +590,10 @@ function drawQuestion(cx, g) {
     return;
   }
 
-  const h = 150;
+  // Tall enough for a 90-char question on TWO large lines. The old bar was
+  // one line shrunk-to-fit, which rendered the longest questions at 34px —
+  // smaller than the answers they were asking about.
+  const h = 190;
   cx.fillStyle = 'rgba(10,8,20,0.9)';
   cx.fillRect(0, 0, WORLD_W, h);
 
@@ -604,23 +607,46 @@ function drawQuestion(cx, g) {
   if (item) {
     cx.fillStyle = UI.dim;
     cx.font = `700 22px ${FONT.ui}`;
-    cx.fillText(q.text, WORLD_W / 2, 38);
+    cx.fillText(q.text, WORLD_W / 2, 40);
     cx.fillStyle = UI.paper;
-    cx.font = fitFont(cx, item.label, WORLD_W - 480, 64, 34);
-    cx.fillText(item.label, WORLD_W / 2, 102);
+    cx.font = fitFont(cx, item.label, WORLD_W - 480, 70, 38);
+    cx.fillText(item.label, WORLD_W / 2, 118);
   } else {
+    // One big line while it fits; below that, two BALANCED lines — the
+    // same rule the answer boards use, so long questions stay huge
+    // instead of shrinking to fit a single line.
+    const maxW = WORLD_W - 340;
     cx.fillStyle = UI.paper;
-    cx.font = fitFont(cx, q.text, WORLD_W - 340, 74, 34);
-    cx.fillText(q.text, WORLD_W / 2, 90);
+    cx.font = `800 74px ${FONT.display}`;
+    const wRef = cx.measureText(q.text).width;
+    const oneSize = Math.min(74, Math.floor((74 * maxW) / Math.max(1, wRef)));
+    if (oneSize >= 46 || !q.text.includes(' ')) {
+      cx.font = `800 ${Math.max(30, oneSize)}px ${FONT.display}`;
+      cx.fillText(q.text, WORLD_W / 2, 96);
+    } else {
+      const words = q.text.split(' ');
+      cx.font = `800 54px ${FONT.display}`;
+      let best = { a: q.text, b: '', w: cx.measureText(q.text).width };
+      for (let i = 1; i < words.length; i++) {
+        const a = words.slice(0, i).join(' ');
+        const b = words.slice(i).join(' ');
+        const lw = Math.max(cx.measureText(a).width, cx.measureText(b).width);
+        if (lw < best.w) best = { a, b, w: lw };
+      }
+      const size = Math.max(30, Math.min(54, Math.floor((54 * maxW) / Math.max(1, best.w))));
+      cx.font = `800 ${size}px ${FONT.display}`;
+      cx.fillText(best.a, WORLD_W / 2, 96 - size * 0.62);
+      cx.fillText(best.b, WORLD_W / 2, 96 + size * 0.62);
+    }
   }
 
   cx.font = `700 24px ${FONT.mono}`;
   cx.fillStyle = UI.faint;
   cx.textAlign = 'left';
-  cx.fillText(`Q${g.qIndex + 1}/${g.questions.length}`, 40, 90);
+  cx.fillText(`Q${g.qIndex + 1}/${g.questions.length}`, 40, 100);
   if (sortLive && q.items) {
     cx.font = `700 20px ${FONT.mono}`;
-    cx.fillText(`item ${g.itemIndex + 1}/${q.items.length}`, 40, 120);
+    cx.fillText(`item ${g.itemIndex + 1}/${q.items.length}`, 40, 130);
   }
 
   // Timer as a full-width bar rather than digits: readable out of the corner of
@@ -642,7 +668,7 @@ function drawQuestion(cx, g) {
     cx.textAlign = 'right';
     cx.font = `800 58px ${FONT.display}`;
     cx.fillStyle = UI.wrong;
-    cx.fillText(String(Math.ceil(secsLeft)), WORLD_W - 40, 98);
+    cx.fillText(String(Math.ceil(secsLeft)), WORLD_W - 40, 112);
   }
 
   // A select-all round says so out loud, or half the room hunts for THE
@@ -657,12 +683,12 @@ function drawQuestion(cx, g) {
     cx.textAlign = 'center';
     cx.font = `700 26px ${FONT.ui}`;
     cx.fillStyle = UI.dim;
-    cx.fillText('get ready…', WORLD_W / 2, 128);
+    cx.fillText('get ready…', WORLD_W / 2, 164);
   } else if (multiTag && g.phase === PHASE.ANSWER) {
     cx.textAlign = 'center';
     cx.font = `800 24px ${FONT.display}`;
     cx.fillStyle = UI.gold;
-    cx.fillText(multiTag, WORLD_W / 2, 128);
+    cx.fillText(multiTag, WORLD_W / 2, 164);
   }
 
   // Say it out loud, or the settle reads as the game having hung.
@@ -670,7 +696,7 @@ function drawQuestion(cx, g) {
     cx.textAlign = 'center';
     cx.font = `800 30px ${FONT.display}`;
     cx.fillStyle = UI.warn;
-    cx.fillText(isSortQuestion(q) ? 'final tally…' : "TIME'S UP", WORLD_W / 2, 130);
+    cx.fillText(isSortQuestion(q) ? 'final tally…' : "TIME'S UP", WORLD_W / 2, 164);
   }
   cx.textAlign = 'left';
 
@@ -723,8 +749,8 @@ function drawQuestionImage(cx, q) {
   const maxW = 780;
   // The height budget honors a contract the sim tests pin: image questions
   // keep ALL furniture in the bottom band, and the closest thing to the
-  // picture is the range rail at y=770 — matte bottom (190 + 420 + 14)
-  // clears it by ~145px. Grow maxH only with that budget in mind.
+  // picture is the range rail at y=770 — matte bottom (230 + 420 + 14)
+  // clears it by ~105px. Grow maxH only with that budget in mind.
   const maxH = 420;
   // Fit the box; tiny images may grow a little, but never into mush.
   const s = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 2);
@@ -732,7 +758,7 @@ function drawQuestionImage(cx, q) {
   const h = Math.round(img.naturalHeight * s);
   const pad = 14;
   const x = (WORLD_W - w) / 2;
-  const y = 190;
+  const y = 230; // below the taller banner, same 40px of air as before
   cx.save();
   // A white photographic matte on every theme: clinical images are authored
   // against white, and the matte is what separates them from any sky.
