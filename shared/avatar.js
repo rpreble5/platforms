@@ -105,7 +105,9 @@ export function accessoryHidesEyes(key) {
  *   ink outline), 'pastel' (hue washed toward white, deep same-hue outline,
  *   blush), 'ghost' (porcelain body, identity in a thick same-hue outline),
  *   'dipped' (flat with the base dunked in a deeper shade), 'glow' (flat
- *   with a soft same-colour aura)
+ *   with a soft same-colour aura), 'neon' (near-ink body, the identity in a
+ *   luminous same-hue outline — the only dark-bodied finish, so its eyes go
+ *   paper: see eyeColorFor)
  * @param {number} w @param {number} h
  * @param {string} shape 'egg' | 'pill' | 'loaf'
  * @param {boolean} [eyes] false when the caller draws live eyes itself
@@ -114,6 +116,7 @@ export function accessoryHidesEyes(key) {
 export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory = 'none') {
   const pastel = finish === 'pastel';
   const ghost = finish === 'ghost';
+  const neon = finish === 'neon';
 
   // Body fill: flat keeps the hue nearly full strength; pastel washes it;
   // ghost bleaches it almost to porcelain. All FLAT fills — no gloss
@@ -127,6 +130,16 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
     cx.shadowColor = color;
     cx.shadowBlur = 10;
     cx.fillStyle = shade(color, 0.12);
+    cx.fill();
+    cx.restore();
+  } else if (neon) {
+    // Night mode: the body goes almost to ink and the COLOUR moves into
+    // the outline, with glow's aura underneath. The only dark-bodied
+    // finish — instantly findable in a crowd of light beans.
+    cx.save();
+    cx.shadowColor = color;
+    cx.shadowBlur = 12;
+    cx.fillStyle = shade(color, -0.62);
     cx.fill();
     cx.restore();
   } else {
@@ -165,9 +178,19 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
   // IS the colour, thick enough to carry identity on its own.
   cx.beginPath();
   avatarBodyPath(cx, w, h, shape);
-  cx.lineWidth = ghost ? 4 : 3;
-  cx.strokeStyle = ghost ? shade(color, -0.1) : pastel ? shade(color, -0.45) : AVATAR_INK;
-  cx.stroke();
+  cx.lineWidth = ghost || neon ? 4 : 3;
+  if (neon) {
+    // The luminous line IS the neon: the tube, with its own soft spill.
+    cx.save();
+    cx.shadowColor = color;
+    cx.shadowBlur = 8;
+    cx.strokeStyle = shade(color, 0.15);
+    cx.stroke();
+    cx.restore();
+  } else {
+    cx.strokeStyle = ghost ? shade(color, -0.1) : pastel ? shade(color, -0.45) : AVATAR_INK;
+    cx.stroke();
+  }
 
   if (pastel) {
     // Blush, the same hue a step deeper. Charm at close range; invisible in
@@ -183,7 +206,7 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
 
   if (eyes && !accessoryHidesEyes(accessory)) {
     const er = Math.max(EYES.rMin, w * EYES.r);
-    cx.fillStyle = EYES.color;
+    cx.fillStyle = eyeColorFor(finish);
     cx.beginPath();
     cx.arc(w * EYES.x1, h * EYES.y, er, 0, Math.PI * 2);
     cx.arc(w * EYES.x2, h * EYES.y, er, 0, Math.PI * 2);
@@ -191,6 +214,17 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
   }
 
   drawAccessory(cx, accessory, w, h);
+}
+
+/**
+ * Eye ink for a finish: the standard ink everywhere, paper on neon — ink
+ * eyes vanish on neon's near-ink body. Shared with the display's live
+ * blinking eyes (render.js), so the sprite and the live pair can never
+ * disagree.
+ * @param {string} finish @returns {string}
+ */
+export function eyeColorFor(finish) {
+  return finish === 'neon' ? '#f4f1e8' : EYES.color;
 }
 
 /**

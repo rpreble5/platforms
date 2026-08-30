@@ -13,7 +13,7 @@ import { PHASE, activeControlTeam, currentQuestion, isControlQuestion } from '..
 import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
-import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
+import { AVATAR_PAD, EYES, eyeColorFor, getAvatar, getLabel, shade } from './sprites.js';
 import { drawDebris, drawSigns, inkPanel, lobbyVeil, panel } from './round-ui.js';
 import { GLASS_CHUNK_H, drawFloor, drawPerch, drawSky } from './stage.js';
 import { FONT, UI } from './theme.js';
@@ -193,7 +193,9 @@ export function render(cx, world, roster, game, opts) {
     if (!accessoryHidesEyes(look.accessory ?? 'none')) {
       const er = Math.max(EYES.rMin, w * EYES.r) * (a?.eye.scale ?? 1);
       const ey = -drawnH + drawnH * EYES.y + (a ? a.eye.dy * er : 0);
-      cx.fillStyle = EYES.color;
+      // Paper eyes on neon's dark body; the sprite and the live pair share
+      // the rule through eyeColorFor.
+      cx.fillStyle = eyeColorFor(look.finish ?? 'flat');
       cx.beginPath();
       for (const fx of [EYES.x1, EYES.x2]) {
         const ex = -w / 2 + w * fx + (a ? a.eye.dx * er : 0);
