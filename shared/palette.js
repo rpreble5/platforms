@@ -113,6 +113,8 @@ export const FINISHES = [
   { key: 'dipped', label: 'Dipped' },
   { key: 'glow', label: 'Glow' },
   { key: 'neon', label: 'Neon' },
+  { key: 'jelly', label: 'Jelly' },
+  { key: 'snow', label: 'Snow' },
 ];
 
 /** Free slots per colour within one year: a colour is claimed whole. */

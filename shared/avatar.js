@@ -107,7 +107,9 @@ export function accessoryHidesEyes(key) {
  *   'dipped' (flat with the base dunked in a deeper shade), 'glow' (flat
  *   with a soft same-colour aura), 'neon' (near-ink body, the identity in a
  *   luminous same-hue outline — the only dark-bodied finish, so its eyes go
- *   paper: see eyeColorFor)
+ *   paper: see eyeColorFor), 'jelly' (translucent gummy: washed body, a
+ *   deeper same-hue core floating inside, one hard gloss chip), 'snow' (a
+ *   cream cap with a wavy hem, like fresh snow on a roof)
  * @param {number} w @param {number} h
  * @param {string} shape 'egg' | 'pill' | 'loaf'
  * @param {boolean} [eyes] false when the caller draws live eyes itself
@@ -117,6 +119,7 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
   const pastel = finish === 'pastel';
   const ghost = finish === 'ghost';
   const neon = finish === 'neon';
+  const jelly = finish === 'jelly';
 
   // Body fill: flat keeps the hue nearly full strength; pastel washes it;
   // ghost bleaches it almost to porcelain. All FLAT fills — no gloss
@@ -143,8 +146,55 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
     cx.fill();
     cx.restore();
   } else {
-    cx.fillStyle = shade(color, ghost ? 0.78 : pastel ? 0.45 : 0.12);
+    cx.fillStyle = shade(color, ghost ? 0.78 : jelly ? 0.5 : pastel ? 0.45 : 0.12);
     cx.fill();
+  }
+
+  if (jelly) {
+    // The gummy read is two clipped marks: a deeper same-hue CORE floating
+    // low in the body (the bean within the bean), and one hard-edged gloss
+    // chip up top — flat white, not a gradient, per the house rule.
+    cx.save();
+    cx.beginPath();
+    avatarBodyPath(cx, w, h, shape);
+    cx.clip();
+    cx.globalAlpha = 0.55;
+    cx.fillStyle = shade(color, -0.05);
+    cx.save();
+    cx.translate(w * 0.2, h * 0.42);
+    cx.scale(0.6, 0.55);
+    cx.beginPath();
+    avatarBodyPath(cx, w, h, shape);
+    cx.fill();
+    cx.restore();
+    cx.globalAlpha = 1;
+    cx.fillStyle = 'rgba(255,255,255,0.55)';
+    cx.beginPath();
+    cx.ellipse(w * 0.32, h * 0.16, w * 0.2, h * 0.1, -0.5, 0, Math.PI * 2);
+    cx.fill();
+    cx.restore();
+  }
+
+  if (finish === 'snow') {
+    // A cream cap with a wavy hem — fresh snowfall on the bean's roof.
+    // Same clip technique as dipped, on the other end of the body.
+    cx.save();
+    cx.beginPath();
+    avatarBodyPath(cx, w, h, shape);
+    cx.clip();
+    cx.fillStyle = shade(color, 0.72);
+    cx.beginPath();
+    cx.moveTo(-4, -4);
+    cx.lineTo(w + 4, -4);
+    const hem = h * 0.34;
+    cx.lineTo(w + 4, hem);
+    for (let i = 4; i >= 0; i--) {
+      const x = (i / 4) * w;
+      cx.quadraticCurveTo(x + w * 0.1, hem + (i % 2 ? -h * 0.05 : h * 0.07), x, hem);
+    }
+    cx.closePath();
+    cx.fill();
+    cx.restore();
   }
 
   if (pastel) {
@@ -188,7 +238,10 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
     cx.stroke();
     cx.restore();
   } else {
-    cx.strokeStyle = ghost ? shade(color, -0.1) : pastel ? shade(color, -0.45) : AVATAR_INK;
+    cx.strokeStyle = ghost ? shade(color, -0.1)
+      : pastel ? shade(color, -0.45)
+        : jelly ? shade(color, -0.4)
+          : AVATAR_INK;
     cx.stroke();
   }
 
