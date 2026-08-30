@@ -501,7 +501,7 @@
     g.clearRect(0, 0, c.width, c.height);
     var cohort = COHORTS[msg.cohortSet ? msg.cohortIndex : DEFAULT_COHORT] || COHORTS[DEFAULT_COHORT];
     var h = 56 * cohort.height;
-    var Z = 2.7; // tallest body (78.4 units) still clears the 224px canvas
+    var Z = (c.height - 4) / (TALLEST + HAT); // tallest body IN A HAT fits
     g.save();
     g.translate(c.width / 2 - (40 * Z) / 2, c.height - 4 - h * Z);
     g.scale(Z, Z);
@@ -829,6 +829,17 @@
     tapper(elAccs, '.ac', function (i) { pickedAcc = i; popPreview(); paintSwatches(); });
   }
 
+  // Hats draw ABOVE the head: the party cone plus its pom tops out around
+  // 20 body units over y=0, so every full-figure preview reserves HAT units
+  // of headroom over the TALLEST cohort. Sized once against the biggest
+  // silhouette, not per pick — a year change must grow the bean from its
+  // feet, never rescale the whole scene around it.
+  var HAT = 22;
+  var TALLEST = 0;
+  for (var ci = 0; ci < COHORTS.length; ci++) {
+    TALLEST = Math.max(TALLEST, 56 * COHORTS[ci].height);
+  }
+
   /** The accessory tiles: a mini pill bean wearing each option. */
   function paintAccs(hex, finKey) {
     for (var i = 0; i < elAccs.children.length; i++) {
@@ -855,7 +866,7 @@
     var cohort = COHORTS[pickedYear >= 0 ? pickedYear : DEFAULT_COHORT];
     var colorIdx = pickedColor >= 0 ? pickedColor : 0;
     var h = 56 * cohort.height;
-    var Z = 3.6; // tallest body (78.4px) still clears the canvas top
+    var Z = 292 / (TALLEST + HAT); // tallest body IN A HAT still clears the top
     g.save();
     g.translate(elPrev.width / 2 - (40 * Z) / 2, 292 - h * Z);
     g.scale(Z, Z);
