@@ -46,7 +46,7 @@ import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from
 import { setRound, setTheme } from './themes.js';
 import { cycleVoice, tickAudio, toggleMuted, unlockAudio } from './audio.js';
 import { drawConfetti } from './fx.js';
-import { drawRoundOverlay, maxScroll, windowCount } from './round-ui.js';
+import { drawRoundOverlay } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
 import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
@@ -342,9 +342,15 @@ const menu = {
   look: 'deck',
   /** The row the pointer is over, for hover feedback. @type {string|null} */
   hover: null,
-  /** First list entry drawn: the deck list is a window, not the whole
-   *  library, so a big questions/ folder cannot outgrow the screen. */
-  deckScroll: 0,
+  /** Which mode's shelf the deck card is paging through. A filter, not a
+   *  second owner of the mode: it only ever offers decks written for that
+   *  mode, and the deck that loads still decides how the night is played.
+   *  @type {'solo'|'teams'} */
+  browse: 'solo',
+  /** The deck you were last on in each mode, so switching the segment back
+   *  returns you where you were instead of to the top of the shelf.
+   *  @type {{solo: string|null, teams: string|null}} */
+  lastIn: { solo: null, teams: null },
   // The dev-tools tab: the full key list, folded away until clicked.
   dev: false,
 };
@@ -375,64 +381,30 @@ function decksFor(mode) {
   return menu.packs.filter((p) => (p.mode ?? 'solo') === mode);
 }
 
-/** The library in display order: free-for-all decks first, then teams. */
-function orderedPacks() {
-  return [...decksFor('solo'), ...decksFor('teams')];
+/** The shelf on the deck card: the decks of the mode being browsed. */
+function shelf() {
+  return decksFor(menu.browse);
+}
+
+/** Where the loaded deck sits on its shelf (0 when it is not on this one). */
+function shelfIndex() {
+  const file = menu.packs[menu.packIndex]?.file;
+  return Math.max(0, shelf().findIndex((p) => p.file === file));
 }
 
 /**
- * The list the lobby draws: a mode heading, then that mode's decks. Used
- * here only for scrolling arithmetic — the renderer builds its own from
- * the same packs, and both agree because both read decksFor().
- * @returns {Array<{kind: 'head'|'deck', file?: string}>}
- */
-function listEntries() {
-  /** @type {Array<{kind: 'head'|'deck', file?: string}>} */
-  const out = [];
-  for (const mode of /** @type {const} */ (['solo', 'teams'])) {
-    const list = decksFor(mode);
-    if (!list.length) continue;
-    out.push({ kind: 'head' });
-    for (const p of list) out.push({ kind: 'deck', file: p.file });
-  }
-  return out;
-}
-
-/** Keep the cursor's deck inside the visible window. */
-function followScroll() {
-  const entries = listEntries();
-  const kinds = entries.map((e) => e.kind);
-  const max = maxScroll(kinds);
-  const item = menuItems()[menu.sel] ?? '';
-  if (item.startsWith('deck:')) {
-    const at = entries.findIndex((e) => e.kind === 'deck' && `deck:${e.file}` === item);
-    if (at >= 0) {
-      // A deck's heading is the entry above it; pull that in too when we can.
-      if (at < menu.deckScroll + 1) menu.deckScroll = Math.max(0, at - 1);
-      else if (at >= menu.deckScroll + windowCount(kinds, menu.deckScroll)) {
-        while (menu.deckScroll < max && at >= menu.deckScroll + windowCount(kinds, menu.deckScroll)) {
-          menu.deckScroll++;
-        }
-      }
-    }
-  }
-  menu.deckScroll = Math.max(0, Math.min(menu.deckScroll, max));
-}
-
-/**
- * The rows the cursor moves through: every deck, then the two settings,
- * then Start last — so one ArrowUp from the top of the list reaches Start
- * however many decks there are.
+ * The rows the cursor moves through, fixed however big the library gets:
+ * the mode segment, the deck card, the two settings, then Start last — so
+ * one ArrowUp from the top still reaches Start in a single press.
  *
- * The mode is not a row. A deck is written for one mode and carries it, so
- * choosing a deck IS choosing the mode; there is nothing to contradict.
- * Control Room and Showdown are absent too: both still parse, validate and
+ * Every row answers ◂ ▸ the same way (flip the mode, page the deck, cycle
+ * the setting), which is what lets one menuAdjust handle all of them.
+ * Control Room and Showdown are absent: both still parse, validate and
  * play, but neither is authored or offered any more.
  * @returns {string[]}
  */
 function menuItems() {
-  const items = [...orderedPacks().map((p) => `deck:${p.file}`), 'time', 'look', 'quiz'];
-  // A shorter list must never strand the cursor past its end.
+  const items = ['mode', 'deck', 'time', 'look', 'quiz'];
   if (menu.sel >= items.length) menu.sel = items.length - 1;
   if (menu.sel < 0) menu.sel = 0;
   return items;
@@ -544,18 +516,30 @@ function menuView() {
   };
 }
 
+/** Bumped by every selectPack; a slower earlier fetch drops its result. */
+let packSeq = 0;
+
 /**
  * Load a pack by index into the live game. Only ever called in the lobby,
  * where scores are empty and losing the Game object costs nothing.
+ *
+ * Paging the deck card fires one of these per press, so a fast run through
+ * the shelf has several in flight at once. The index moves immediately —
+ * the card must never lag the arrow — and a response is applied only if no
+ * later request has started since, or a slow early fetch would land on top
+ * of the deck the host actually stopped on.
  * @param {number} index
  */
 async function selectPack(index) {
   if (!menu.packs.length) return;
   menu.packIndex = ((index % menu.packs.length) + menu.packs.length) % menu.packs.length;
+  const file = menu.packs[menu.packIndex].file;
+  menu.lastIn[(menu.packs[menu.packIndex].mode ?? 'solo')] = file;
+  const seq = ++packSeq;
   menu.loading = true;
   try {
-    const file = menu.packs[menu.packIndex].file;
     const pack = await fetch(`/api/questions?pack=${encodeURIComponent(file)}`).then((r) => r.json());
+    if (seq !== packSeq) return; // a later deck was asked for; this one is stale
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
       game.levelPool = levelPool;
@@ -571,10 +555,37 @@ async function selectPack(index) {
       hud.note = `${file}: no valid questions`;
     }
   } catch {
-    hud.note = 'could not load pack';
+    if (seq === packSeq) hud.note = 'could not load pack';
   }
+  if (seq !== packSeq) return;
   menu.loading = false;
   lastCheckpoint = 0;
+}
+
+/**
+ * Page the deck card. Wrapping is the point: with a long shelf, ◂ from the
+ * first deck is the shortest way to the last one.
+ * @param {number} dir
+ */
+function pageDeck(dir) {
+  const list = shelf();
+  if (list.length < 2) return;
+  const next = list[(shelfIndex() + dir + list.length) % list.length];
+  void selectPack(menu.packs.indexOf(next));
+}
+
+/**
+ * Show a mode's shelf, and load the deck the host was last on there (or its
+ * first). A mode with no decks is not offered — switching to it would leave
+ * the card empty and Start pointing at a deck that is no longer on screen.
+ * @param {'solo'|'teams'} mode
+ */
+function browseMode(mode) {
+  const list = decksFor(mode);
+  if (!list.length || menu.browse === mode) return;
+  menu.browse = mode;
+  const back = list.find((p) => p.file === menu.lastIn[mode]) ?? list[0];
+  void selectPack(menu.packs.indexOf(back));
 }
 
 /** The answer-time setting cycles through party-sensible windows. */
@@ -590,7 +601,9 @@ function cycleTime(dir) {
 
 /** @param {string} item @param {number} dir */
 function menuAdjust(item, dir) {
-  if (item === 'time') cycleTime(dir);
+  if (item === 'deck') pageDeck(dir);
+  else if (item === 'mode') browseMode(menu.browse === 'solo' ? 'teams' : 'solo');
+  else if (item === 'time') cycleTime(dir);
   else if (item === 'look') {
     const at = Math.max(0, LOOKS.indexOf(menu.look));
     menu.look = LOOKS[(at + dir + LOOKS.length) % LOOKS.length];
@@ -604,9 +617,13 @@ function menuAdjust(item, dir) {
  * @param {string} item
  */
 function menuActivate(item) {
-  if (item.startsWith('deck:')) {
-    const file = item.slice(5);
-    const ix = menu.packs.findIndex((p) => p.file === file);
+  if (item === 'deck:prev') pageDeck(-1);
+  else if (item === 'deck:next') pageDeck(1);
+  else if (item.startsWith('mode:')) {
+    browseMode(item.slice(5) === 'teams' ? 'teams' : 'solo');
+  } else if (item.startsWith('dot:')) {
+    // A dot is a direct jump to that deck — the shelf's shortcut past ▸.
+    const ix = menu.packs.findIndex((p) => p.file === item.slice(4));
     if (ix >= 0) void selectPack(ix);
   } else if (item === 'quiz') {
     // The button itself carries the reason, so a blocked press stays quiet
@@ -917,7 +934,6 @@ function onKey(e, down) {
       if (k === 'arrowup') menu.sel = (menu.sel + items.length - 1) % items.length;
       else if (k === 'arrowdown') menu.sel = (menu.sel + 1) % items.length;
       else menuAdjust(items[menu.sel], k === 'arrowright' ? 1 : -1);
-      followScroll();
       e.preventDefault();
       return;
     }
@@ -1036,11 +1052,11 @@ addEventListener('pointermove', (e) => {
   wakeCursor();
 });
 
+// The wheel pages the deck card: a scroll over the lobby flips through the
+// shelf, which is what a scroll on a row of covers is expected to do.
 canvas.addEventListener('wheel', (e) => {
-  if (!menuOpen()) return;
-  const max = maxScroll(listEntries().map((e) => e.kind));
-  if (!max) return;
-  menu.deckScroll = Math.max(0, Math.min(max, menu.deckScroll + (e.deltaY > 0 ? 1 : -1)));
+  if (!menuOpen() || shelf().length < 2) return;
+  pageDeck(e.deltaY > 0 ? 1 : -1);
   e.preventDefault();
 }, { passive: false });
 
@@ -1060,14 +1076,19 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   // A click acts, the way a click does everywhere else. The cursor follows
-  // it so the keyboard picks up where the pointer left off.
-  const items = menuItems();
-  const ix = items.indexOf(target.id);
-  if (ix < 0) return;
-  menu.sel = ix;
-  followScroll();
-  menuActivate(items[ix]);
+  // it so the keyboard picks up where the pointer left off — a control
+  // inside a row (an arrow, a dot, a mode pill) parks the cursor on the row
+  // that owns it.
+  menu.sel = Math.max(0, menuItems().indexOf(rowOf(target.id)));
+  menuActivate(target.id);
 });
+
+/** The cursor row a clickable belongs to. @param {string} id */
+function rowOf(id) {
+  if (id.startsWith('mode:')) return 'mode';
+  if (id.startsWith('deck:') || id.startsWith('dot:')) return 'deck';
+  return id;
+}
 // A window that loses focus must release, or the avatar runs forever.
 addEventListener('blur', () => {
   localMask = 0;
@@ -1158,6 +1179,11 @@ async function init() {
     if (Array.isArray(packs) && packs.length) {
       menu.packs = packs;
       menu.packIndex = Math.max(0, packs.findIndex((/** @type {any} */ p) => p.file === pack?.file));
+      // The card opens on the shelf the booted deck belongs to, so the mode
+      // segment and the deck under it can never disagree on the first frame.
+      const here = menu.packs[menu.packIndex];
+      menu.browse = (here?.mode ?? 'solo') === 'teams' ? 'teams' : 'solo';
+      menu.lastIn[menu.browse] = here?.file ?? null;
     }
   } catch {
     hud.note = 'could not load questions';

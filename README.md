@@ -45,7 +45,7 @@ with no phone at all.
 | key | on the display |
 |---|---|
 | **`Enter`** | **activate the menu row / skip to the next question** |
-| `↑` `↓` `←` `→` | in the lobby: navigate the menu, change pack / answer time |
+| `↑` `↓` `←` `→` | in the lobby: `↑↓` move down the column, `←→` page decks / flip the mode / change a setting |
 | `S` | start the showdown (sudden-death true/false, from the lobby) |
 | `P` | pause |
 | `R` | restart from question one / abort the showdown |
@@ -62,11 +62,12 @@ lobby (name it with a top-level `"pack"` field). Decks are re-read on every
 selection, so editing one and re-picking it is the whole edit loop.
 
 **A deck is played one way, and says so**: `"mode": "solo"` for a
-free-for-all or `"mode": "teams"`. The lobby asks which kind of night it is
-first and then lists only that mode's decks, so a deck is never played the
-way it was not written for. A deck that does not say is read from its
-questions — select-all only works in teams, so a deck using one is a teams
-deck. Two ship:
+free-for-all or `"mode": "teams"`. The lobby's mode segment picks which kind
+of night it is, and the card below it pages only that mode's decks, so a
+deck is never played the way it was not written for. The deck on the card is
+the deck that will play — paging is picking, there is no separate confirm.
+A deck that does not say is read from its questions — select-all only works
+in teams, so a deck using one is a teams deck. Two ship:
 
 - **`mixed.json`** — free-for-all, 14 questions of general knowledge and
   medicine, one of every type a single player can answer.
