@@ -99,9 +99,9 @@ What covers it, as fractions of the image height:
 
 ## `assets/fonts/display.woff2` — the display face
 
-**Filled: Fredoka** (variable, latin, weight axis 300–700), with its OFL
-license alongside as `OFL-Fredoka.txt`. Draw code asking for 800 clamps to
-700, which is intentional — one file serves every weight.
+**Filled: Baloo 2** (variable, latin, weight axis 400–800), with its OFL
+license alongside as `OFL-Baloo2.txt`. The 800s the draw code asks for
+render true — one file serves every weight.
 
 **Self-hosted on purpose — don't link Google Fonts.** There's no internet at
 the venue, so a CDN link would silently fall back to the system face on the

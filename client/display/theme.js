@@ -48,11 +48,12 @@ export const UI = {
 };
 
 /**
- * Fonts. `display` is Fredoka (variable, OFL — assets/fonts/display.woff2 +
- * OFL-Fredoka.txt), served by the @font-face in client/display/index.html;
+ * Fonts. `display` is Baloo 2 (variable, OFL — assets/fonts/display.woff2 +
+ * OFL-Baloo2.txt), served by the @font-face in client/display/index.html;
  * the system stack is only the fallback for the first frames before it
- * loads. Fredoka's weight axis tops out at 700, so the 800s in draw code
- * clamp there — intentional, it keeps one file serving every weight.
+ * loads. Baloo 2's weight axis runs 400–800, so the 800s in draw code
+ * render true — the heavy START/question weights are real, not clamped
+ * the way they were under Fredoka.
  */
 export const FONT = {
   display: '"PlatformsDisplay", ui-rounded, "SF Pro Rounded", system-ui, sans-serif',
