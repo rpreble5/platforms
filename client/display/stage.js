@@ -189,10 +189,11 @@ export const GLASS_CHUNK_H = SLAB_H + PLAQUE_GAP + PLAQUE_H;
 function drawGlassChunk(cx, x, y, w, h, r, state) {
   const fam = glassFam();
   // The winning chunk must go WHITER than resting glass on every family —
-  // the lit veil clears the family's own body with room to spare (light
-  // families rest at 0.5 white, dark ones at 0.13), and the text keeps its
-  // usual ink: the verdict belongs to the glass, not the lettering. 0.48
-  // on the dark side is the ceiling where white 0.96 text still reads.
+  // light families rest on near-solid porcelain (0.9 white) and dark ones
+  // on smoked glass (a dark tinted body), so the lit veil clears both with
+  // room to spare, and the text keeps its usual ink: the verdict belongs
+  // to the glass, not the lettering. 0.48 on the dark side is the ceiling
+  // where white 0.96 text still reads.
   const litFill = fam.light ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.48)';
   cx.save();
   cx.beginPath();
