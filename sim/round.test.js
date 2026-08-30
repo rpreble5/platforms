@@ -39,6 +39,7 @@ import {
   inputsLive,
   skip,
   createGame,
+  lateBonus,
   speedBonus,
   standings,
   startGame,
@@ -160,7 +161,7 @@ test('a round runs LOBBY -> INTRO -> ANSWER -> LOCK -> REVEAL -> SCORE', () => {
   assert.equal(game.qIndex, 1);
 });
 
-test('arriving earlier scores more than arriving later', () => {
+test('multiple choice pays the NERVE bonus: committing later scores more', () => {
   const { world, game } = rig();
   addPlayer(world, 1);
   addPlayer(world, 2);
@@ -177,9 +178,33 @@ test('arriving earlier scores more than arriving later', () => {
   const early = resultFor(game, 1);
   const late = resultFor(game, 2);
   assert.ok(early.correct && late.correct, 'both were on the right platform');
+  assert.ok(late.points > early.points, `${late.points} should beat ${early.points}`);
+  // rank runs in the ramp's direction: the latest commit is 1st here
+  assert.equal(late.rank, 1);
+  assert.equal(early.rank, 2);
+});
+
+test('select-all keeps the SPEED bonus: a late-bonus would fight coverage', () => {
+  const { world, game } = rig([
+    { text: 'Pick both', answers: ['a', 'b', 'c', 'd'], correct: [0, 1] },
+  ]);
+  addPlayer(world, 1);
+  addPlayer(world, 2);
+  startGame(game, world);
+  run(world, game, 3100); // into ANSWER
+
+  standOn(world, 1, 0);
+  run(world, game, 1000);
+  standOn(world, 2, 1);
+
+  run(world, game, 11900);
+  assert.equal(game.phase, PHASE.REVEAL);
+
+  const early = resultFor(game, 1);
+  const late = resultFor(game, 2);
+  assert.ok(early.correct && late.correct, 'both stood on correct platforms');
   assert.ok(early.points > late.points, `${early.points} should beat ${late.points}`);
   assert.equal(early.rank, 1);
-  assert.equal(late.rank, 2);
 });
 
 test('a wrong platform scores nothing, and so does the floor', () => {
@@ -302,6 +327,16 @@ test('pause freezes the round', () => {
 });
 
 // ---------------------------------------------------------------- fairness
+
+test('the nerve bonus is the speed bonus mirrored, clamped at both ends', () => {
+  assert.equal(lateBonus(0, 12000), 0);
+  assert.equal(lateBonus(12000, 12000), MAX_SPEED_BONUS);
+  assert.equal(lateBonus(6000, 12000), MAX_SPEED_BONUS / 2);
+  assert.equal(lateBonus(-500, 12000), 0, 'never negative');
+  assert.equal(lateBonus(99999, 12000), MAX_SPEED_BONUS, 'never more than the max');
+  assert.equal(lateBonus(4000, 12000) + speedBonus(4000, 12000), MAX_SPEED_BONUS,
+    'the two ramps mirror around the same budget');
+});
 
 test('speed bonus decays linearly and is clamped at both ends', () => {
   assert.equal(speedBonus(0, 12000), MAX_SPEED_BONUS);

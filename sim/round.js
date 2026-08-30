@@ -3,16 +3,19 @@
  *
  * SCORING, and why it is shaped this way:
  *
- * Points decay smoothly with arrival time rather than being ranked. Ranking
+ * Points vary smoothly with arrival time rather than being ranked. Ranking
  * would make the score depend on ordering, and at 30 players the gap between
  * adjacent arrivals is often tens of milliseconds — which is the same size as
  * the spread in network latency. Rank scoring would therefore quietly hand
  * points to whoever has the better phone and the better spot in the room.
+ * A linear ramp over a 12-second window makes 100ms worth about four points
+ * out of five hundred, so the connection never decides anything.
  *
- * A linear decay over a 12-second window makes 100ms worth about four points
- * out of five hundred. So what actually gets rewarded is deciding fast, not
- * having a fast connection — which is the only version of "first gets more"
- * that's fair to run at a party.
+ * WHICH WAY the ramp runs depends on the question. Plain multiple choice
+ * pays the bonus to the LAST first-touch on the correct platform — hold
+ * your nerve, commit late, win more (lateBonus). Everything else keeps the
+ * classic decay: fast pays on select-all (a team has coverage to build),
+ * ranges and sort items (speedBonus).
  *
  * Rank is still shown on screen, because "you were 3rd!" is the fun part. It
  * just doesn't drive the maths.
@@ -828,11 +831,16 @@ function score(g, world) {
       results.push({ id: p.id, correct: false, points: 0, rank: 0, arrivalMs: Infinity });
       continue;
     }
+    // Plain multiple choice inverts the ramp: the bonus grows with how
+    // long you dared to wait before committing. Select-all keeps speed —
+    // a late-bonus would fight the team's coverage job — and ranges keep
+    // it too, so a decisive read still pays there.
+    const nerve = isChoice(q) && !isMulti(q);
     const arrivalMs = g.arrivals.get(p.id) ?? window;
     results.push({
       id: p.id,
       correct: true,
-      points: BASE_POINTS + speedBonus(arrivalMs, window),
+      points: BASE_POINTS + (nerve ? lateBonus : speedBonus)(arrivalMs, window),
       rank: 0,
       arrivalMs,
     });
@@ -868,10 +876,13 @@ function score(g, world) {
   }
 
   // Rank is display only — it never feeds the maths, precisely so that a
-  // photo-finish decided by someone's WiFi can't change anyone's score.
+  // photo-finish decided by someone's WiFi can't change anyone's score. It
+  // runs in the ramp's direction: on a nerve round the latest commit is
+  // 1st, everywhere else the earliest is.
+  const nerveRound = isChoice(q) && !isMulti(q);
   results
     .filter((r) => r.correct)
-    .sort((a, b) => a.arrivalMs - b.arrivalMs)
+    .sort((a, b) => (nerveRound ? b.arrivalMs - a.arrivalMs : a.arrivalMs - b.arrivalMs))
     .forEach((r, i) => {
       r.rank = i + 1;
     });
@@ -947,6 +958,29 @@ export function speedBonus(arrivalMs, windowMs) {
   if (windowMs <= 0) return 0;
   const frac = Math.max(0, Math.min(1, arrivalMs / windowMs));
   return Math.round(MAX_SPEED_BONUS * (1 - frac));
+}
+
+/**
+ * speedBonus mirrored: the bonus GROWS with arrival time. Multiple choice
+ * pays this one — the game of nerve, where standing on the floor until the
+ * last second and committing late is what earns the extra. First touch
+ * still sets your time, so landing early and hopping at the buzzer buys
+ * nothing, and someone who only lands in the settle counts as the window's
+ * edge — the latest possible commit.
+ * @param {number} arrivalMs
+ * @param {number} windowMs
+ * @returns {number}
+ */
+export function lateBonus(arrivalMs, windowMs) {
+  if (windowMs <= 0) return 0;
+  const frac = Math.max(0, Math.min(1, arrivalMs / windowMs));
+  return Math.round(MAX_SPEED_BONUS * frac);
+}
+
+/** A plain multiple-choice question: the default type, nothing declared —
+ *  the loader never emits a literal 'choice' (see shared/pack-validate). */
+function isChoice(/** @type {Question} */ q) {
+  return q.type === undefined;
 }
 
 /**

@@ -5,7 +5,8 @@ gamepads (left / right / jump). One central screen owns the physics and the
 rendering. Nobody looks at their phone while playing.
 
 Rounds work: a question appears, the platforms get answer labels, a timer runs,
-the wrong platforms crumble, and points go to whoever committed fastest.
+the wrong platforms crumble — and on multiple choice the extra points go to
+whoever dared to commit LAST. Select-alls, ranges and sorts still pay speed.
 
 It still carries the measurement rig it was built around, because the number
 that decides whether any of this feels good — real glass-to-glass latency on
@@ -487,21 +488,32 @@ Two structural things worth knowing:
 
 ## How a round scores
 
-Correct answer: **1000 points**, plus a **speed bonus up to 500** that decays
-linearly from the moment the question opens to the moment it locks.
+Correct answer: **1000 points**, plus a **bonus up to 500** that ramps
+linearly across the answer window — and which way the ramp runs depends on
+the question type:
 
-The decay is the important part, and it is not the obvious design. Ranking
-players — 1st gets most, 2nd gets less — would make the score depend on
-ordering, and at 30 players the gap between adjacent arrivals is often tens of
-milliseconds. That is the same size as the spread in network latency, so rank
-scoring would quietly hand points to whoever has the better phone and the better
-corner of the room. A linear decay over a 12-second window makes 100 ms worth
-about **four points out of five hundred**.
+- **Multiple choice pays the NERVE bonus**: the ramp is inverted, so the
+  bonus grows the longer you dare to wait before committing. Standing on
+  the floor until the last second and landing late is what earns the
+  extra — a game of chicken with the timer. First touch still sets your
+  time, so landing early and hopping in place at the buzzer buys nothing.
+- **Select-all, ranges and sort items keep the speed decay**: fastest pays.
+  A late-bonus on select-all would fight the team's coverage job, and a
+  decisive read should still win a range.
 
-So what actually gets rewarded is **deciding fast, not connecting fast** — which
-is the only version of "first gets more" that's fair to run at a party. Rank is
-still shown on the scoreboard, because "you were 3rd!" is the fun part; it just
-doesn't drive the maths.
+The smooth ramp (rather than ranking) is the important part, and it is not
+the obvious design. Ranking players — 1st gets most, 2nd gets less — would
+make the score depend on ordering, and at 30 players the gap between
+adjacent arrivals is often tens of milliseconds. That is the same size as
+the spread in network latency, so rank scoring would quietly hand points to
+whoever has the better phone and the better corner of the room. A linear
+ramp over a 12-second window makes 100 ms worth about **four points out of
+five hundred**, in either direction.
+
+So what gets rewarded is **deciding, not connecting** — nerve on multiple
+choice, speed everywhere else. Rank is still shown on the scoreboard,
+because "you were 1st!" is the fun part (on a nerve round, 1st is the
+latest commit); it just doesn't drive the maths.
 
 ### The buzzer
 
@@ -521,8 +533,9 @@ on it during the settle. The union is deliberate — input is dead after the
 buzzer so there's nothing to game, and it closes off every way of losing credit
 through no fault of your own, including a round-trip of latency.
 
-Your *time* for the speed bonus is still set by **first touch**. Leaving early
-still forfeits: wander off to another platform and that's where you're counted.
+Your *time* for the bonus — whichever way the ramp runs — is still set by
+**first touch**. Leaving early still forfeits: wander off to another
+platform and that's where you're counted.
 
 All of that is covered by tests in `sim/round.test.js`, including explicit
 fairness tests asserting that a realistic latency gap is worth under ten points.
