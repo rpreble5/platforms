@@ -602,34 +602,19 @@ function drawQuestion(cx, g) {
   const sortLive = isSortQuestion(q) && g.phase === PHASE.ANSWER;
   const item = sortLive ? q.items?.[g.itemIndex] : null;
 
-  // The status line under the question, when this phase has one. Decided
-  // up front because the question block is centered around WHAT IS
-  // ACTUALLY DRAWN — a question floating high over reserved-but-empty
-  // status space reads as a bug, and that is exactly what it was.
-  const multiTag = isMulti(q)
-    ? g.mode === 'teams'
-      ? 'SELECT ALL THAT APPLY — your year must cover every correct answer'
-      : 'SELECT ALL THAT APPLY — any correct answer scores'
-    : null;
-  /** @type {{ text: string, font: string, color: string } | null} */
-  const status = g.phase === PHASE.INTRO
-    ? { text: 'get ready…', font: `700 26px ${FONT.ui}`, color: UI.dim }
-    : g.phase === PHASE.LOCK
-      ? { text: isSortQuestion(q) ? 'final tally…' : "TIME'S UP", font: `800 30px ${FONT.display}`, color: UI.warn }
-      : multiTag && g.phase === PHASE.ANSWER
-        ? { text: multiTag, font: `800 24px ${FONT.display}`, color: UI.gold }
-        : null;
-  const statusH = status ? 44 : 0;
+  // The banner holds the QUESTION and nothing else: no status lines, no
+  // counters — anything that would jostle the text or steal its width
+  // lives in the floor band at the bottom of the screen instead. The
+  // question never reflows and gets nearly the whole 1920 to itself (a
+  // symmetric margin is kept so the 3-2-1 countdown never overlaps).
   const zone = h - 14; // everything above the timer bar
 
   cx.textBaseline = 'alphabetic';
   cx.textAlign = 'center';
-  /** Where the status line's baseline landed, for the draw below. */
-  let statusY = 0;
   if (item) {
     // A live sort: rubric line, then the item — the item is the question.
     const itemSize = 64;
-    const block = 30 + 14 + itemSize + statusH;
+    const block = 30 + 14 + itemSize;
     const top = (zone - block) / 2;
     cx.fillStyle = UI.dim;
     cx.font = `700 22px ${FONT.ui}`;
@@ -637,22 +622,19 @@ function drawQuestion(cx, g) {
     cx.fillStyle = UI.paper;
     cx.font = fitFont(cx, item.label, WORLD_W - 480, itemSize, 38);
     cx.fillText(item.label, WORLD_W / 2, top + 44 + itemSize * 0.78);
-    statusY = top + block - 8;
   } else {
     // One big line while it fits; below that, two BALANCED lines — the
     // same rule the answer boards use, so long questions stay huge
     // instead of shrinking to fit a single line.
-    const maxW = WORLD_W - 340;
+    const maxW = WORLD_W - 260;
     cx.fillStyle = UI.paper;
     cx.font = `800 74px ${FONT.display}`;
     const wRef = cx.measureText(q.text).width;
     const oneSize = Math.min(74, Math.floor((74 * maxW) / Math.max(1, wRef)));
     if (oneSize >= 46 || !q.text.includes(' ')) {
       const size = Math.max(30, oneSize);
-      const top = (zone - (size + statusH)) / 2;
       cx.font = `800 ${size}px ${FONT.display}`;
-      cx.fillText(q.text, WORLD_W / 2, top + size * 0.82);
-      statusY = top + size + statusH - 10;
+      cx.fillText(q.text, WORLD_W / 2, (zone - size) / 2 + size * 0.82);
     } else {
       const words = q.text.split(' ');
       cx.font = `800 54px ${FONT.display}`;
@@ -664,27 +646,36 @@ function drawQuestion(cx, g) {
         if (lw < best.w) best = { a, b, w: lw };
       }
       const size = Math.max(30, Math.min(54, Math.floor((54 * maxW) / Math.max(1, best.w))));
-      const block = size * 2.24 + statusH;
-      const top = (zone - block) / 2;
+      const top = (zone - size * 2.24) / 2;
       cx.font = `800 ${size}px ${FONT.display}`;
       cx.fillText(best.a, WORLD_W / 2, top + size * 0.82);
       cx.fillText(best.b, WORLD_W / 2, top + size * 2.06);
-      statusY = top + block - 10;
     }
   }
-  if (status) {
-    cx.font = status.font;
-    cx.fillStyle = status.color;
-    cx.fillText(status.text, WORLD_W / 2, statusY);
-  }
 
+  // ---- the floor band: the round's bookkeeping, out of the question's way
+  const bandY = 1046;
   cx.font = `700 24px ${FONT.mono}`;
-  cx.fillStyle = UI.faint;
+  cx.fillStyle = 'rgba(244,241,232,0.55)';
   cx.textAlign = 'left';
-  cx.fillText(`Q${g.qIndex + 1}/${g.questions.length}`, 40, 100);
-  if (sortLive && q.items) {
-    cx.font = `700 20px ${FONT.mono}`;
-    cx.fillText(`item ${g.itemIndex + 1}/${q.items.length}`, 40, 130);
+  cx.fillText(
+    `Q${g.qIndex + 1}/${g.questions.length}` +
+      (sortLive && q.items ? `  ·  item ${g.itemIndex + 1}/${q.items.length}` : ''),
+    40, bandY
+  );
+  // Select-all still has to be said out loud, or half the room hunts for
+  // THE answer and blames the game — it just says it from the floor now.
+  if (isMulti(q) && (g.phase === PHASE.INTRO || g.phase === PHASE.ANSWER)) {
+    cx.textAlign = 'center';
+    cx.font = `800 24px ${FONT.display}`;
+    cx.fillStyle = UI.gold;
+    cx.fillText(
+      g.mode === 'teams'
+        ? 'SELECT ALL THAT APPLY — your year must cover every correct answer'
+        : 'SELECT ALL THAT APPLY — any correct answer scores',
+      WORLD_W / 2, bandY
+    );
+    cx.textAlign = 'left';
   }
 
   // Timer as a full-width bar rather than digits: readable out of the corner of
