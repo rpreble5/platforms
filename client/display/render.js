@@ -84,14 +84,15 @@ export function render(cx, world, roster, game, opts) {
   } else {
     drawDebris(cx, game);
     for (const p of world.platforms) {
-      // A range round's floor comes in three pieces (plus the off-screen pit,
-      // which is never drawn); each piece is rendered exactly like the floor.
-      if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) {
-        drawFloor(cx, p);
-      } else if (p.id?.startsWith('perch')) {
-        drawPerch(cx, p);
-      }
+      if (p.id?.startsWith('perch')) drawPerch(cx, p);
     }
+    // A range round's floor comes in three physics pieces split at the exact
+    // answer boundaries — but those are fractional pixels, and two opaque
+    // fills abutting at a fractional x leave an antialiased seam: a faint
+    // vertical line telegraphing the band before the reveal. So contiguous
+    // pieces are DRAWN as one merged run; the split only becomes visible
+    // when the wrong pieces genuinely fall away.
+    for (const run of floorRuns(world.platforms)) drawFloor(cx, run);
     drawSigns(cx, world, game);
   }
 
@@ -298,12 +299,39 @@ function drawGlassReflections(cx, items, roster, world, scale) {
 }
 
 /**
+ * Contiguous floor pieces merged into visual runs. A range round's floor is
+ * three physics pieces split at fractional answer-boundary pixels; drawing
+ * (or clipping) at those seams paints a faint vertical line that gives the
+ * band away. Pieces are merged when they touch; once the reveal removes the
+ * wrong ones, the survivors become separate runs and the gap is real.
+ * @param {readonly import('../../sim/collide.js').Platform[]} platforms
+ * @returns {Array<{id: string, x: number, y: number, w: number, h: number}>}
+ */
+function floorRuns(platforms) {
+  const floors = platforms
+    .filter((p) => p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID)
+    .sort((a, b) => a.x - b.x);
+  /** @type {Array<{id: string, x: number, y: number, w: number, h: number}>} */
+  const runs = [];
+  for (const p of floors) {
+    const last = runs[runs.length - 1];
+    if (last && p.x - (last.x + last.w) < 1 && p.y === last.y) {
+      last.w = Math.max(last.w, p.x + p.w - last.x);
+    } else {
+      runs.push({ id: 'floor', x: p.x, y: p.y, w: p.w, h: p.h });
+    }
+  }
+  return runs;
+}
+
+/**
  * The glossy floor mirrors the beans near it, every theme: a bean standing
  * on the deck grows a faint upside-down twin, and a jump makes the twin
  * sink away — the mirror plane is the floor surface, so the reflection
  * drops as the body rises. Deliberately quieter than the glass panels'
  * 0.08: the floor is a stage, not a showcase. Skipped when a custom floor
  * tile is installed — no gloss assumption on someone else's artwork.
+ * Works on merged floor runs, never raw pieces — see floorRuns.
  * @param {CanvasRenderingContext2D} cx
  * @param {Array<{x:number, y:number, w:number, p:Player}>} items
  * @param {Map<number, Look>} roster
@@ -312,9 +340,7 @@ function drawGlassReflections(cx, items, roster, world, scale) {
  */
 function drawFloorReflections(cx, items, roster, world, scale) {
   if (has('floor')) return;
-  const floors = world.platforms.filter(
-    (p) => p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR'
-  );
+  const floors = floorRuns(world.platforms);
   if (!floors.length) return;
 
   for (const it of items) {
