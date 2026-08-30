@@ -40,6 +40,7 @@ import {
   skip,
   startGame,
   stepRound,
+  targetIds,
 } from '../../sim/round.js';
 import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
@@ -389,6 +390,82 @@ function trackMenuLandings() {
   for (const k of Object.keys(menu.fx)) {
     menu.fx[k] *= 0.86;
     if (menu.fx[k] < 0.02) delete menu.fx[k];
+  }
+}
+
+// ------------------------------------------------------ the reveal bounce
+//
+// When a choice reveal lands, the correct board does one happy hop — and
+// genuinely tosses whoever is standing on it. The board is a real platform,
+// so the hop is done in the sim: on the way up it works as an elevator
+// (feet re-pinned to the rising top each frame, because the one-way landing
+// check refuses feet that are already below the surface), and at the apex
+// the riders get a small upward kick and are released — ordinary physics
+// brings them back down onto the settled board. Winners get bounced;
+// nobody's score can change (results are already frozen at LOCK).
+//
+// Sort rounds keep their per-item confetti (a summary hop would re-judge),
+// range rounds have no board to hop (the target is a floor band), and
+// control turns run on their own stage.
+
+/** @typedef {import('../../sim/collide.js').Platform} Platform */
+/** @typedef {import('../../sim/player.js').Player} Player */
+
+const HOP_MS = 360;
+const HOP_PX = 26;
+const HOP_KICK = 300; // px/s upward, a polite fraction of a real jump
+
+/** @type {{plats: Array<{plat: Platform, base: number}>, riders: Array<{p: Player, plat: Platform}>, t0: number, kicked: boolean} | null} */
+let hop = null;
+
+/** Arm the hop on the frame the game enters REVEAL. */
+function startRevealHop() {
+  const q = currentQuestion(game);
+  if (!q || isSortQuestion(q) || isControlQuestion(q)) return;
+  const ids = targetIds(q);
+  const plats = world.platforms
+    .filter((p) => p.id?.startsWith('ans') && ids.has(p.id))
+    .map((plat) => ({ plat, base: plat.y }));
+  if (!plats.length) return;
+  /** @type {Array<{p: Player, plat: Platform}>} */
+  const riders = [];
+  for (const pl of world.players.values()) {
+    if (pl.standingOn && plats.some((e) => e.plat === pl.standingOn)) {
+      riders.push({ p: pl, plat: pl.standingOn });
+    }
+  }
+  hop = { plats, riders, t0: world.t, kicked: false };
+}
+
+/** One frame of the hop; restores the exact base y when done or cut short. */
+function tickRevealHop() {
+  if (!hop) return;
+  const t = world.t - hop.t0;
+  if (game.phase !== PHASE.REVEAL || t >= HOP_MS) {
+    for (const e of hop.plats) e.plat.y = e.base;
+    hop = null;
+    return;
+  }
+  const lift = HOP_PX * Math.sin((Math.PI * t) / HOP_MS);
+  for (const e of hop.plats) e.plat.y = e.base - lift;
+  if (t < HOP_MS / 2) {
+    // Rising: re-pin every rider's feet to the moving top BEFORE the next
+    // physics step sees it, so they ride the board instead of sinking in.
+    for (const r of hop.riders) {
+      r.p.y = r.plat.y - r.p.h;
+      r.p.vy = 0;
+      r.p.onGround = true;
+      r.p.standingOn = r.plat;
+    }
+  } else if (!hop.kicked) {
+    // Apex: let go with a flick. From here on it's all regular physics.
+    hop.kicked = true;
+    for (const r of hop.riders) {
+      r.p.vy = -HOP_KICK;
+      r.p.onGround = false;
+      r.p.standingOn = null;
+    }
+    hop.riders = [];
   }
 }
 
@@ -797,8 +874,10 @@ function frame(now) {
   // Landing notes ride the same frame as the landing squash.
   tickAudio(world);
   trackMenuLandings();
+  tickRevealHop();
 
   if (game.phase !== lastPhase) {
+    if (game.phase === PHASE.REVEAL) startRevealHop();
     // A sort round's phones already buzzed per item; the summary reveal
     // repeating the last verdict would read as a second judgement.
     if (game.phase === PHASE.REVEAL && !isSortQuestion(currentQuestion(game))) {
