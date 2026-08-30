@@ -92,7 +92,10 @@ export function avatarBodyPath(cx, w, h, shape) {
  * @returns {boolean}
  */
 export function accessoryHidesEyes(key) {
-  return key === 'sunglasses';
+  // The bandit mask paints its own paper eye dots on the band, so the
+  // standard ink pair (baked or live) stays out of its way — same deal as
+  // the shades.
+  return key === 'sunglasses' || key === 'bandit';
 }
 
 /**
@@ -625,4 +628,91 @@ const ACCESSORY_PAINTERS = {
       g.fill();
     }
   },
+
+  // ---- the face set: expression instead of headgear. Same rules — flat
+  // fills, ink lines, eye-line fractions (EYES) so every mark sits right
+  // on all three shapes.
+  brows(g, w, h) {
+    // Thick ink brows at a slight scowl. Deliberately changes the bean's
+    // whole mood — that is the joke, and the player chose it.
+    g.fillStyle = AVATAR_INK;
+    for (const [x, dir] of [[EYES.x1, -1], [EYES.x2, 1]]) {
+      g.save();
+      g.translate(w * x, h * (EYES.y - 0.13));
+      g.rotate(dir * 0.18);
+      g.beginPath();
+      g.roundRect(-w * 0.13, -h * 0.035, w * 0.26, h * 0.07, 3);
+      g.fill();
+      g.restore();
+    }
+  },
+  whiskers(g, w, h) {
+    g.lineWidth = 2;
+    g.strokeStyle = AVATAR_INK;
+    g.lineCap = 'round';
+    for (const dir of [-1, 1]) {
+      const x0 = w * (0.5 + dir * 0.34);
+      for (const [dy, tilt] of [[-0.02, -0.05], [0.04, 0], [0.1, 0.05]]) {
+        g.beginPath();
+        g.moveTo(x0, h * (0.46 + dy));
+        g.lineTo(x0 + dir * w * 0.22, h * (0.46 + dy + tilt));
+        g.stroke();
+      }
+    }
+  },
+  buckteeth(g, w, h) {
+    g.fillStyle = '#ffffff';
+    g.lineWidth = 2;
+    g.strokeStyle = AVATAR_INK;
+    for (const x of [0.44, 0.53]) {
+      g.beginPath();
+      g.roundRect(w * x, h * 0.47, w * 0.075, h * 0.075, 2);
+      g.fill();
+      g.stroke();
+    }
+  },
+  lipstick(g, w, h) {
+    // The one accessory that gives a bean a mouth — a cupid's-bow pout.
+    g.beginPath();
+    g.moveTo(w * 0.4, h * 0.52);
+    g.quadraticCurveTo(w * 0.45, h * 0.49, w * 0.5, h * 0.52);
+    g.quadraticCurveTo(w * 0.55, h * 0.49, w * 0.6, h * 0.52);
+    g.quadraticCurveTo(w * 0.55, h * 0.585, w * 0.5, h * 0.585);
+    g.quadraticCurveTo(w * 0.45, h * 0.585, w * 0.4, h * 0.52);
+    g.closePath();
+    g.fillStyle = '#d8375e';
+    g.fill();
+    g.lineWidth = 1.8;
+    g.strokeStyle = shade('#d8375e', -0.4);
+    g.stroke();
+  },
+  bandit(g, w, h) {
+    // The band spans the whole box with rounded ends; the pixel or two of
+    // overhang past the silhouette reads as the tied fabric. Its own paper
+    // eyes sit where the ink pair would (accessoryHidesEyes suppresses
+    // those), matching the baked-eye geometry exactly.
+    g.fillStyle = 'rgba(42,36,64,0.92)';
+    g.beginPath();
+    g.roundRect(-1, h * (EYES.y - 0.11), w + 2, h * 0.22, 4);
+    g.fill();
+    g.fillStyle = '#f4f1e8';
+    const er = Math.max(EYES.rMin, w * EYES.r);
+    g.beginPath();
+    g.arc(w * EYES.x1, h * EYES.y, er, 0, Math.PI * 2);
+    g.arc(w * EYES.x2, h * EYES.y, er, 0, Math.PI * 2);
+    g.fill();
+  },
+  heartblush(g, w, h) {
+    g.fillStyle = 'rgba(240,110,140,0.8)';
+    for (const x of [0.2, 0.8]) {
+      const s = w * 0.075;
+      const hx = w * x;
+      const hy = h * 0.475;
+      g.beginPath();
+      g.moveTo(hx, hy + s * 0.9);
+      g.bezierCurveTo(hx - s * 1.3, hy - s * 0.1, hx - s * 0.5, hy - s, hx, hy - s * 0.28);
+      g.bezierCurveTo(hx + s * 0.5, hy - s, hx + s * 1.3, hy - s * 0.1, hx, hy + s * 0.9);
+      g.fill();
+    }
+  }
 };

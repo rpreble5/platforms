@@ -119,10 +119,13 @@ test('every accessory in the palette has a painter, and it runs DOM-free', () =>
   }
 });
 
-test('sunglasses suppress the baked eyes; nothing else does', () => {
-  assert.ok(accessoryHidesEyes('sunglasses'));
+test('only the eye-covering accessories suppress the baked eyes', () => {
+  // Shades cover the eyes; the bandit mask paints its own paper pair on
+  // the band. Everything else leaves the standard eyes alone.
+  const covering = ['sunglasses', 'bandit'];
+  for (const key of covering) assert.ok(accessoryHidesEyes(key), `${key} hides eyes`);
   for (const { key } of ACCESSORIES) {
-    if (key !== 'sunglasses') assert.ok(!accessoryHidesEyes(key), `${key} leaves eyes alone`);
+    if (!covering.includes(key)) assert.ok(!accessoryHidesEyes(key), `${key} leaves eyes alone`);
   }
 });
 

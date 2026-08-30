@@ -89,6 +89,12 @@ export const ACCESSORIES = [
   { key: 'beanie', label: 'Beanie' },
   { key: 'halo', label: 'Halo' },
   { key: 'catears', label: 'Cat ears' },
+  { key: 'brows', label: 'Bushy brows' },
+  { key: 'whiskers', label: 'Whiskers' },
+  { key: 'buckteeth', label: 'Buck teeth' },
+  { key: 'lipstick', label: 'Lipstick' },
+  { key: 'bandit', label: 'Bandit mask' },
+  { key: 'heartblush', label: 'Heart blush' },
 ];
 
 /** @param {number} i @returns {number} */
