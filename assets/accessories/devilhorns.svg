@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="92" height="124" viewBox="0 0 92 124">
+  <g id="guides" opacity="0.35">
+    <path d="M46 16 C67.6 16 74.2 30.72 74.2 47.28 L74.2 78.56 C74.2 100.64 64 108 46 108 C28 108 17.8 100.64 17.8 78.56 L17.8 47.28 C17.8 30.72 24.4 16 46 16 Z" fill="#dfe3ee"/>
+  </g>
+  <path d="M25 31 C19.5 22 19.5 10 27 3 C28.5 13 34 20 38 27 Z" fill="#e04f4f" stroke="#2a2440" stroke-width="2.5"/>
+  <path d="M67 31 C72.5 22 72.5 10 65 3 C63.5 13 58 20 54 27 Z" fill="#e04f4f" stroke="#2a2440" stroke-width="2.5"/>
+</svg>

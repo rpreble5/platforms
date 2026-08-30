@@ -702,6 +702,34 @@ const ACCESSORY_PAINTERS = {
     g.arc(w * EYES.x2, h * EYES.y, er, 0, Math.PI * 2);
     g.fill();
   },
+  // Generated from assets/accessories/devilhorns.svg by
+  // tools/accessory-svg.js — the worked example of the SVG-to-painter
+  // pipeline. Edit the SVG and re-run the tool rather than tuning numbers
+  // here by hand.
+  devilhorns(g, w, h) {
+    g.beginPath();
+    g.moveTo(w * 0.1500, h * 0.1630);
+    g.bezierCurveTo(w * 0.0583, h * 0.0652, w * 0.0583, h * -0.0652, w * 0.1833, h * -0.1413);
+    g.bezierCurveTo(w * 0.2083, h * -0.0326, w * 0.3000, h * 0.0435, w * 0.3667, h * 0.1196);
+    g.closePath();
+    g.fillStyle = '#e04f4f';
+    g.fill();
+    g.lineWidth = Math.max(1.5, w * 0.0417);
+    g.lineJoin = 'round';
+    g.strokeStyle = '#2a2440';
+    g.stroke();
+    g.beginPath();
+    g.moveTo(w * 0.8500, h * 0.1630);
+    g.bezierCurveTo(w * 0.9417, h * 0.0652, w * 0.9417, h * -0.0652, w * 0.8167, h * -0.1413);
+    g.bezierCurveTo(w * 0.7917, h * -0.0326, w * 0.7000, h * 0.0435, w * 0.6333, h * 0.1196);
+    g.closePath();
+    g.fillStyle = '#e04f4f';
+    g.fill();
+    g.lineWidth = Math.max(1.5, w * 0.0417);
+    g.lineJoin = 'round';
+    g.strokeStyle = '#2a2440';
+    g.stroke();
+  },
   heartblush(g, w, h) {
     g.fillStyle = 'rgba(240,110,140,0.8)';
     for (const x of [0.2, 0.8]) {

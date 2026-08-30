@@ -95,6 +95,7 @@ export const ACCESSORIES = [
   { key: 'lipstick', label: 'Lipstick' },
   { key: 'bandit', label: 'Bandit mask' },
   { key: 'heartblush', label: 'Heart blush' },
+  { key: 'devilhorns', label: 'Devil horns' },
 ];
 
 /** @param {number} i @returns {number} */

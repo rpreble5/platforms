@@ -99,6 +99,28 @@ Answer time is no longer on the lobby at all: decks carry their own
 default, and the host phone (`/host`) keeps a `Time ▸` button for cycling
 it when a night needs something different.
 
+### Drawing your own accessories (Figma → code)
+
+Accessories are tiny canvas painters, but you don't have to write one:
+draw it as an SVG and convert it.
+
+1. Drag `assets/accessories/TEMPLATE.svg` into Figma. It's a 92×124 frame
+   with a ghost bean, the eye line, and margins marked.
+2. Draw on top of the guides. Flat fills and simple strokes only — outline
+   any text and flatten fancy effects (the converter refuses gradients,
+   filters and live text by name). Stay inside the frame; anything more
+   than 16 units past the body box gets cropped by the sprite cache.
+3. Delete the `guides` layer (forgetting is harmless — it's ignored) and
+   export the frame as SVG.
+4. `node tools/accessory-svg.js myhat.svg myhat` prints two snippets: a
+   painter for `ACCESSORY_PAINTERS` in `shared/avatar.js` and a
+   registration line for `ACCESSORIES` in `shared/palette.js`. Paste both,
+   check `/client/display/sprites-preview.html`, run `npm test`.
+
+Nothing loads at runtime — the output is ordinary committed code, cached
+into sprites like every built-in. `devilhorns` was made exactly this way
+(its SVG sits next to the template) and is the example to crib from.
+
 ### Training for question writers: /training
 
 Before faculty write anything, point them at **`/training`** (served by

@@ -1,0 +1,27 @@
+<!--
+  Accessory template for Figma (or any vector tool).
+
+  HOW TO USE
+  1. Drag this file into Figma. You get a 92x124 frame with guide layers.
+  2. Draw your accessory ON TOP of the guides, positioned against the bean.
+     Flat fills and simple strokes only; outline any text (Figma: right
+     click > Outline stroke / Flatten). Keep everything inside the frame.
+  3. Delete the "guides" layer, then export the frame as SVG.
+  4. Convert it to painter code:  node tools/accessory-svg.js yourfile.svg mykey
+     and paste the two printed snippets where they say to go.
+
+  GEOMETRY: the bean's body box is x 16..76, y 16..108 (60x92). The eye
+  line sits at y 49. Everything outside the body box may poke out at most
+  16 units in any direction, or the sprite cache's padding will crop it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="92" height="124" viewBox="0 0 92 124">
+  <g id="guides" opacity="0.35">
+    <rect x="0" y="0" width="92" height="124" fill="none" stroke="#b0b0c0" stroke-width="1"/>
+    <path d="M46 16 C67.6 16 74.2 30.72 74.2 47.28 L74.2 78.56 C74.2 100.64 64 108 46 108 C28 108 17.8 100.64 17.8 78.56 L17.8 47.28 C17.8 30.72 24.4 16 46 16 Z"
+      fill="#dfe3ee" stroke="#8a8aa0" stroke-width="1.5"/>
+    <circle cx="35.8" cy="49.1" r="3" fill="#3a3650"/>
+    <circle cx="56.2" cy="49.1" r="3" fill="#3a3650"/>
+    <line x1="0" y1="49.1" x2="92" y2="49.1" stroke="#c86a8a" stroke-width="0.75" stroke-dasharray="3 3"/>
+    <line x1="0" y1="16" x2="92" y2="16" stroke="#8a8aa0" stroke-width="0.75" stroke-dasharray="3 3"/>
+  </g>
+</svg>
