@@ -147,6 +147,7 @@ export function render(cx, world, roster, game, opts) {
 
   if (glass) drawGlassReflections(cx, items, roster, world, scale);
   drawFloorReflections(cx, items, roster, world, scale);
+  drawContactShadows(cx, items, roster, world, scale, anyFindMe);
 
   for (const it of items) {
     const p = it.p;
@@ -322,6 +323,101 @@ function floorRuns(platforms) {
     }
   }
   return runs;
+}
+
+// One soft elliptical blob, rendered once and stamped scaled per shadow —
+// soft edges with no per-frame gradient allocation, and one place to tune
+// the ink. Deep violet-ink rather than black: it sits on every family's
+// palette, and on the near-black noir floor it simply disappears, which is
+// correct — the reflections carry that theme.
+const SHADOW_SPRITE = (() => {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 40;
+  const g = c.getContext('2d');
+  if (g) {
+    g.translate(64, 20);
+    g.scale(1, 40 / 128);
+    const r = g.createRadialGradient(0, 0, 0, 0, 0, 64);
+    r.addColorStop(0, 'rgba(20,16,40,0.85)');
+    r.addColorStop(0.55, 'rgba(20,16,40,0.5)');
+    r.addColorStop(1, 'rgba(20,16,40,0)');
+    g.fillStyle = r;
+    g.fillRect(-64, -64, 128, 128);
+  }
+  return c;
+})();
+
+/** Beans fade their shadows out entirely by this many px above the surface —
+ *  matched to the ~220px jump apex, so leaving the ground visibly detaches
+ *  the shadow and it rushes back up to meet the landing. */
+const SHADOW_RANGE = 220;
+const SHADOW_ALPHA = 0.34;
+
+/**
+ * Contact shadows: each bean casts a soft ellipse on the highest landable
+ * surface below it — boards, perches, floor runs, the lobby furniture. The
+ * gap to that surface drives size and strength, which turns the shadow into
+ * a landing sight: mid-jump it marks the platform you are going to hit.
+ * Clipped to the surface span, so overhanging an edge casts only the sliver
+ * that fits. Floor pieces are merged through floorRuns first — a shadow
+ * clipped at a range round's fractional seam would leak the band all over
+ * again. Alpha follows the body's own dimming (disconnect, find-me) so
+ * shadows never look orphaned from their owners.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {Array<{x:number, y:number, w:number, p:Player}>} items
+ * @param {Map<number, Look>} roster
+ * @param {World} world
+ * @param {number} scale
+ * @param {boolean} anyFindMe
+ */
+function drawContactShadows(cx, items, roster, world, scale, anyFindMe) {
+  /** @type {Array<{x:number, y:number, w:number}>} */
+  const surfaces = [];
+  for (const run of floorRuns(world.platforms)) surfaces.push(run);
+  for (const p of world.platforms) {
+    if (!p.id) continue;
+    if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) continue;
+    if (p.id === 'pit' || p.y >= WORLD_H) continue;
+    surfaces.push(p);
+  }
+
+  for (const it of items) {
+    const p = it.p;
+    const w = p.w * scale;
+    // Feet in COLLISION space — the sim rests feet at platform tops there.
+    const feetY = it.y + p.h;
+    const midX = it.x + w / 2;
+
+    // The highest surface at or below the feet, under the bean's midpoint.
+    /** @type {{x:number, y:number, w:number} | null} */
+    let surf = null;
+    for (const s of surfaces) {
+      if (midX < s.x - 2 || midX > s.x + s.w + 2) continue;
+      if (s.y < feetY - 4) continue;
+      if (!surf || s.y < surf.y) surf = s;
+    }
+    if (!surf) continue;
+
+    const gap = Math.max(0, surf.y - feetY);
+    if (gap >= SHADOW_RANGE) continue;
+    const k = 1 - gap / SHADOW_RANGE;
+
+    const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', finish: 'flat', connected: true };
+    const findMe = p.findMeUntil > world.t;
+    const dim = !look.connected ? 0.35 : anyFindMe && !findMe ? 0.55 : 1;
+
+    const sw = w * 0.95 * (0.6 + 0.4 * k);
+    const sh = sw * 0.26;
+    cx.save();
+    cx.beginPath();
+    cx.rect(surf.x, surf.y - sh, surf.w, sh * 2);
+    cx.clip();
+    cx.globalAlpha = SHADOW_ALPHA * k * k * dim;
+    cx.drawImage(SHADOW_SPRITE, midX - sw / 2, surf.y - sh / 2, sw, sh);
+    cx.restore();
+  }
+  cx.globalAlpha = 1;
 }
 
 /**
