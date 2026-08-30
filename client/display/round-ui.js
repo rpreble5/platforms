@@ -114,6 +114,9 @@ function fallOffset(t) {
  * @property {number} [controlCases] size of the pack's Control Room pool
  * @property {boolean} [browse] the deck browser is open (modal over the card)
  * @property {number} [browseSel] browser cursor, an index into packs
+ * @property {boolean} [dev] the key-list panel is open
+ * @property {Array<{id: string, x: number, y: number, w: number, h: number}>} [hits]
+ *   click targets, refilled by the draw so the geometry can never drift
  */
 
 /**
@@ -166,6 +169,38 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
 const WORDMARK = 'PLATFORMS';
 
 /**
+ * Stand-in cover art for a deck: the game in miniature. Packs will be able
+ * to carry their own picture later; until then every deck shows this, so
+ * the card has the same shape either way.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} x @param {number} y @param {number} s square side
+ */
+function drawDeckCover(cx, x, y, s) {
+  cx.save();
+  cx.beginPath();
+  cx.roundRect(x, y, s, s, 14);
+  cx.clip();
+  cx.fillStyle = 'rgba(255,255,255,0.10)';
+  cx.fillRect(x, y, s, s);
+  cx.fillStyle = 'rgba(255,255,255,0.30)';
+  for (const [bx, by] of [[0.10, 0.64], [0.54, 0.52], [0.30, 0.38]]) {
+    cx.beginPath();
+    cx.roundRect(x + s * bx, y + s * by, s * 0.36, s * 0.07, 4);
+    cx.fill();
+  }
+  cx.fillStyle = 'rgba(255,255,255,0.58)';
+  cx.beginPath();
+  cx.roundRect(x + s * 0.41, y + s * 0.22, s * 0.14, s * 0.16, 6);
+  cx.fill();
+  cx.restore();
+  cx.strokeStyle = 'rgba(255,255,255,0.22)';
+  cx.lineWidth = 1.5;
+  cx.beginPath();
+  cx.roundRect(x, y, s, s, 14);
+  cx.stroke();
+}
+
+/**
  * The lobby: a composed screen, not a dialog. Setup card on the LEFT (host
  * business), join panel on the RIGHT (drawn with the QR in render.js), and
  * the whole centre left open — the lobby arena's platforms live there, so
@@ -201,8 +236,17 @@ function drawMenu(cx, menu, playerCount) {
     ? 'teams only — needs at least one committed PGY year'
     : `needs ${activeTeams} case${activeTeams === 1 ? '' : 's'} · pack has ${menu.controlCases ?? 0}`;
 
+  const hits = menu.hits;
+  if (hits) hits.length = 0;
+  /** Register a click target; the pointer handler reads these, so the
+   *  geometry is written down exactly once. */
+  const hit = (/** @type {string} */ id, /** @type {number} */ hx, /** @type {number} */ hy,
+    /** @type {number} */ hw, /** @type {number} */ hh) => {
+    if (hits) hits.push({ id, x: hx, y: hy, w: hw, h: hh });
+  };
+
   const actions = menu.items.filter((it) => it === 'quiz' || it === 'control' || it === 'showdown');
-  const packH = 104;
+  const packH = 124;
   const rowH = 58;
   const stripH = 56;
   const btnH = 68;
@@ -228,25 +272,51 @@ function drawMenu(cx, menu, playerCount) {
   // lives in the deck browser (Enter), so this block stays a summary.
   let y = y0 + pad;
   if (sel === 'pack') pill(y - 12, packH);
-  const bits = pack ? [`${pack.questions} questions`] : [];
-  if (pack?.controlRoom) bits.push('control room (teams)');
-  if (pack?.showdown) bits.push('showdown');
-  const eyebrow = bits.length ? `DECK  ·  ${bits.join('  ·  ')}` : 'DECK';
-  cx.font = fitFont(cx, eyebrow, w - pad * 2 - (sel === 'pack' ? 130 : 0), 15, 11);
-  cx.fillStyle = 'rgba(255,255,255,0.5)';
-  cx.fillText(eyebrow, x0 + pad, y + 8);
+  hit('pack', x0 + 16, y - 12, w - 32, packH);
+
+  const cover = 92;
+  drawDeckCover(cx, x0 + pad, y - 2, cover);
+  const tx = x0 + pad + cover + 18;
+  const tw = x0 + w - pad - tx - (sel === 'pack' ? 56 : 0);
+
+  cx.font = `700 13px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.45)';
+  cx.fillText('DECK', tx, y + 12);
+
   const name = menu.loading ? 'loading…' : pack ? pack.name : '—';
-  cx.font = fitFont(cx, name, w - pad * 2 - 76, 40, 22);
+  cx.font = fitFont(cx, name, tw, 34, 19);
   cx.fillStyle = '#ffffff';
-  cx.fillText(name, x0 + pad, y + 56);
+  cx.fillText(name, tx, y + 46);
+
+  // How tonight plays, in the same words the pack editor uses.
+  const modeLabel = menu.mode === 'teams' ? 'TEAMS' : 'FREE-FOR-ALL';
+  cx.font = `800 13px ${FONT.ui}`;
+  const chipW = cx.measureText(modeLabel).width + 20;
+  cx.fillStyle = 'rgba(255,255,255,0.16)';
+  cx.strokeStyle = 'rgba(255,255,255,0.34)';
+  cx.lineWidth = 1;
+  cx.beginPath();
+  cx.roundRect(tx, y + 60, chipW, 24, 12);
+  cx.fill();
+  cx.stroke();
+  cx.fillStyle = 'rgba(255,255,255,0.92)';
+  cx.fillText(modeLabel, tx + 10, y + 77);
+
+  const bits = pack ? [`${pack.questions} questions`] : [];
+  if (pack?.controlRoom) bits.push('control room');
+  if (pack?.showdown) bits.push('showdown');
+  cx.font = `600 14px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.5)';
+  cx.fillText(bits.join('  ·  '), tx + chipW + 12, y + 77);
+
   if (sel === 'pack') {
     cx.textAlign = 'right';
     cx.font = `700 14px ${FONT.ui}`;
     cx.fillStyle = 'rgba(255,255,255,0.6)';
-    cx.fillText('⏎ browse', x0 + w - pad, y + 8);
+    cx.fillText('⏎ browse', x0 + w - pad, y + 12);
     cx.font = `800 30px ${FONT.display}`;
     cx.fillStyle = 'rgba(255,255,255,0.75)';
-    cx.fillText('◂ ▸', x0 + w - pad + 6, y + 54);
+    cx.fillText('◂ ▸', x0 + w - pad + 6, y + 52);
     cx.textAlign = 'left';
   }
   y += packH;
@@ -255,7 +325,7 @@ function drawMenu(cx, menu, playerCount) {
   /** @type {Array<['time'|'mode'|'look', string, string]>} */
   const settingRows = [
     ['time', 'Answer time', `${Math.round(menu.answerMs / 1000)}s`],
-    ['mode', 'Teams', menu.mode === 'teams' ? 'PGY years' : 'off'],
+    ['mode', "How it's played", menu.mode === 'teams' ? 'teams' : 'free-for-all'],
     ['look', 'Background', menu.look === 'deck'
       ? `from deck${menu.deckTheme ? ` · ${menu.deckTheme}` : ''}`
       : menu.look],
@@ -263,6 +333,7 @@ function drawMenu(cx, menu, playerCount) {
   for (const [key, label, value] of settingRows) {
     const selected = sel === key;
     if (selected) pill(y + 2, rowH - 4);
+    hit(key, x0 + 16, y + 2, w - 32, rowH - 4);
     const base = y + rowH / 2 + 9;
     cx.font = `700 25px ${FONT.display}`;
     cx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.8)';
@@ -316,6 +387,7 @@ function drawMenu(cx, menu, playerCount) {
             ? (menu.controlCases ?? 0) > 0 ? 'teams · Control Room turns between questions' : 'teams by PGY year'
             : 'free-for-all';
 
+    hit(item, x0 + 24, y, w - 48, btnH);
     cx.save();
     cx.beginPath();
     cx.roundRect(x0 + 24, y, w - 48, btnH, 16);
@@ -353,7 +425,77 @@ function drawMenu(cx, menu, playerCount) {
     y += btnH + 12;
   }
 
+  // ---- the dev-tools tab, bottom left: everything the keyboard can do,
+  // one click away and out of the room's sight until asked for.
+  const devW = 132;
+  const devH = 34;
+  const devX = x0;
+  const devY = y0 + h + 14;
+  hit('dev', devX, devY, devW, devH);
+  cx.fillStyle = menu.dev ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)';
+  cx.strokeStyle = menu.dev ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)';
+  cx.lineWidth = 1.5;
+  cx.beginPath();
+  cx.roundRect(devX, devY, devW, devH, 10);
+  cx.fill();
+  cx.stroke();
+  cx.font = `700 14px ${FONT.ui}`;
+  cx.fillStyle = menu.dev ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
+  cx.fillText('⌨  dev tools', devX + 14, devY + 22);
+
+  if (menu.dev) drawDevPanel(cx, devX, devY + devH + 12);
   if (menu.browse) drawPackBrowser(cx, menu);
+}
+
+/**
+ * Every key the display answers to. The lobby is driven with the arrows and
+ * Enter; the rest are running-a-game and debugging keys that would only
+ * clutter the card, so they live behind the dev-tools tab.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {number} x @param {number} y
+ */
+function drawDevPanel(cx, x, y) {
+  /** @type {Array<[string, string]>} */
+  const keys = [
+    ['↑ ↓', 'move down the card'],
+    ['◂ ▸', 'change the setting'],
+    ['⏎', 'start, or browse decks'],
+    ['P', 'pause / resume'],
+    ['R', 'restart the round'],
+    ['Q', 'back to the lobby'],
+    ['S', 'start the showdown'],
+    ['K', 'add a keyboard player'],
+    ['M', 'mute the sound'],
+    ['N', 'landing-note voice'],
+    ['H', 'debug readout'],
+    ['T', 'physics tuner'],
+    ['F', 'flash target'],
+  ];
+  // Two columns, and the whole panel pulled up if it would run off the
+  // bottom — the lobby card's height changes with the pack, so the space
+  // under the tab is not fixed.
+  const rowH = 30;
+  const pad = 18;
+  const colW = 290;
+  const rows = Math.ceil(keys.length / 2);
+  const w = pad * 2 + colW * 2;
+  const h = pad * 2 + 26 + rows * rowH;
+  const top = Math.min(y, 1080 - h - 28);
+  panel(cx, x, top, w, h, undefined, { veil: lobbyVeil() });
+  cx.textAlign = 'left';
+  cx.font = `700 13px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.5)';
+  cx.fillText('KEYBOARD', x + pad, top + pad + 12);
+  keys.forEach(([key, what], i) => {
+    const kx = x + pad + colW * Math.floor(i / rows);
+    const ky = top + pad + 26 + (i % rows) * rowH;
+    cx.font = `800 15px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.92)';
+    cx.fillText(key, kx, ky + 20);
+    cx.font = `600 15px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.6)';
+    cx.fillText(what, kx + 52, ky + 20);
+  });
 }
 
 /**

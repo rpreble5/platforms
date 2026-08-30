@@ -344,7 +344,17 @@ const menu = {
   // The deck browser: a modal list over the card, for real libraries.
   browse: false,
   browseSel: 0,
+  // The dev-tools tab: the full key list, folded away until clicked.
+  dev: false,
 };
+
+/**
+ * Click targets for the lobby card, refilled by the renderer every frame.
+ * The draw owns the geometry and writes it here, so a moved button can
+ * never leave its hit box behind.
+ * @type {Array<{id: string, x: number, y: number, w: number, h: number}>}
+ */
+const menuHits = [];
 
 /** The Background row's cycle: the deck's own theme, then every pack theme
  *  ('glass' is skipped — it is just an alias for blanc). */
@@ -456,6 +466,7 @@ function menuView() {
     cohortCounts,
     controlCases: controlSpec?.questions.length ?? 0,
     deckTheme,
+    hits: menuHits,
   };
 }
 
@@ -921,6 +932,63 @@ function onKey(e, down) {
 addEventListener('keydown', (e) => onKey(e, true));
 addEventListener('keyup', (e) => onKey(e, false));
 addEventListener('pointerdown', unlockAudio);
+
+// ------------------------------------------------------------------ pointer
+// The display hides its cursor — it is a projected screen, not a desktop —
+// but the host drives it from a laptop, so the pointer comes back the moment
+// the trackpad moves and fades away again once it is still.
+
+/** @type {any} */
+let cursorTimer = 0;
+function wakeCursor() {
+  document.body.style.cursor = 'default';
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => { document.body.style.cursor = 'none'; }, 2500);
+}
+addEventListener('pointermove', wakeCursor);
+
+/**
+ * Where a click landed in the 1920x1080 world. The canvas is letterboxed by
+ * `object-fit: contain`, so undo that fit rather than assuming it fills.
+ * @param {PointerEvent} e
+ */
+function stagePoint(e) {
+  const r = canvas.getBoundingClientRect();
+  const scale = Math.min(r.width / canvas.width, r.height / canvas.height);
+  if (!(scale > 0)) return null;
+  return {
+    x: (e.clientX - (r.left + (r.width - canvas.width * scale) / 2)) / scale,
+    y: (e.clientY - (r.top + (r.height - canvas.height * scale) / 2)) / scale,
+  };
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  wakeCursor();
+  if (!menuOpen() || menu.browse) return;
+  const p = stagePoint(e);
+  if (!p) return;
+  const target = menuHits.find(
+    (a) => p.x >= a.x && p.x <= a.x + a.w && p.y >= a.y && p.y <= a.y + a.h
+  );
+  // With the key list open, a click anywhere else puts it away.
+  if (menu.dev && target?.id !== 'dev') {
+    menu.dev = false;
+    return;
+  }
+  if (!target) return;
+  if (target.id === 'dev') {
+    menu.dev = !menu.dev;
+    return;
+  }
+  // Everything else on the card: move the cursor there, then act. A second
+  // click on the row that is already selected is what activates it, so one
+  // click never starts a game by accident.
+  const items = menuItems();
+  const ix = items.indexOf(/** @type {any} */ (target.id));
+  if (ix < 0) return;
+  if (menu.sel === ix) menuActivate(items[ix]);
+  else menu.sel = ix;
+});
 // A window that loses focus must release, or the avatar runs forever.
 addEventListener('blur', () => {
   localMask = 0;
@@ -1043,6 +1111,7 @@ async function init() {
       get game() { return game; },
       get showdown() { return showdown; },
       get menu() { return menu; },
+      get hits() { return menuHits; },
     },
   });
 
