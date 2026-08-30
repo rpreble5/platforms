@@ -140,8 +140,10 @@ const phone = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 phone.binaryType = 'arraybuffer';
 await once(phone, 'open');
 phone.send(encodeJson({ type: 'HELLO', name: 'smoke' }));
+// The keyboard test avatar is off by default now, so the phone's avatar is
+// the first (and only) body in the world.
 await display.waitForFunction(
-  () => /** @type {any} */ (globalThis).__platforms.world.players.size >= 2,
+  () => /** @type {any} */ (globalThis).__platforms.world.players.size >= 1,
   null,
   { timeout: 5000 }
 );
@@ -369,7 +371,7 @@ if (crowd > 0) {
   }
   await display.waitForFunction(
     (/** @type {number[]} */ [n]) => /** @type {any} */ (globalThis).__platforms.world.players.size >= n,
-    [crowd + 2],
+    [crowd + 1],
     { timeout: 15000 }
   );
   // Scatter them, then let a few hold buttons so the scene isn't static.

@@ -133,10 +133,11 @@ function note(text) {
 const LOCAL_ID = 0;
 let localMask = 0;
 
-// On by default for the dev loop; K removes it for the real party, where a
-// bean labelled "keyboard" standing in the crowd is just clutter. Purely
-// display-local — the server roster never contains id 0.
-let keyboardOn = true;
+// Off by default: at a real party a bean labelled "keyboard" standing in
+// the crowd is just clutter. K summons it for the dev loop (tuning feel,
+// verifying the round with no phone in the room) and removes it again.
+// Purely display-local — the server roster never contains id 0.
+let keyboardOn = false;
 
 function toggleKeyboardPlayer() {
   keyboardOn = !keyboardOn;
@@ -1312,9 +1313,6 @@ async function init() {
   // Missing art is reported inside the latency HUD (press H), not as a
   // standing on-screen note: the game is fully procedural by design, so on a
   // party screen this is dev information, not a warning.
-
-  addPlayer(world, LOCAL_ID);
-  roster.set(LOCAL_ID, { name: 'keyboard', color: '#e8e2d4', finish: 'flat', connected: true });
 
   try {
     const pack = await fetch('/api/questions').then((r) => r.json());

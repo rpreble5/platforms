@@ -40,8 +40,8 @@ display   http://localhost:8080/display/  <- open on the machine driving the TV
 ```
 
 Put the display page fullscreen on the TV, scan the QR from a phone, and press
-buttons. You can also drive an avatar from the host keyboard (`A` / `D` / space)
-with no phone at all.
+buttons. With no phone at all, press `K` to summon a keyboard test avatar and
+drive it from the host keyboard (`A` / `D` / space).
 
 | key | on the display |
 |---|---|
@@ -53,7 +53,7 @@ with no phone at all.
 | `Q` | back to the main menu (from a running or finished game) |
 | `A` `D` / arrows | move the local test avatar |
 | space / `W` | jump |
-| `K` | remove / restore the keyboard test avatar (remove it for the real party) |
+| `K` | add / remove the keyboard test avatar (off by default) |
 | `H` | latency HUD: hidden → panel → per-player detail |
 | `T` | live physics tuning (`←→` pick, `↑↓` adjust, shift for ×5, `P` prints a paste-able block) |
 | `F` | arm the flash-test target |

@@ -127,8 +127,10 @@ In a browser on the laptop, go to **http://localhost:8080/display/**.
 You should see a dark level with platforms and the QR code in the corner. Press
 **F11** (Windows) or **⌃⌘F** (Mac) for fullscreen.
 
-Try it right now with the keyboard: **A** and **D** to move, **space** to jump.
-If a white blob runs and jumps, everything works.
+Try it right now: press **K** to summon a keyboard test avatar, then **A** and
+**D** to move, **space** to jump. If a white blob runs and jumps, everything
+works. (Press **K** again to dismiss it — it's not there by default so it never
+wanders into a real party.)
 
 ## 7. Connect your phone
 
@@ -236,6 +238,7 @@ the path. For that you need a real phone, and the flash test in
 
 | key | does |
 |---|---|
+| `K` | add / remove the keyboard test avatar (off by default) |
 | `A` `D`, space | move / jump the keyboard test avatar |
 | `H` | per-player connection quality table |
 | `T` | live physics tuning (arrows to adjust, `P` prints the values) |
