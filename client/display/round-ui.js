@@ -279,17 +279,20 @@ function drawMenu(cx, menu, playerCount) {
       const hovered = menu.hover === id;
       hit(id, x0 + 18, y, w - 36, rowH - 8);
 
-      if (chosen || cursor || hovered) {
-        cx.fillStyle = chosen ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)';
-        cx.strokeStyle = chosen
-          ? 'rgba(255,255,255,0.85)'
-          : hovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.32)';
-        cx.lineWidth = chosen ? 2.5 : 1.5;
-        cx.beginPath();
-        cx.roundRect(x0 + 18, y, w - 36, rowH - 8, 14);
-        cx.fill();
-        cx.stroke();
-      }
+      // EVERY deck is drawn as a card, not just the chosen one: a row that
+      // only looks like a control once the pointer crosses it reads as a
+      // label, and nobody clicks a label.
+      cx.fillStyle = chosen
+        ? 'rgba(255,255,255,0.20)'
+        : cursor || hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)';
+      cx.strokeStyle = chosen
+        ? 'rgba(255,255,255,0.85)'
+        : cursor || hovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)';
+      cx.lineWidth = chosen ? 2.5 : 1.5;
+      cx.beginPath();
+      cx.roundRect(x0 + 18, y, w - 36, rowH - 8, 14);
+      cx.fill();
+      cx.stroke();
 
       const cover = 52;
       drawDeckCover(cx, x0 + pad, y + 9, cover);
@@ -300,6 +303,11 @@ function drawMenu(cx, menu, playerCount) {
       cx.font = `600 14px ${FONT.ui}`;
       cx.fillStyle = 'rgba(255,255,255,0.5)';
       cx.fillText(`${p.questions} questions`, tx, y + 54);
+      cx.textAlign = 'right';
+      cx.font = `700 13px ${FONT.ui}`;
+      cx.fillStyle = chosen ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.38)';
+      cx.fillText(chosen ? 'PLAYING' : 'click to pick', x0 + w - pad, y + 42);
+      cx.textAlign = 'left';
       y += rowH;
     }
   }
