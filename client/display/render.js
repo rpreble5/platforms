@@ -14,7 +14,7 @@ import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, getAvatar, getLabel, shade } from './sprites.js';
-import { drawDebris, drawSigns, lobbyVeil, panel } from './round-ui.js';
+import { drawDebris, drawSigns, inkPanel, lobbyVeil, panel } from './round-ui.js';
 import { GLASS_CHUNK_H, drawFloor, drawPerch, drawSky } from './stage.js';
 import { FONT, UI } from './theme.js';
 
@@ -329,18 +329,20 @@ function drawJoin(cx, qr, url, count) {
   // One self-contained "get in here" card on the right edge: title, code,
   // URL and headcount together, instead of a bare QR floating in the corner
   // and a "Scan to join" headline half a screen away.
+  // Geometry mirrored by LOBBY.join in round-ui.js (its roof is a
+  // platform) — change both together.
   const w = 384;
   const x0 = WORLD_W - w - 40;
   const y0 = 118;
   const h = 508;
-  // Same lighter veil as the setup card opposite — the QR sits on its own
-  // solid white box, so the glass around it can afford to show the sky.
-  panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
+  // The same opaque ink panel as the lobby furniture opposite: one card
+  // treatment for the whole screen, readable on every theme's sky.
+  inkPanel(cx, x0, y0, w, h);
 
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
   cx.font = `800 36px ${FONT.display}`;
-  cx.fillStyle = themeName() === 'terrazzo' ? '#333a4a' : '#ffffff';
+  cx.fillStyle = '#ffffff';
   cx.fillText('Scan to join', x0 + w / 2, y0 + 56);
 
   const quiet = 3;
@@ -375,10 +377,10 @@ function drawJoin(cx, qr, url, count) {
     size -= 1;
   } while (size > 13 && cx.measureText(url).width > maxW);
 
-  cx.fillStyle = themeName() === 'terrazzo' ? '#333a4a' : UI.paper;
+  cx.fillStyle = '#ffffff';
   cx.fillText(url, x0 + w / 2, qy + px + 46);
   cx.font = '500 20px ui-sans-serif, system-ui, sans-serif';
-  cx.fillStyle = UI.dim;
+  cx.fillStyle = 'rgba(255,255,255,0.62)';
   cx.fillText(`${count} player${count === 1 ? '' : 's'} connected`, x0 + w / 2, qy + px + 78);
   cx.textAlign = 'left';
 }

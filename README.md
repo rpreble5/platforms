@@ -45,7 +45,7 @@ with no phone at all.
 | key | on the display |
 |---|---|
 | **`Enter`** | **activate the menu row / skip to the next question** |
-| `↑` `↓` `←` `→` | in the lobby: `↑↓` move down the column, `←→` page decks / flip the mode / change a setting |
+| `↑` `↓` `←` `→` | in the lobby: `↑↓` move between controls, `←→` change deck / mode / background |
 | `S` | start the showdown (sudden-death true/false, from the lobby) |
 | `P` | pause |
 | `R` | restart from question one / abort the showdown |
@@ -62,12 +62,12 @@ lobby (name it with a top-level `"pack"` field). Decks are re-read on every
 selection, so editing one and re-picking it is the whole edit loop.
 
 **A deck is played one way, and says so**: `"mode": "solo"` for a
-free-for-all or `"mode": "teams"`. The lobby's mode segment picks which kind
-of night it is, and the card below it pages only that mode's decks, so a
-deck is never played the way it was not written for. The deck on the card is
-the deck that will play — paging is picking, there is no separate confirm.
-A deck that does not say is read from its questions — select-all only works
-in teams, so a deck using one is a teams deck. Two ship:
+free-for-all or `"mode": "teams"`. The lobby's mode tabs pick which kind of
+night it is and the list below shows only that mode's decks, so a deck is
+never played the way it was not written for. The highlighted row is the
+deck that will play — clicking a row IS the pick, there is no separate
+confirm. A deck that does not say is read from its questions — select-all
+only works in teams, so a deck using one is a teams deck. Two ship:
 
 - **`mixed.json`** — free-for-all, 14 questions of general knowledge and
   medicine, one of every type a single player can answer.
@@ -78,18 +78,25 @@ in teams, so a deck using one is a teams deck. Two ship:
   question uses it as-is. Verify the medical answer keys before a real
   session — they're board-classic, but they're the author's word.
 
-**Cover art**: a deck can wear its own picture on its lobby card with a
-top-level `"cover": "night.png"` — a bare filename in `questions/images/`,
-the same folder and the same rules as a question picture. Set it with the
-Cover button in the Pack Studio's pack bar. A deck without one (or whose
-image file never made it to the host) shows the drawn stand-in instead, so
-a missing picture is never a broken card.
+**Cover art** (dormant): a deck may carry a top-level
+`"cover": "night.png"` — a bare filename in `questions/images/`, same rules
+as a question picture, set with the Cover button in the Pack Studio's pack
+bar. The current lobby lists decks as text rows and does not draw covers;
+the field, the Studio button and the server-side checks are all kept for
+when deck art returns to the display.
 
 Control Room cases and Showdown statements still parse, validate and play,
 but nothing authors or offers them any more: the editor does not write them
 and the lobby does not list them. Packs that carry them keep them.
-The lobby is a live arena: players join, run and warm up underneath the menu
-while the host picks a pack and answer time.
+The lobby is a live arena, and the menu is furniture standing in it: the
+deck selector, the START platform (with a per-PGY headcount under the
+word), the background switcher and the join panel are physical objects
+whose roofs are one-way platforms. Players can climb the rungs and stand
+on the menu while the host sets up — landing on a card squashes it, but
+jumping never changes state; every control is host-only (mouse/keyboard).
+Answer time is no longer on the lobby at all: decks carry their own
+default, and the host phone (`/host`) keeps a `Time ▸` button for cycling
+it when a night needs something different.
 
 ### Training for question writers: /training
 

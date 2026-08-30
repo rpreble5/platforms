@@ -108,6 +108,7 @@ function fallOffset(t) {
  * @property {string[]} items
  * @property {string|null} [hover] the row the pointer is over
  * @property {'solo'|'teams'} [browse] which mode's shelf is on the card
+ * @property {Record<string, number>} [fx] squash per furniture id, 0..1
  * @property {string|null} [startBlocked] why Start cannot run, or null
  * @property {number} answerMs
  * @property {'solo'|'teams'} mode
@@ -170,157 +171,106 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
 const WORDMARK = 'PLATFORMS';
 
 /**
- * The lobby's left column, laid out to read as a pair with the join panel
- * opposite: same width, same top, same kind of card. Written down here
- * because the draw and the click handling both need the same numbers, and
- * because the whole column is FIXED — a library of thirty decks draws the
- * identical box as a library of two, since only one deck is ever on screen.
+ * The lobby's furniture, placed IN the playground rather than stacked in a
+ * column: the deck selector floats top-left, START is a platform in the
+ * middle of the air, the background switcher sits low where anyone can hop
+ * onto it, and the join panel anchors the right. The draw and the physics
+ * both need these numbers — menuPlatforms() turns the same rects into
+ * one-way platforms, so what looks landable IS landable. The climbing
+ * rungs that connect them live in buildLobbyArena (sim/levels.js), tuned
+ * to the same geometry.
  */
-const COL = {
-  x: 40,
-  w: 384,
-  modeY: 118,
-  modeH: 54,
-  deckY: 186,
-  deckH: 466,
-  startY: 666,
-  startH: 74,
-  setY: 752,
-  setH: 52,
-  devY: 818,
-  devH: 34,
-  cover: 292, // the same square as the QR code
-};
-
-/** Dots stop being readable past this many; a "3 / 12" counter takes over. */
-const MAX_DOTS = 8;
-
-/**
- * A control drawn straight onto the lobby sky, with no panel behind it —
- * the mode pills, Start, the settings strip, the dev tab. The sky is pale
- * and changes with the theme, so these carry their OWN dark ground: a
- * 10%-white wash over a bright background is invisible, which is exactly
- * what the first cut of this column got wrong. Everything inside the deck
- * card can stay light, because panel() lays lobbyVeil() down first.
- */
-const SKY = {
-  idle: {
-    fill: 'rgba(22,18,32,0.44)', line: 'rgba(255,255,255,0.34)',
-    text: 'rgba(255,255,255,0.94)', dim: 'rgba(255,255,255,0.72)',
-  },
-  active: {
-    fill: 'rgba(22,18,32,0.64)', line: 'rgba(255,255,255,0.95)',
-    text: '#ffffff', dim: 'rgba(255,255,255,0.86)',
-  },
-  off: {
-    fill: 'rgba(22,18,32,0.20)', line: 'rgba(255,255,255,0.16)',
-    text: 'rgba(255,255,255,0.45)', dim: 'rgba(255,255,255,0.35)',
-  },
+const LOBBY = {
+  deck: { x: 80, y: 250, w: 400, tabH: 58, rowH: 80, maxRows: 5 },
+  start: { x: 730, y: 488, w: 460, h: 118 },
+  back: { x: 760, y: 830, w: 400, h: 68 },
+  // mirrored by drawJoin in render.js — change both together
+  join: { x: 1496, y: 118, w: 384, h: 508 },
+  dev: { x: 48, y: 934, w: 132, h: 34 },
 };
 
 /**
- * A stable hue for a deck with no cover of its own. The modulo is taken
- * ONCE at the end — folding it into the loop mixes so weakly that names
- * sharing a prefix ("Filler deck 3", "Filler deck 5") come out the same
- * colour, which is the one thing this is here to avoid.
- * @param {string} [seed]
+ * The game-show skin: opaque deep-ink panels with white text, and ONE gold
+ * accent that belongs to START alone. Opaque is the whole point — five
+ * rounds of translucent-white washes proved that a see-through control is
+ * unreadable on a pale sky, and the sky changes with every theme.
  */
-function deckHue(seed) {
-  let h = 0;
-  for (const ch of seed ?? '') h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
-  return ((h % 360) + 360) % 360;
-}
+const INK = {
+  panel: '#26233b',
+  line: 'rgba(255,255,255,0.22)',
+  text: '#ffffff',
+  dim: 'rgba(255,255,255,0.62)',
+  faint: 'rgba(255,255,255,0.38)',
+  tabOn: '#ffffff',
+  tabOnText: '#26233b',
+  accent: '#f5b944',
+  accentText: '#2a2440',
+  amber: '#ffd478',
+};
 
 /**
- * Cover art for a deck. A pack that names a cover gets its own picture,
- * centre-cropped into the square; everything else gets the stand-in — the
- * game in miniature. The frame in which a cover is still loading draws the
- * stand-in too, so a card never flickers between two shapes: the rounded
- * square and its stroke are identical either way.
+ * One opaque ink panel — the only card treatment in the lobby, shared with
+ * the join panel in render.js so the two sides cannot drift apart.
  * @param {CanvasRenderingContext2D} cx
- * @param {number} x @param {number} y @param {number} s square side
- * @param {string} [name] the pack's cover filename, if it has one
- * @param {string} [seed] the deck's name, which tints the stand-in
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {string} [fill]
  */
-function drawDeckCover(cx, x, y, s, name, seed) {
-  const art = name ? questionImage(name) : null;
-  // The corner and the stroke are fractions of the side: this draws at 292
-  // on the lobby card and could draw small again elsewhere, and a radius
-  // pinned to one size looks wrong at the other.
-  const r = s * 0.055;
+export function inkPanel(cx, x, y, w, h, fill = INK.panel) {
   cx.save();
+  cx.shadowColor = 'rgba(20,16,40,0.45)';
+  cx.shadowBlur = 34;
+  cx.shadowOffsetY = 12;
+  cx.fillStyle = fill;
   cx.beginPath();
-  cx.roundRect(x, y, s, s, r);
-  cx.clip();
-  if (art) {
-    // cover-fit: fill the square from the middle of the picture, whichever
-    // way round it is, rather than squashing it to a thumbnail.
-    const k = Math.max(s / art.naturalWidth, s / art.naturalHeight);
-    const w = art.naturalWidth * k;
-    const h = art.naturalHeight * k;
-    cx.drawImage(art, x + (s - w) / 2, y + (s - h) / 2, w, h);
-  } else {
-    // The stand-in has to hold a 292px square without reading as a picture
-    // that failed to load, so it is a composed little scene rather than a
-    // flat wash: a lit sky, a floor, three platforms and a player on top.
-    // Its hue comes from the deck's NAME, so two coverless decks are still
-    // told apart at a glance, and the same deck looks the same every night.
-    const hue = deckHue(seed);
-    const sky = cx.createLinearGradient(x, y, x, y + s);
-    sky.addColorStop(0, `hsla(${hue}, 62%, 62%, 0.85)`);
-    sky.addColorStop(0.62, `hsla(${(hue + 26) % 360}, 54%, 44%, 0.85)`);
-    sky.addColorStop(1, `hsla(${(hue + 44) % 360}, 48%, 30%, 0.9)`);
-    cx.fillStyle = sky;
-    cx.fillRect(x, y, s, s);
-    cx.fillStyle = 'rgba(0,0,0,0.16)';
-    cx.fillRect(x, y + s * 0.86, s, s * 0.14);
-    cx.fillStyle = 'rgba(255,255,255,0.82)';
-    for (const [bx, by] of [[0.10, 0.64], [0.54, 0.52], [0.30, 0.38]]) {
-      cx.beginPath();
-      cx.roundRect(x + s * bx, y + s * by, s * 0.36, s * 0.07, s * 0.018);
-      cx.fill();
-    }
-    cx.fillStyle = '#ffffff';
-    cx.beginPath();
-    cx.roundRect(x + s * 0.41, y + s * 0.22, s * 0.14, s * 0.16, s * 0.026);
-    cx.fill();
-  }
+  cx.roundRect(x, y, w, h, 20);
+  cx.fill();
   cx.restore();
-  cx.strokeStyle = 'rgba(255,255,255,0.22)';
-  cx.lineWidth = Math.max(1.5, s * 0.006);
+  cx.strokeStyle = INK.line;
+  cx.lineWidth = 1.5;
   cx.beginPath();
-  cx.roundRect(x, y, s, s, r);
+  cx.roundRect(x, y, w, h, 20);
   cx.stroke();
 }
 
 /**
- * The lobby: a composed screen, not a dialog. The host's column on the LEFT
- * and the join panel on the RIGHT are deliberately the same shape — one
- * card asks the room to scan, the other shows the room what it is about to
- * play, and the deck's cover is drawn at the same size as the QR code. The
- * whole centre is left open: the lobby arena's platforms live there, so the
- * warm-up playground is never under a panel, and the world runs live
- * throughout. Setup time is play time.
- *
- * ONE deck is on screen at a time, paged with the arrows. That makes the
- * column a fixed height whatever the library holds — the thing the old
- * scrolling list needed its own arithmetic to guarantee — and it makes
- * paging the same act as picking: what is on the card is what will play.
+ * The lobby furniture as one-way platforms: a thin landing strip along each
+ * card's top edge, so beans can stand on the menu. One-way means nothing
+ * blocks from below or the side — the furniture is a roof, not a wall.
+ * Constant regardless of how many decks are listed, because only the TOP
+ * edge is collision and every card grows downward.
+ * @returns {Array<{id:string, x:number, y:number, w:number, h:number, oneWay:true}>}
+ */
+export function menuPlatforms() {
+  const strip = (/** @type {string} */ id, /** @type {{x:number,y:number,w:number}} */ r) =>
+    ({ id, x: r.x, y: r.y, w: r.w, h: 18, oneWay: /** @type {true} */ (true) });
+  return [
+    strip('menu:deck', LOBBY.deck),
+    strip('menu:quiz', LOBBY.start),
+    strip('menu:look', LOBBY.back),
+    strip('menu:join', LOBBY.join),
+  ];
+}
+
+/**
+ * The lobby: a playground with the menu standing in it as furniture. The
+ * deck selector, START and the background switcher are physical objects —
+ * their roofs are platforms (menuPlatforms), landing on one squashes it
+ * (menu.fx), and the rungs of the arena exist to make every roof
+ * reachable. Controls stay host-only: jumping on the menu never changes
+ * state, it is just allowed to be fun.
  * @param {CanvasRenderingContext2D} cx
  * @param {MenuView} menu
  * @param {number} playerCount
  */
 function drawMenu(cx, menu, playerCount) {
   void playerCount; // the join panel owns the headcount
-  const { x: x0, w } = COL;
-
   cx.textAlign = 'left';
   cx.textBaseline = 'alphabetic';
   cx.font = `800 46px ${FONT.display}`;
   cx.fillStyle = themeName() === 'glass' && glassFam().light
     ? glassFam().text
     : 'rgba(255,255,255,0.92)';
-  cx.fillText(WORDMARK, x0 + 4, 88);
+  cx.fillText(WORDMARK, 52, 88);
 
   const hits = menu.hits;
   if (hits) hits.length = 0;
@@ -332,233 +282,227 @@ function drawMenu(cx, menu, playerCount) {
   const sel = menu.items[menu.sel];
   const browse = menu.browse ?? 'solo';
   const counts = menu.cohortCounts ?? [0, 0, 0];
-  const onTeams = counts.reduce((a, b) => a + b, 0);
+  const fx = menu.fx ?? {};
   const shelf = menu.packs.filter((p) => (p.mode ?? 'solo') === browse);
   const found = shelf.findIndex((p) => p.file === menu.packs[menu.packIndex]?.file);
   const at = found < 0 ? 0 : found;
-  const deck = shelf[at];
 
-  // ---- how the night is played, above the deck it applies to
-  const segGap = 10;
-  const segW = (w - segGap) / 2;
-  /** @type {Array<['solo'|'teams', string, string, boolean]>} */
-  const segs = [
-    ['solo', 'Free-for-all', 'everyone for themselves', false],
-    ['teams', 'Teams', onTeams ? `${onTeams} on a team` : 'no years picked yet', !onTeams],
-  ];
-  for (const [mode, title, note, warn] of segs) {
-    const i = mode === 'solo' ? 0 : 1;
-    const sx = x0 + i * (segW + segGap);
-    const has = menu.packs.some((p) => (p.mode ?? 'solo') === mode);
-    const on = browse === mode;
-    // A mode with no decks is not a control: it draws as a label and takes
-    // no click, rather than switching to an empty shelf.
-    if (has) hit(`mode:${mode}`, sx, COL.modeY, segW, COL.modeH);
-    const lit = has && menu.hover === `mode:${mode}`;
-    const skin = !has ? SKY.off : lit ? SKY.active : SKY.idle;
-    // The chosen mode is a SOLID pill, not a slightly brighter one: over a
-    // pale lobby sky a 12%-vs-22% wash is no signal at all. The other one
-    // takes the dark sky treatment, so both are legible either way round.
-    cx.fillStyle = on ? 'rgba(255,255,255,0.86)' : skin.fill;
-    cx.strokeStyle = on ? 'rgba(255,255,255,0.95)' : skin.line;
-    cx.lineWidth = on ? 2.5 : 1.5;
-    cx.beginPath();
-    cx.roundRect(sx, COL.modeY, segW, COL.modeH, 14);
-    cx.fill();
-    cx.stroke();
-    cx.textAlign = 'center';
-    cx.font = fitFont(cx, title, segW - 22, 19, 14);
-    cx.fillStyle = on ? '#1d1b28' : skin.text;
-    cx.fillText(title, sx + segW / 2, COL.modeY + 25);
-    const sub = has ? note : 'no decks';
-    cx.font = fitFont(cx, sub, segW - 22, 13, 10);
-    // The amber only shows on the mode you are actually looking at: a
-    // warning about a shelf you are not on is noise.
-    cx.fillStyle = on ? (warn ? '#7d5a00' : 'rgba(29,27,40,0.66)') : skin.dim;
-    cx.fillText(sub, sx + segW / 2, COL.modeY + 43);
-    cx.textAlign = 'left';
-  }
+  /**
+   * Landing feedback: the whole piece of furniture squashes about its base
+   * when a bean lands on its roof, then springs back (main.js decays fx).
+   * @param {string} id @param {{x:number,y:number,w:number}} r
+   * @param {number} h @param {() => void} draw
+   */
+  const press = (id, r, h, draw) => {
+    const s = fx[id] ?? 0;
+    if (s < 0.02) { draw(); return; }
+    cx.save();
+    cx.translate(r.x + r.w / 2, r.y + h);
+    cx.scale(1 + 0.05 * s, 1 - 0.08 * s);
+    cx.translate(-(r.x + r.w / 2), -(r.y + h));
+    draw();
+    cx.restore();
+  };
 
-  // ---- the deck itself: one card, the cover as big as the QR opposite
-  panel(cx, x0, COL.deckY, w, COL.deckH, undefined, { veil: lobbyVeil() });
-  const s = COL.cover;
-  const cvX = x0 + (w - s) / 2;
-  const cvY = COL.deckY + 26;
+  // ---- the deck selector: mode tabs over the list of that mode's decks
+  const D = LOBBY.deck;
+  const rows = Math.max(1, Math.min(shelf.length, D.maxRows));
+  const deckH = D.tabH + 14 + rows * D.rowH + 10;
+  press('menu:deck', D, deckH, () => {
+    inkPanel(cx, D.x, D.y, D.w, deckH);
 
-  if (!deck) {
-    cx.textAlign = 'center';
-    cx.font = `700 19px ${FONT.ui}`;
-    cx.fillStyle = 'rgba(255,255,255,0.6)';
-    cx.fillText(menu.packs.length ? 'No decks written for this mode.' : 'No decks in questions/ yet.',
-      x0 + w / 2, COL.deckY + COL.deckH / 2);
-    cx.textAlign = 'left';
-  } else {
-    drawDeckCover(cx, cvX, cvY, s, deck.cover, deck.name);
-
-    cx.textAlign = 'center';
-    cx.font = fitFont(cx, deck.name, w - 60, 30, 18);
-    cx.fillStyle = '#ffffff';
-    cx.fillText(deck.name, x0 + w / 2, cvY + s + 40);
-    cx.font = `600 15px ${FONT.ui}`;
-    cx.fillStyle = 'rgba(255,255,255,0.6)';
-    cx.fillText(`${deck.questions} questions`, x0 + w / 2, cvY + s + 66);
-
-    // ---- the paging row: ◂ , where you are, ▸ — all of it under the
-    // picture, so nothing is ever drawn over the cover. The arrows wrap, so
-    // the far end of the library is always one press away. A shelf of one
-    // has nothing to page to and draws no row at all: a permanently dead
-    // control reads as a broken button, an absent one reads as "this is the
-    // only deck".
-    const rowY = cvY + s + 100;
-    if (shelf.length > 1) {
-      const bw = 56;
-      const bh = 42;
-      for (const [id, bx, dir] of /** @type {Array<[string, number, number]>} */ ([
-        ['deck:prev', x0 + 34, -1], ['deck:next', x0 + w - 34 - bw, 1],
-      ])) {
-        hit(id, bx, rowY - bh / 2, bw, bh);
-        const over = menu.hover === id;
-        const skin = over ? SKY.active : SKY.idle;
-        cx.fillStyle = over ? 'rgba(255,255,255,0.30)'
-          : sel === 'deck' ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.13)';
-        cx.strokeStyle = skin.line;
-        cx.lineWidth = over || sel === 'deck' ? 2 : 1.5;
+    const tabW = D.w / 2;
+    for (const [mode, title, i] of /** @type {Array<['solo'|'teams', string, number]>} */ ([
+      ['solo', 'Free-for-all', 0], ['teams', 'Teams', 1],
+    ])) {
+      const tx = D.x + i * tabW;
+      const has = menu.packs.some((p) => (p.mode ?? 'solo') === mode);
+      const on = browse === mode;
+      if (has) hit(`mode:${mode}`, tx, D.y, tabW, D.tabH);
+      const lit = has && menu.hover === `mode:${mode}`;
+      if (on) {
+        cx.fillStyle = INK.tabOn;
         cx.beginPath();
-        cx.roundRect(bx, rowY - bh / 2, bw, bh, 12);
+        cx.roundRect(tx, D.y, tabW, D.tabH, i === 0 ? [20, 0, 0, 0] : [0, 20, 0, 0]);
         cx.fill();
-        cx.stroke();
-        const mx = bx + bw / 2;
-        cx.strokeStyle = '#ffffff';
-        cx.lineWidth = 3.5;
-        cx.lineCap = 'round';
-        cx.lineJoin = 'round';
+      } else if (lit) {
+        cx.fillStyle = 'rgba(255,255,255,0.10)';
         cx.beginPath();
-        cx.moveTo(mx - dir * 4.5, rowY - 9);
-        cx.lineTo(mx + dir * 4.5, rowY);
-        cx.lineTo(mx - dir * 4.5, rowY + 9);
-        cx.stroke();
-        cx.lineCap = 'butt';
+        cx.roundRect(tx, D.y, tabW, D.tabH, i === 0 ? [20, 0, 0, 0] : [0, 20, 0, 0]);
+        cx.fill();
       }
-
-      // Between them: a dot per deck while they are still big enough to
-      // aim at — each one a direct jump, which beats pressing ▸ four times
-      // — and a plain counter once there are too many.
-      if (shelf.length <= MAX_DOTS) {
-        const gap = 22;
-        const dx0 = x0 + w / 2 - ((shelf.length - 1) * gap) / 2;
-        shelf.forEach((p, i) => {
-          const dx = dx0 + i * gap;
-          hit(`dot:${p.file}`, dx - 11, rowY - 13, 22, 26);
-          const here = i === at;
-          cx.fillStyle = here ? '#ffffff'
-            : menu.hover === `dot:${p.file}` ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.38)';
-          cx.beginPath();
-          cx.arc(dx, rowY, here ? 5.5 : 4, 0, Math.PI * 2);
-          cx.fill();
-        });
-      } else {
-        cx.font = `700 15px ${FONT.ui}`;
-        cx.fillStyle = 'rgba(255,255,255,0.72)';
-        cx.fillText(`${at + 1} / ${shelf.length}`, x0 + w / 2, rowY + 5);
+      cx.textAlign = 'center';
+      cx.font = fitFont(cx, title, tabW - 24, 21, 15);
+      cx.fillStyle = !has ? INK.faint : on ? INK.tabOnText : INK.dim;
+      cx.fillText(title, tx + tabW / 2, D.y + 37);
+      cx.textAlign = 'left';
+      // the cursor on the mode row rings the ACTIVE tab
+      if (sel === 'mode' && on) {
+        cx.strokeStyle = 'rgba(255,255,255,0.9)';
+        cx.lineWidth = 2.5;
+        cx.beginPath();
+        cx.roundRect(tx + 2, D.y + 2, tabW - 4, D.tabH - 4, i === 0 ? [18, 0, 0, 0] : [0, 18, 0, 0]);
+        cx.stroke();
       }
     }
-    cx.textAlign = 'left';
-  }
-
-  // ---- Start, and the reason when it cannot run
-  let y = COL.startY;
-  const why = menu.startBlocked ?? null;
-  const cursorHere = sel === 'quiz';
-  const hoverHere = menu.hover === 'quiz';
-  const btnH = COL.startH;
-  hit('quiz', x0, y, w, btnH);
-  cx.save();
-  cx.beginPath();
-  cx.roundRect(x0, y, w, btnH, 18);
-  if ((cursorHere || hoverHere) && !why) {
-    cx.shadowColor = 'rgba(255,255,255,0.85)';
-    cx.shadowBlur = 28;
-  }
-  // Start sits on the bare sky, so it carries its own ground like the rest
-  // of the column's sky controls — and the blocked state is DARKER rather
-  // than fainter, because its amber reason has to be readable from the
-  // back of the room.
-  // Blocked takes the SAME ground as idle, not the disabled one: it still
-  // has a sentence to deliver. The dimmed wordmark is what says "not yet".
-  cx.fillStyle = why
-    ? SKY.idle.fill
-    : cursorHere || hoverHere ? 'rgba(38,32,54,0.78)' : SKY.idle.fill;
-  cx.fill();
-  cx.shadowColor = 'rgba(0,0,0,0)';
-  cx.strokeStyle = why
-    ? 'rgba(255,255,255,0.22)'
-    : cursorHere || hoverHere ? 'rgba(255,255,255,0.95)' : SKY.idle.line;
-  cx.lineWidth = cursorHere || hoverHere ? 2.5 : 1.5;
-  cx.stroke();
-  cx.restore();
-  cx.textAlign = 'center';
-  if (why) {
-    cx.font = `800 24px ${FONT.display}`;
-    cx.fillStyle = 'rgba(255,255,255,0.55)';
-    cx.fillText('Start', x0 + w / 2, y + 31);
-    cx.font = fitFont(cx, why, w - 30, 15, 11);
-    cx.fillStyle = '#ffd478';
-    cx.fillText(why, x0 + w / 2, y + 54);
-  } else {
-    cx.font = `800 30px ${FONT.display}`;
-    cx.fillStyle = '#ffffff';
-    cx.fillText(menu.loading ? 'loading…' : 'Start', x0 + w / 2, y + btnH / 2 + 11);
-  }
-  cx.textAlign = 'left';
-
-  // ---- the two settings, off the deck card and deliberately quiet:
-  // set once at the top of the night, rarely touched again.
-  y = COL.setY;
-  /** @type {Array<['time'|'look', string, string]>} */
-  const cells = [
-    ['time', 'Answer time', `${Math.round(menu.answerMs / 1000)}s`],
-    ['look', 'Background', menu.look === 'deck'
-      ? `deck${menu.deckTheme ? ` · ${menu.deckTheme}` : ''}`
-      : menu.look],
-  ];
-  const cellW = (w - 12) / 2;
-  cells.forEach(([key, label, value], i) => {
-    const cxp = x0 + i * (cellW + 12);
-    const active = sel === key || menu.hover === key;
-    const skin = active ? SKY.active : SKY.idle;
-    hit(key, cxp, y, cellW, COL.setH);
-    cx.fillStyle = skin.fill;
-    cx.strokeStyle = skin.line;
-    cx.lineWidth = active ? 2 : 1.5;
+    cx.strokeStyle = INK.line;
+    cx.lineWidth = 1.5;
     cx.beginPath();
-    cx.roundRect(cxp, y, cellW, COL.setH, 12);
-    cx.fill();
+    cx.moveTo(D.x, D.y + D.tabH);
+    cx.lineTo(D.x + D.w, D.y + D.tabH);
     cx.stroke();
-    cx.font = `700 12px ${FONT.ui}`;
-    cx.fillStyle = skin.dim;
-    cx.fillText(label, cxp + 13, y + 20);
-    cx.font = fitFont(cx, value, cellW - 40, 18, 12);
-    cx.fillStyle = skin.text;
-    cx.fillText(active ? `${value}  ▸` : value, cxp + 13, y + 42);
+
+    if (!shelf.length) {
+      cx.textAlign = 'center';
+      cx.font = `700 17px ${FONT.ui}`;
+      cx.fillStyle = INK.dim;
+      cx.fillText(menu.packs.length ? 'No decks for this mode yet.' : 'No decks in questions/ yet.',
+        D.x + D.w / 2, D.y + D.tabH + 14 + D.rowH / 2 + 6);
+      cx.textAlign = 'left';
+      return;
+    }
+
+    // A window keeps a big library from growing the card off the arena:
+    // the list shows maxRows around the loaded deck, derived from the
+    // selection so there is no separate scroll state to desync.
+    const top = Math.min(Math.max(0, at - rows + 1), Math.max(0, shelf.length - rows));
+    shelf.slice(top, top + rows).forEach((p, i) => {
+      const ry = D.y + D.tabH + 14 + i * D.rowH;
+      const here = top + i === at;
+      const id = `deck:${p.file}`;
+      hit(id, D.x + 12, ry, D.w - 24, D.rowH - 12);
+      if (here || menu.hover === id) {
+        cx.fillStyle = here ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)';
+        cx.beginPath();
+        cx.roundRect(D.x + 12, ry, D.w - 24, D.rowH - 12, 12);
+        cx.fill();
+      }
+      if (here) {
+        cx.strokeStyle = sel === 'deck' ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)';
+        cx.lineWidth = sel === 'deck' ? 2.5 : 1.5;
+        cx.beginPath();
+        cx.roundRect(D.x + 12, ry, D.w - 24, D.rowH - 12, 12);
+        cx.stroke();
+      }
+      cx.font = fitFont(cx, p.name, D.w - 100, 22, 15);
+      cx.fillStyle = here ? INK.text : INK.dim;
+      cx.fillText(p.name, D.x + 30, ry + 31);
+      cx.font = `600 14px ${FONT.ui}`;
+      cx.fillStyle = INK.faint;
+      cx.fillText(`${p.questions} questions`, D.x + 30, ry + 53);
+      if (here) {
+        cx.font = `800 24px ${FONT.ui}`;
+        cx.fillStyle = INK.accent;
+        cx.fillText('✓', D.x + D.w - 44, ry + 41);
+      }
+    });
+    if (shelf.length > rows) {
+      // sliver scrollbar: how much of the shelf is on the card
+      const trackY = D.y + D.tabH + 14;
+      const trackH = rows * D.rowH - 12;
+      cx.fillStyle = 'rgba(255,255,255,0.12)';
+      cx.fillRect(D.x + D.w - 7, trackY, 3, trackH);
+      const thumbH = Math.max(24, (rows / shelf.length) * trackH);
+      const thumbY = trackY + (top / (shelf.length - rows)) * (trackH - thumbH);
+      cx.fillStyle = 'rgba(255,255,255,0.55)';
+      cx.fillRect(D.x + D.w - 7, thumbY, 3, thumbH);
+    }
   });
 
-  // ---- the dev-tools tab: every key, one click away, folded up otherwise
-  const devW = 132;
-  const devY = COL.devY;
-  const devHover = menu.hover === 'dev';
-  hit('dev', x0, devY, devW, COL.devH);
-  const devSkin = menu.dev || devHover ? SKY.active : SKY.idle;
-  cx.fillStyle = devSkin.fill;
-  cx.strokeStyle = devSkin.line;
-  cx.lineWidth = 1.5;
-  cx.beginPath();
-  cx.roundRect(x0, devY, devW, COL.devH, 10);
-  cx.fill();
-  cx.stroke();
+  // ---- START: the one gold thing on screen, floating mid-air
+  const S = LOBBY.start;
+  const why = menu.startBlocked ?? null;
+  const startLit = sel === 'quiz' || menu.hover === 'quiz';
+  hit('quiz', S.x, S.y, S.w, S.h);
+  press('menu:quiz', S, S.h, () => {
+    cx.save();
+    if (startLit && !why) {
+      cx.shadowColor = 'rgba(245,185,68,0.9)';
+      cx.shadowBlur = 34;
+    } else {
+      cx.shadowColor = 'rgba(20,16,40,0.45)';
+      cx.shadowBlur = 34;
+      cx.shadowOffsetY = 12;
+    }
+    cx.fillStyle = why ? '#3a3650' : INK.accent;
+    cx.beginPath();
+    cx.roundRect(S.x, S.y, S.w, S.h, 20);
+    cx.fill();
+    cx.restore();
+    cx.strokeStyle = startLit ? 'rgba(255,255,255,0.95)' : why ? INK.line : 'rgba(255,255,255,0.5)';
+    cx.lineWidth = startLit ? 2.5 : 1.5;
+    cx.beginPath();
+    cx.roundRect(S.x, S.y, S.w, S.h, 20);
+    cx.stroke();
+
+    cx.textAlign = 'center';
+    if (why) {
+      cx.font = `800 38px ${FONT.display}`;
+      cx.fillStyle = 'rgba(255,255,255,0.55)';
+      cx.fillText('START', S.x + S.w / 2, S.y + 50);
+      cx.font = fitFont(cx, why, S.w - 30, 15, 11);
+      cx.fillStyle = INK.amber;
+      cx.fillText(why, S.x + S.w / 2, S.y + 76);
+    } else {
+      cx.font = `800 44px ${FONT.display}`;
+      cx.fillStyle = INK.accentText;
+      cx.fillText(menu.loading ? 'loading…' : 'START', S.x + S.w / 2, S.y + 54);
+    }
+    // who is in the room, by year — the host's headcount at a glance
+    cx.font = `700 17px ${FONT.display}`;
+    cx.fillStyle = why ? 'rgba(255,255,255,0.45)' : 'rgba(42,36,64,0.78)';
+    counts.slice(0, 3).forEach((n, i) => {
+      cx.fillText(`PGY${i + 1} · ${n}`, S.x + S.w / 2 + (i - 1) * 120, S.y + (why ? 100 : 94));
+    });
+    cx.textAlign = 'left';
+  });
+
+  // ---- the background switcher: a low platform anyone can hop onto
+  const B = LOBBY.back;
+  const lookLabel = menu.look === 'deck'
+    ? `deck${menu.deckTheme ? ` · ${menu.deckTheme}` : ''}`
+    : menu.look;
+  hit('look:prev', B.x, B.y, 64, B.h);
+  hit('look:next', B.x + B.w - 64, B.y, 64, B.h);
+  hit('look', B.x + 64, B.y, B.w - 128, B.h);
+  press('menu:look', B, B.h, () => {
+    inkPanel(cx, B.x, B.y, B.w, B.h);
+    const lookLit = sel === 'look';
+    for (const [id, ax, ch] of /** @type {Array<[string, number, string]>} */ ([
+      ['look:prev', B.x + 32, '◂'], ['look:next', B.x + B.w - 32, '▸'],
+    ])) {
+      const over = menu.hover === id;
+      cx.textAlign = 'center';
+      cx.font = `800 26px ${FONT.ui}`;
+      cx.fillStyle = over || lookLit ? INK.text : INK.dim;
+      cx.fillText(ch, ax, B.y + 44);
+    }
+    cx.textAlign = 'center';
+    cx.font = `700 12px ${FONT.ui}`;
+    cx.fillStyle = INK.faint;
+    cx.fillText('Background', B.x + B.w / 2, B.y + 26);
+    cx.font = fitFont(cx, lookLabel, B.w - 150, 22, 14);
+    cx.fillStyle = INK.text;
+    cx.fillText(lookLabel, B.x + B.w / 2, B.y + 52);
+    cx.textAlign = 'left';
+    if (lookLit) {
+      cx.strokeStyle = 'rgba(255,255,255,0.9)';
+      cx.lineWidth = 2.5;
+      cx.beginPath();
+      cx.roundRect(B.x + 2, B.y + 2, B.w - 4, B.h - 4, 18);
+      cx.stroke();
+    }
+  });
+
+  // ---- the dev-tools tab: tucked at floor level, out of the composition
+  const V = LOBBY.dev;
+  const devLit = menu.dev || menu.hover === 'dev';
+  hit('dev', V.x, V.y, V.w, V.h);
+  inkPanel(cx, V.x, V.y, V.w, V.h, devLit ? '#38344e' : INK.panel);
   cx.font = `700 14px ${FONT.ui}`;
-  cx.fillStyle = devSkin.text;
-  cx.fillText('⌨  dev tools', x0 + 14, devY + 22);
-  if (menu.dev) drawDevPanel(cx, x0, devY + COL.devH + 12);
+  cx.fillStyle = devLit ? INK.text : INK.dim;
+  cx.fillText('⌨  dev tools', V.x + 14, V.y + 22);
+  if (menu.dev) drawDevPanel(cx, V.x, V.y + V.h + 12);
 }
 
 /**

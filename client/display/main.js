@@ -46,7 +46,7 @@ import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from
 import { setRound, setTheme } from './themes.js';
 import { cycleVoice, tickAudio, toggleMuted, unlockAudio } from './audio.js';
 import { drawConfetti } from './fx.js';
-import { drawRoundOverlay } from './round-ui.js';
+import { drawRoundOverlay, menuPlatforms } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
 import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
@@ -67,6 +67,10 @@ const boot = /** @type {HTMLElement} */ (document.getElementById('boot'));
 // ------------------------------------------------------------------ state
 
 const world = createWorld(buildLobbyArena());
+// The lobby menu's cards are furniture: their roofs are one-way platforms,
+// so beans can stand on the menu. Rounds rebuild the arena from the
+// question, which drops the furniture for the duration of play.
+world.platforms.push(...menuPlatforms());
 const bus = new InputBus();
 let game = createGame([]);
 world.spawn = { x: 1920 / 2 - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
@@ -353,6 +357,10 @@ const menu = {
   lastIn: { solo: null, teams: null },
   // The dev-tools tab: the full key list, folded away until clicked.
   dev: false,
+  /** Landing squash per furniture id, 0..1 — set by trackMenuLandings when
+   *  a bean lands on a menu:* roof, decayed every frame. Pure fun: nothing
+   *  here changes state. @type {Record<string, number>} */
+  fx: {},
 };
 
 /**
@@ -362,6 +370,27 @@ const menu = {
  * @type {Array<{id: string, x: number, y: number, w: number, h: number}>}
  */
 const menuHits = [];
+
+/** What each player stood on last frame, to tell a landing from standing. */
+const stoodOn = new Map();
+
+/** A fresh landing on a menu:* roof squashes that furniture (menu.fx). */
+function trackMenuLandings() {
+  if (!menuOpen()) {
+    if (stoodOn.size) stoodOn.clear();
+    return;
+  }
+  for (const [pid, pl] of world.players) {
+    const on = pl.standingOn?.id ?? null;
+    if (on && on.startsWith('menu:') && stoodOn.get(pid) !== on) menu.fx[on] = 1;
+    if (on) stoodOn.set(pid, on);
+    else stoodOn.delete(pid);
+  }
+  for (const k of Object.keys(menu.fx)) {
+    menu.fx[k] *= 0.86;
+    if (menu.fx[k] < 0.02) delete menu.fx[k];
+  }
+}
 
 /** The Background row's cycle: the deck's own theme, then every pack theme
  *  ('glass' is skipped — it is just an alias for blanc). */
@@ -404,7 +433,7 @@ function shelfIndex() {
  * @returns {string[]}
  */
 function menuItems() {
-  const items = ['mode', 'deck', 'time', 'look', 'quiz'];
+  const items = ['mode', 'deck', 'look', 'quiz'];
   if (menu.sel >= items.length) menu.sel = items.length - 1;
   if (menu.sel < 0) menu.sel = 0;
   return items;
@@ -534,7 +563,11 @@ async function selectPack(index) {
   if (!menu.packs.length) return;
   menu.packIndex = ((index % menu.packs.length) + menu.packs.length) % menu.packs.length;
   const file = menu.packs[menu.packIndex].file;
-  menu.lastIn[(menu.packs[menu.packIndex].mode ?? 'solo')] = file;
+  const deckMode = (menu.packs[menu.packIndex].mode ?? 'solo') === 'teams' ? 'teams' : 'solo';
+  menu.lastIn[deckMode] = file;
+  // Whoever picked the deck — a tab, a row, the host phone's Pack button —
+  // the tabs follow it: the shelf on screen always holds the loaded deck.
+  menu.browse = deckMode;
   const seq = ++packSeq;
   menu.loading = true;
   try {
@@ -588,7 +621,8 @@ function browseMode(mode) {
   void selectPack(menu.packs.indexOf(back));
 }
 
-/** The answer-time setting cycles through party-sensible windows. */
+/** Answer-time steps for the HOST PHONE's 'timenext' command — the lobby
+ *  itself no longer shows the setting; decks carry their own default. */
 const TIME_STEPS = [8000, 12000, 15000, 20000];
 
 /** @param {number} dir */
@@ -603,7 +637,6 @@ function cycleTime(dir) {
 function menuAdjust(item, dir) {
   if (item === 'deck') pageDeck(dir);
   else if (item === 'mode') browseMode(menu.browse === 'solo' ? 'teams' : 'solo');
-  else if (item === 'time') cycleTime(dir);
   else if (item === 'look') {
     const at = Math.max(0, LOOKS.indexOf(menu.look));
     menu.look = LOOKS[(at + dir + LOOKS.length) % LOOKS.length];
@@ -617,14 +650,16 @@ function menuAdjust(item, dir) {
  * @param {string} item
  */
 function menuActivate(item) {
-  if (item === 'deck:prev') pageDeck(-1);
-  else if (item === 'deck:next') pageDeck(1);
-  else if (item.startsWith('mode:')) {
+  if (item.startsWith('mode:')) {
     browseMode(item.slice(5) === 'teams' ? 'teams' : 'solo');
-  } else if (item.startsWith('dot:')) {
-    // A dot is a direct jump to that deck — the shelf's shortcut past ▸.
-    const ix = menu.packs.findIndex((p) => p.file === item.slice(4));
+  } else if (item.startsWith('deck:')) {
+    // A row IS the pick — clicking a deck loads it, nothing to confirm.
+    const ix = menu.packs.findIndex((p) => p.file === item.slice(5));
     if (ix >= 0) void selectPack(ix);
+  } else if (item === 'look:prev') {
+    menuAdjust('look', -1);
+  } else if (item === 'look:next') {
+    menuAdjust('look', 1);
   } else if (item === 'quiz') {
     // The button itself carries the reason, so a blocked press stays quiet
     // rather than repeating it in a banner.
@@ -658,7 +693,7 @@ function startShowdown() {
 
 function endShowdown() {
   showdown = null;
-  world.platforms = buildLobbyArena();
+  world.platforms = [...buildLobbyArena(), ...menuPlatforms()];
   respawnAll(world);
   game.phase = PHASE.LOBBY;
   game.phaseT = 0;
@@ -683,7 +718,7 @@ function toMenu() {
   game = createGame(game.baseQuestions, game.answerMs);
   game.levelPool = levelPool;
   applyMode();
-  world.platforms = buildLobbyArena();
+  world.platforms = [...buildLobbyArena(), ...menuPlatforms()];
   respawnAll(world);
   menu.sel = Math.max(0, menuItems().indexOf('quiz'));
   lastCheckpoint = 0;
@@ -761,6 +796,7 @@ function frame(now) {
 
   // Landing notes ride the same frame as the landing squash.
   tickAudio(world);
+  trackMenuLandings();
 
   if (game.phase !== lastPhase) {
     // A sort round's phones already buzzed per item; the summary reveal
@@ -1086,7 +1122,8 @@ canvas.addEventListener('pointerdown', (e) => {
 /** The cursor row a clickable belongs to. @param {string} id */
 function rowOf(id) {
   if (id.startsWith('mode:')) return 'mode';
-  if (id.startsWith('deck:') || id.startsWith('dot:')) return 'deck';
+  if (id.startsWith('deck:')) return 'deck';
+  if (id.startsWith('look:')) return 'look';
   return id;
 }
 // A window that loses focus must release, or the avatar runs forever.
