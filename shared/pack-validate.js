@@ -62,6 +62,18 @@ export function suggestOrder(questions) {
 }
 
 /**
+ * A picture reference a pack is allowed to make: a BARE filename with a
+ * picture extension. No slashes, no traversal — every image a pack names
+ * lives in questions/images and is served through the one /qimg/ window.
+ * Used for question pictures and for pack cover art alike, and exported so
+ * the host applies the identical rule before touching the disk.
+ * @param {any} v @returns {boolean}
+ */
+export function plainImageName(v) {
+  return typeof v === 'string' && !/[\\/]/.test(v) && /\.(png|jpe?g|webp|svg)$/i.test(v);
+}
+
+/**
  * How a deck is played, for any pack — including the ones written before
  * decks declared it. A pack that never said is read from its questions:
  * select-all only works in teams (covering every correct platform is a
@@ -83,7 +95,7 @@ export function packMode(raw) {
  * @param {any} raw the parsed pack JSON
  * @returns {{ pack: {
  *   pack: string, answerMs: number, theme: string, questions: any[],
- *   mode: 'solo'|'teams',
+ *   mode: 'solo'|'teams', cover?: string,
  *   showdown: {statements:any[], answerMs?:number} | null,
  *   controlRoom: {questions:any[], perTeam:number, answerMs:number} | null,
  * }, problems: string[] }}
@@ -100,15 +112,20 @@ export function validatePack(raw) {
    */
   const vetImage = (q, where) => {
     if (q.image === undefined) return;
-    if (
-      typeof q.image !== 'string' ||
-      /[\\/]/.test(q.image) ||
-      !/\.(png|jpe?g|webp|svg)$/i.test(q.image)
-    ) {
+    if (!plainImageName(q.image)) {
       problems.push(`${where}: image must be a plain png/jpg/webp/svg filename — ignored`);
       delete q.image;
     }
   };
+
+  // The pack's cover art, drawn on its card in the lobby deck list. Same
+  // filename rule as a question picture, same questions/images folder, same
+  // "the host owns existence" split.
+  let cover;
+  if (raw.cover !== undefined) {
+    if (plainImageName(raw.cover)) cover = raw.cover;
+    else problems.push('cover must be a plain png/jpg/webp/svg filename — ignored');
+  }
 
   // How the deck is played. This is a property OF THE DECK, not a setting
   // the host flips at game time: the lobby lists free-for-all decks and
@@ -376,16 +393,16 @@ export function validatePack(raw) {
     else problems.push(`order "${raw.order}" is unknown — playing as authored`);
   }
 
-  return {
-    pack: {
-      pack: raw.pack ?? 'default',
-      answerMs: raw.answerMs ?? 12000,
-      mode,
-      theme,
-      questions: deck,
-      showdown,
-      controlRoom,
-    },
-    problems,
+  /** @type {any} */
+  const pack = {
+    pack: raw.pack ?? 'default',
+    answerMs: raw.answerMs ?? 12000,
+    mode,
+    theme,
+    questions: deck,
+    showdown,
+    controlRoom,
   };
+  if (cover) pack.cover = cover;
+  return { pack, problems };
 }

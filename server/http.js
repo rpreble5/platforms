@@ -12,7 +12,7 @@
  */
 
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { packMode, validatePack } from '../shared/pack-validate.js';
+import { packMode, plainImageName, validatePack } from '../shared/pack-validate.js';
 // Re-exported so existing callers (and tests) keep one import site.
 export { suggestOrder } from '../shared/pack-validate.js';
 import { gzipSync } from 'node:zlib';
@@ -381,7 +381,11 @@ function readBody(req, cap) {
  * Read fresh on each call — dropping a new pack file in and reloading the
  * display is the whole workflow.
  * @param {string} root
- * @returns {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom:number}>}
+ * The cover is the one filesystem truth in this list: it is reported only
+ * when the file is really in questions/images, so the lobby never chases a
+ * 404 for a picture that was never sent along with the pack.
+ * @returns {Array<{file:string, name:string, questions:number,
+ *   mode:'solo'|'teams', cover?:string, showdown:boolean, controlRoom:number}>}
  */
 export function listPacks(root) {
   const dir = path.join(root, 'questions');
@@ -395,7 +399,8 @@ export function listPacks(root) {
   return files.map((file) => {
     try {
       const j = JSON.parse(readFileSync(path.join(dir, file), 'utf8'));
-      return {
+      /** @type {any} */
+      const row = {
         file,
         name: typeof j.pack === 'string' ? j.pack : file.replace(/\.json$/, ''),
         questions: Array.isArray(j.questions) ? j.questions.length : 0,
@@ -403,6 +408,8 @@ export function listPacks(root) {
         showdown: !!j.showdown?.statements?.length,
         controlRoom: Array.isArray(j.controlRoom?.questions) ? j.controlRoom.questions.length : 0,
       };
+      if (plainImageName(j.cover) && existsSync(path.join(dir, 'images', j.cover))) row.cover = j.cover;
+      return row;
     } catch {
       return { file, name: `${file} (broken)`, questions: 0, mode: 'solo', showdown: false, controlRoom: 0 };
     }
@@ -437,6 +444,10 @@ export function loadQuestions(root, packFile = 'default.json') {
       problems.push(`Q${i + 1}: image "${q.image}" not found in questions/images — ignored`);
       delete q.image;
     }
+  }
+  if (pack.cover && !existsSync(path.join(root, 'questions', 'images', pack.cover))) {
+    problems.push(`cover "${pack.cover}" not found in questions/images — ignored`);
+    delete pack.cover;
   }
 
   if (problems.length) {

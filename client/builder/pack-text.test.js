@@ -534,3 +534,26 @@ test('removeBlock deletes the block and its trailing blank', () => {
   assert.equal(removeBlock(doc, blocks[0]), '# Two?\n✓ c\nd');
   assert.equal(removeBlock(doc, blocks[1]), '# One?\n✓ a\nb\n');
 });
+
+test('cover: rides the front matter like mode, and never shows in the doc', () => {
+  const { meta, text } = extractFrontMatter('pack: A\ncover: night.png\nmode: teams\n\n# Q?\n✓ a\nb');
+  assert.equal(meta.cover, 'night.png');
+  assert.equal(text, '# Q?\n✓ a\nb', 'the editor is shown questions only');
+
+  assert.match(serializeDoc({ cover: 'night.png', questions: [] }), /cover: night\.png/);
+  assert.doesNotMatch(serializeDoc({ questions: [] }), /cover:/); // absent unless set
+
+  assert.equal(parseDoc('cover: night.png\n\n# Q?\n✓ a\nb').raw.cover, 'night.png');
+  assert.equal(validatePack({ cover: 'night.png', questions: [] }).pack.cover, 'night.png');
+});
+
+test('the front-matter region ends AFTER mode and cover, not before them', () => {
+  // setDirective(…, null, …) appends past the last front-matter line. When
+  // frontMatterEnd stopped at time:, a new setting landed above mode/cover
+  // and — worse — an existing one below them was never found to replace.
+  const doc = 'pack: A\ntime: 12s\nmode: teams\ncover: night.png\n\n# Q?\n✓ a\nb';
+  const withOrder = setDirective(doc, null, 'order', 'suggested');
+  assert.equal(withOrder.split('\n')[4], 'order: suggested');
+  assert.equal(setDirective(doc, null, 'cover', 'day.png').split('\n')[3], 'cover: day.png');
+  assert.equal(extractFrontMatter(withOrder).text, '# Q?\n✓ a\nb');
+});

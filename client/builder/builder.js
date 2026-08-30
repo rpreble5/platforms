@@ -46,7 +46,7 @@ const doc = $('doc');
 let docText = '';
 /** The always-there pack settings live in the pack bar, never the doc.
  *  order has no UI — an imported pack's value survives the round trip. */
-let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo' };
+let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo', cover: '' };
 /**
  * Control Room cases and Showdown statements belonging to a pack that was
  * opened here. The Studio authors decks only, so they never enter the
@@ -92,6 +92,7 @@ function exportable() {
     questions: raw.questions,
   };
   out.mode = meta.mode === 'teams' ? 'teams' : 'solo';
+  if (meta.cover) out.cover = meta.cover;
   if (meta.order === 'suggested') out.order = 'suggested';
   for (const q of out.questions) {
     const pin = levels[q.text];
@@ -832,6 +833,39 @@ function syncPackCard() {
   const teams = meta.mode === 'teams';
   $('modeSolo').classList.toggle('on', !teams);
   $('modeTeams').classList.toggle('on', teams);
+  syncCoverTile();
+}
+
+/**
+ * The cover tile: this session's own pixels when the file was picked here,
+ * otherwise the host's copy through /qimg (a Studio served by our node
+ * server can show the cover of a pack it just opened). A cover named by a
+ * pack whose file is not on this host falls back to the placeholder — the
+ * name still exports, so that is honest rather than broken.
+ */
+function syncCoverTile() {
+  const tile = $('coverTile');
+  const name = meta.cover;
+  $('coverClear').hidden = !name;
+  tile.title = name
+    ? `${name} — click to replace`
+    : 'the picture this deck wears in the lobby deck list';
+  const src = name ? localImages.get(name) ?? `/qimg/${encodeURIComponent(name)}` : '';
+  if (tile.dataset.src === src) return;
+  tile.dataset.src = src;
+  tile.replaceChildren();
+  if (!src) {
+    const ph = document.createElement('span');
+    ph.className = 'ph';
+    ph.textContent = '🖼';
+    tile.appendChild(ph);
+    return;
+  }
+  const img = document.createElement('img');
+  img.alt = name;
+  img.onerror = () => { tile.dataset.src = ''; syncCoverTile(); };
+  img.src = src;
+  tile.appendChild(img);
 }
 
 // ------------------------------------------------------------------ refresh
@@ -1017,6 +1051,9 @@ function adoptDoc(t, opts = {}) {
   levels = Object.keys(pins).length || !opts.boot ? pins : restoredPins;
   Object.assign(meta, fm);
   if (meta.order !== 'suggested') meta.order = 'authored';
+  // Like the mode: the cover belongs to the pack being opened. Without this
+  // the last pack's picture would follow you into the next one.
+  if (!opts.boot) meta.cover = typeof fm.cover === 'string' ? fm.cover : '';
   // The mode always comes from the pack being opened, never from whatever
   // was open before. When the pack does not say, select-all decides it:
   // only a teams deck can hold one, so a pack using them was written for
@@ -1102,6 +1139,23 @@ const setMode = (/** @type {'solo'|'teams'} */ m) => {
     toast(`${multis} question${multis === 1 ? ' has' : 's have'} more than one correct answer. Select-all is a teams question — each one now needs a single check, or switch back to Teams.`);
   }
 };
+// The cover is a picture the PACK wears, so it is a pack-bar button like
+// the mode segment — never a line in the document.
+$('coverTile').onclick = () => {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.png,.jpg,.jpeg,.webp,.svg';
+  inp.onchange = () => {
+    const f = inp.files?.[0];
+    if (!f) return;
+    localImages.set(f.name, URL.createObjectURL(f));
+    meta.cover = f.name;
+    metaChanged();
+    toast('The exported pack references the FILENAME only — send the image file along; the host drops it in questions/images/.');
+  };
+  inp.click();
+};
+$('coverClear').onclick = () => { meta.cover = ''; metaChanged(); };
 $('modeSolo').onclick = () => setMode('solo');
 $('modeTeams').onclick = () => setMode('teams');
 $('packAnswerMs').oninput = () => {

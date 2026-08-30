@@ -1,6 +1,7 @@
 {
   "pack": "Showcase night",
   "mode": "teams",
+  "cover": "showcase-cover.png",
   "theme": "blanc",
   "answerMs": 12000,
   "questions": [

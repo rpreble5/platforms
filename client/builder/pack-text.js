@@ -55,7 +55,7 @@ const BUCKET_ARROW_RE = /^(.{1,40}?)\s*(?:→|->)\s*(.*)$/;
 const DIRECTIVE_RE = /^(img|image|layout|level|type|pace|time|context|turns)\s*:\s*(.*)$/i;
 
 /** Directive keys that make sense per location; anything else is flagged. */
-const FRONT_KEYS = ['pack', 'theme', 'time', 'order', 'mode'];
+const FRONT_KEYS = ['pack', 'theme', 'time', 'order', 'mode', 'cover'];
 
 /** @param {string} v e.g. "12s", "12", "6.5s" @returns {number|null} ms */
 function parseSeconds(v) {
@@ -90,23 +90,23 @@ const fmtSeconds = (/** @type {number} */ ms) => `${ms / 1000}s`;
  */
 
 /**
- * Pull the pack meta (pack/theme/time/order) off the top of a document
+ * Pull the pack meta (pack/theme/time/order/mode/cover) off the top of a document
  * and return it alongside the stripped text. The Studio runs this at
  * every LOAD — boot, Open, Paste, Load sample — so serialized imports
  * and drafts from the front-matter era migrate into the Pack panel and
  * the doc itself holds only questions.
  * @param {string} text
- * @returns {{ meta: {pack?:string, theme?:string, answerMs?:number, order?:string, mode?:string}, text: string }}
+ * @returns {{ meta: {pack?:string, theme?:string, answerMs?:number, order?:string, mode?:string, cover?:string}, text: string }}
  */
 export function extractFrontMatter(text) {
   const lines = text.split('\n');
-  /** @type {{pack?:string, theme?:string, answerMs?:number, order?:string, mode?:string}} */
+  /** @type {{pack?:string, theme?:string, answerMs?:number, order?:string, mode?:string, cover?:string}} */
   const meta = {};
   let i = 0;
   while (i < lines.length) {
     const t = lines[i].trim();
     if (!t) { i++; continue; } // leading/interleaved blanks go with the block
-    const m = /^(pack|theme|time|order|mode)\s*:\s*(.*)$/i.exec(t);
+    const m = /^(pack|theme|time|order|mode|cover)\s*:\s*(.*)$/i.exec(t);
     if (!m) break;
     const key = m[1].toLowerCase();
     const v = m[2].trim();
@@ -114,6 +114,7 @@ export function extractFrontMatter(text) {
     else if (key === 'theme') meta.theme = v;
     else if (key === 'order') meta.order = v;
     else if (key === 'mode') meta.mode = v;
+    else if (key === 'cover') meta.cover = v;
     else {
       const ms = parseSeconds(v);
       if (ms !== null) meta.answerMs = ms;
@@ -437,7 +438,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
       const m = /^(\w[\w-]*)\s*:\s*(.*)$/.exec(t);
       if (m && FRONT_KEYS.includes(m[1].toLowerCase())) {
         if (!frontMatter) {
-          flag(i, 'name, theme, time, mode and order live in the bar above the document — this line is ignored');
+          flag(i, 'name, theme, time, mode, cover and order live in the bar above the document — this line is ignored');
           lines[i] = { kind: 'unknown', block: null };
           continue;
         }
@@ -447,6 +448,7 @@ export function parseDoc(text, { frontMatter = true } = {}) {
         else if (key === 'theme') raw.theme = v;
         else if (key === 'order') raw.order = v;
         else if (key === 'mode') raw.mode = v;
+        else if (key === 'cover') raw.cover = v;
         else {
           const ms = parseSeconds(v);
           if (ms === null) flag(i, `time "${v}" is not a number of seconds (try: time: 12s)`);
@@ -618,6 +620,7 @@ export function serializeDoc(p) {
   out.push(`theme: ${typeof p?.theme === 'string' ? p.theme : 'blanc'}`);
   out.push(`time: ${fmtSeconds(Number.isFinite(p?.answerMs) ? p.answerMs : 12000)}`);
   if (p?.mode === 'solo' || p?.mode === 'teams') out.push(`mode: ${p.mode}`);
+  if (typeof p?.cover === 'string' && p.cover) out.push(`cover: ${p.cover}`);
   if (p?.order === 'suggested') out.push('order: suggested');
   out.push('');
 
@@ -804,7 +807,7 @@ function frontMatterEnd(/** @type {string[]} */ lines) {
     const t = lines[i].trim();
     if (!t) continue;
     if (t.startsWith('#')) break;
-    if (!/^(pack|theme|time|order)\s*:/i.test(t)) break;
+    if (!/^(pack|theme|time|order|mode|cover)\s*:/i.test(t)) break;
     last = i;
   }
   return last;

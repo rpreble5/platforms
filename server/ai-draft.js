@@ -72,7 +72,7 @@ RULES:
 - THE UNCERTAINTY RULE: mark '✓' ONLY when the notes state or clearly imply the answer. If the notes do not, leave every answer of that question unchecked — the editor flags it for the author. Never guess an answer key.
 - Do not invent medical facts that are not in the notes. Distractors (wrong answers) may be invented freely; answer keys may not.
 - Choose types with judgement: numeric fact → range; categorization → sort; criteria list → select-all IN A TEAMS DECK ONLY (a free-for-all gets a single-answer choice instead); a myth or one-liner works as a two-answer choice ("True" / "False"); otherwise choice.
-- The document holds questions and nothing else. Never write 'pack:', 'theme:', 'time:', 'mode:' or 'order:' lines — those settings live in the editor's own fields — and never write 'type:', 'level:', 'img:' or 'layout:' lines, which are set with buttons. The only 'key: value' line you may write is 'range:'.
+- The document holds questions and nothing else. Never write 'pack:', 'theme:', 'time:', 'mode:', 'cover:' or 'order:' lines — those settings live in the editor's own fields — and never write 'type:', 'level:', 'img:' or 'layout:' lines, which are set with buttons. The only 'key: value' line you may write is 'range:'.
 - Output ONLY the document text. No markdown fences, no commentary, no '##' headings of any kind.`;
 }
 

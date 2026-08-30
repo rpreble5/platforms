@@ -77,6 +77,13 @@ deck. Two ship:
   question uses it as-is. Verify the medical answer keys before a real
   session — they're board-classic, but they're the author's word.
 
+**Cover art**: a deck can wear its own picture on its lobby card with a
+top-level `"cover": "night.png"` — a bare filename in `questions/images/`,
+the same folder and the same rules as a question picture. Set it with the
+Cover button in the Pack Studio's pack bar. A deck without one (or whose
+image file never made it to the host) shows the drawn stand-in instead, so
+a missing picture is never a broken card.
+
 Control Room cases and Showdown statements still parse, validate and play,
 but nothing authors or offers them any more: the editor does not write them
 and the lobby does not list them. Packs that carry them keep them.
@@ -135,8 +142,8 @@ document: `#` starts a question, its answers go on the lines below, and
 everything updates live as you type. Correct answers are picked with the
 checkbox beside each line (typing `✓ ` or `* ` at the start of the line
 does the same); two checks make a select-all automatically. The
-always-there settings — pack name, theme, answer time, deck order —
-never appear in the doc: they live in the Pack panel beside it. Each
+always-there settings — pack name, cover, theme, answer time, how it's
+played — never appear in the doc: they live in the pack bar above it. Each
 question's type shows as a chip in the left margin, and clicking the
 chip switches the type. The full format:
 

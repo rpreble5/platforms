@@ -80,6 +80,28 @@
   #packBar .f.name { flex: 2; min-width: 160px; }
   #packBar .f.theme { flex: 1; min-width: 110px; }
   #packBar .f.time { width: 92px; flex: none; }
+  /* the cover: the picture this deck wears on its card in the lobby */
+  #packBar .f.cover { width: 54px; flex: none; }
+  #coverTile {
+    width: 54px; height: 54px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--bg); padding: 0; overflow: hidden; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #coverTile:hover { border-color: var(--acc-line); }
+  #packBar .coverWrap { position: relative; width: 54px; height: 54px; }
+  /* inside the tile's corner, not outside it: the pack bar's cells sit
+     shoulder to shoulder, so a badge hanging off the edge lands on the
+     neighbouring label. */
+  #coverClear {
+    position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
+    padding: 0; border-radius: 50%; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(20, 18, 30, 0.62); border-color: rgba(255, 255, 255, 0.35);
+    color: #fff;
+  }
+  #coverClear:hover { background: var(--err); border-color: transparent; }
+  #coverTile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #coverTile .ph { font-size: 17px; color: var(--faint); line-height: 1; }
   #docHead .hint { margin-right: auto; }
   #docHead button { flex: none; }
   /* what the doc adds up to, and which game mode each part needs */
@@ -315,6 +337,15 @@
   <section id="center">
     <div class="card" id="packBar">
       <div class="fields">
+      <div class="f cover">
+        <label for="coverTile">Cover</label>
+        <div class="coverWrap">
+          <button type="button" id="coverTile" title="the picture this deck wears in the lobby deck list">
+            <span class="ph">🖼</span>
+          </button>
+          <button type="button" id="coverClear" title="remove the cover" hidden>×</button>
+        </div>
+      </div>
       <div class="f name">
         <label for="packName">Pack name</label>
         <input type="text" id="packName" placeholder="Cardiology night">

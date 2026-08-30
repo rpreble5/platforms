@@ -101,7 +101,7 @@ function fallOffset(t) {
 
 /**
  * @typedef {object} MenuView
- * @property {Array<{file:string, name:string, questions:number, mode?:'solo'|'teams', showdown:boolean, controlRoom?:number}>} packs
+ * @property {Array<{file:string, name:string, questions:number, mode?:'solo'|'teams', cover?:string, showdown:boolean, controlRoom?:number}>} packs
  * @property {number} packIndex
  * @property {number} sel
  * @property {boolean} loading
@@ -208,29 +208,42 @@ export function maxScroll(kinds) {
 }
 
 /**
- * Stand-in cover art for a deck: the game in miniature. Packs will be able
- * to carry their own picture later; until then every deck shows this, so
- * the card has the same shape either way.
+ * Cover art for a deck. A pack that names a cover gets its own picture,
+ * centre-cropped into the square; everything else gets the stand-in — the
+ * game in miniature. The frame in which a cover is still loading draws the
+ * stand-in too, so a card never flickers between two shapes: the rounded
+ * square and its stroke are identical either way.
  * @param {CanvasRenderingContext2D} cx
  * @param {number} x @param {number} y @param {number} s square side
+ * @param {string} [name] the pack's cover filename, if it has one
  */
-function drawDeckCover(cx, x, y, s) {
+function drawDeckCover(cx, x, y, s, name) {
+  const art = name ? questionImage(name) : null;
   cx.save();
   cx.beginPath();
   cx.roundRect(x, y, s, s, 14);
   cx.clip();
-  cx.fillStyle = 'rgba(255,255,255,0.10)';
-  cx.fillRect(x, y, s, s);
-  cx.fillStyle = 'rgba(255,255,255,0.30)';
-  for (const [bx, by] of [[0.10, 0.64], [0.54, 0.52], [0.30, 0.38]]) {
+  if (art) {
+    // cover-fit: fill the square from the middle of the picture, whichever
+    // way round it is, rather than squashing it to a thumbnail.
+    const k = Math.max(s / art.naturalWidth, s / art.naturalHeight);
+    const w = art.naturalWidth * k;
+    const h = art.naturalHeight * k;
+    cx.drawImage(art, x + (s - w) / 2, y + (s - h) / 2, w, h);
+  } else {
+    cx.fillStyle = 'rgba(255,255,255,0.10)';
+    cx.fillRect(x, y, s, s);
+    cx.fillStyle = 'rgba(255,255,255,0.30)';
+    for (const [bx, by] of [[0.10, 0.64], [0.54, 0.52], [0.30, 0.38]]) {
+      cx.beginPath();
+      cx.roundRect(x + s * bx, y + s * by, s * 0.36, s * 0.07, 4);
+      cx.fill();
+    }
+    cx.fillStyle = 'rgba(255,255,255,0.58)';
     cx.beginPath();
-    cx.roundRect(x + s * bx, y + s * by, s * 0.36, s * 0.07, 4);
+    cx.roundRect(x + s * 0.41, y + s * 0.22, s * 0.14, s * 0.16, 6);
     cx.fill();
   }
-  cx.fillStyle = 'rgba(255,255,255,0.58)';
-  cx.beginPath();
-  cx.roundRect(x + s * 0.41, y + s * 0.22, s * 0.14, s * 0.16, 6);
-  cx.fill();
   cx.restore();
   cx.strokeStyle = 'rgba(255,255,255,0.22)';
   cx.lineWidth = 1.5;
@@ -367,7 +380,7 @@ function drawMenu(cx, menu, playerCount) {
     cx.stroke();
 
     const cover = 46;
-    drawDeckCover(cx, x0 + pad, y + 9, cover);
+    drawDeckCover(cx, x0 + pad, y + 9, cover, p.cover);
     const tx = x0 + pad + cover + 14;
     cx.font = fitFont(cx, p.name, w - pad * 2 - cover - 110, 22, 15);
     cx.fillStyle = chosen ? '#ffffff' : 'rgba(255,255,255,0.85)';

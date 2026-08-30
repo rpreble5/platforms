@@ -271,3 +271,38 @@ test('an unknown order value plays as authored', () => {
   const pack = loadQuestions(rootWithDeck(deck, { order: 'shuffled' }), 'test.json');
   assert.deepEqual(pack.questions.map((/** @type {any} */ q) => q.text), ['r1', 'warm']);
 });
+
+/** A root with one pack that names a cover, and the image file only if asked. */
+function rootWithCover(/** @type {string} */ cover, /** @type {boolean} */ onDisk) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cover-pack-'));
+  fs.mkdirSync(path.join(root, 'questions', 'images'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'questions', 'a.json'), JSON.stringify({
+    pack: 'Covered', cover,
+    questions: [{ text: 'plain', answers: ['a', 'b'], correct: 0 }],
+  }));
+  if (onDisk) fs.writeFileSync(path.join(root, 'questions', 'images', cover), 'not really a png');
+  return root;
+}
+
+test('the pack list reports a cover only when the file is really there', () => {
+  const [there] = listPacks(rootWithCover('art.png', true));
+  assert.equal(there.cover, 'art.png');
+  const [missing] = listPacks(rootWithCover('art.png', false));
+  assert.equal(missing.cover, undefined);
+});
+
+test('a cover escaping questions/images is never reported or loaded', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cover-pack-'));
+  fs.mkdirSync(path.join(root, 'questions', 'images'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'questions', 'a.json'), JSON.stringify({
+    pack: 'Sneaky', cover: '../../secret.png',
+    questions: [{ text: 'plain', answers: ['a', 'b'], correct: 0 }],
+  }));
+  assert.equal(listPacks(root)[0].cover, undefined);
+  assert.equal(loadQuestions(root, 'a.json').cover, undefined);
+});
+
+test('loading drops a cover whose file never arrived, and keeps one that did', () => {
+  assert.equal(loadQuestions(rootWithCover('art.png', false), 'a.json').cover, undefined);
+  assert.equal(loadQuestions(rootWithCover('art.png', true), 'a.json').cover, 'art.png');
+});
