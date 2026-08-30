@@ -454,23 +454,20 @@ export function drawNumberLine(cx, q) {
   // just made 160 look longer. Same plate treatment as the reveal tag.
   if (q.unit) {
     const unitText = `in ${q.unit}`;
-    cx.font = `800 30px ${FONT.display}`;
+    cx.font = `800 44px ${FONT.display}`;
     const tw = cx.measureText(unitText).width;
-    const w = tw + 44;
-    const h = 54;
+    const w = tw + 56;
+    const h = 74;
     const ux = WORLD_W / 2;
     const uy = 540;
     const way = activeWay();
     cx.fillStyle = inky ? way.face : 'rgba(12,10,22,0.92)';
     cx.beginPath();
-    cx.roundRect(ux - w / 2, uy - h / 2, w, h, 14);
+    cx.roundRect(ux - w / 2, uy - h / 2, w, h, 18);
     cx.fill();
-    cx.strokeStyle = inky ? INK : 'rgba(244,241,232,0.9)';
-    cx.lineWidth = 3;
-    cx.stroke();
     cx.textBaseline = 'middle';
     cx.fillStyle = inky ? way.text : UI.paper;
-    cx.fillText(unitText, ux, uy + 1);
+    cx.fillText(unitText, ux, uy + 2);
   }
   cx.restore();
 }
