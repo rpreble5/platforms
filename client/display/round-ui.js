@@ -105,8 +105,9 @@ function fallOffset(t) {
  * @property {number} packIndex
  * @property {number} sel
  * @property {boolean} loading
- * @property {'mode'|'decks'} [stage] which question the lobby is asking
  * @property {string[]} items
+ * @property {string|null} [hover] the row the pointer is over
+ * @property {string|null} [startBlocked] why Start cannot run, or null
  * @property {number} answerMs
  * @property {'solo'|'teams'} mode
  * @property {string} look 'deck' = play the pack's theme; else the override
@@ -210,14 +211,12 @@ function drawDeckCover(cx, x, y, s) {
  * @param {number} playerCount
  */
 function drawMenu(cx, menu, playerCount) {
-  void playerCount; // the join panel owns the headcount now
+  void playerCount; // the join panel owns the headcount
   const x0 = 40;
   const y0 = 118;
-  const w = 520;
-  const pad = 34;
+  const w = 560;
+  const pad = 30;
 
-  // Masthead, above the card. Ink on the light glass families — white
-  // vanishes against their near-white upper corner.
   cx.textAlign = 'left';
   cx.textBaseline = 'alphabetic';
   cx.font = `800 46px ${FONT.display}`;
@@ -233,244 +232,171 @@ function drawMenu(cx, menu, playerCount) {
     if (hits) hits.push({ id, x: hx, y: hy, w: hw, h: hh });
   };
 
-  const h = menu.stage === 'decks'
-    ? drawDeckStage(cx, menu, hit, x0, y0, w, pad)
-    : drawModeStage(cx, menu, hit, x0, y0, w, pad);
+  const sel = menu.items[menu.sel];
+  const decks = menu.packs;
+  const solo = decks.filter((p) => (p.mode ?? 'solo') === 'solo');
+  const teams = decks.filter((p) => (p.mode ?? 'solo') === 'teams');
+  const counts = menu.cohortCounts ?? [0, 0, 0];
+  const onTeams = counts.reduce((a, b) => a + b, 0);
 
-  // ---- the dev-tools tab, bottom left: everything the keyboard can do,
-  // one click away and out of the room's sight until asked for.
+  const rowH = 78;
+  const headH = 34;
+  const groups = [
+    ['Free-for-all', 'everyone plays for themselves', solo],
+    ['Teams', 'PGY years score together', teams],
+  ].filter(([, , list]) => /** @type {any[]} */ (list).length);
+
+  const listH = groups.reduce((t, [, , list]) => t + headH + /** @type {any[]} */ (list).length * rowH, 0);
+  const h = pad + 24 + listH + 18 + 64 + 20 + 74 + pad - 16;
+  panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
+
+  cx.font = `700 14px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(255,255,255,0.45)';
+  cx.fillText('PICK A DECK', x0 + pad, y0 + pad + 8);
+
+  let y = y0 + pad + 24;
+  for (const [title, blurb, list] of groups) {
+    const isTeams = title === 'Teams';
+    cx.font = `800 17px ${FONT.display}`;
+    cx.fillStyle = 'rgba(255,255,255,0.9)';
+    cx.fillText(/** @type {string} */ (title), x0 + pad, y + 22);
+    cx.font = `600 14px ${FONT.ui}`;
+    cx.fillStyle = isTeams && !onTeams ? 'rgba(255,215,120,0.8)' : 'rgba(255,255,255,0.45)';
+    const note = isTeams
+      ? onTeams
+        ? `${onTeams} player${onTeams === 1 ? '' : 's'} on a team`
+        : 'waiting for players to pick a year'
+      : /** @type {string} */ (blurb);
+    cx.textAlign = 'right';
+    cx.fillText(note, x0 + w - pad, y + 22);
+    cx.textAlign = 'left';
+    y += headH;
+
+    for (const p of /** @type {any[]} */ (list)) {
+      const id = `deck:${p.file}`;
+      const chosen = p.file === menu.packs[menu.packIndex]?.file;
+      const cursor = sel === id;
+      const hovered = menu.hover === id;
+      hit(id, x0 + 18, y, w - 36, rowH - 8);
+
+      if (chosen || cursor || hovered) {
+        cx.fillStyle = chosen ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)';
+        cx.strokeStyle = chosen
+          ? 'rgba(255,255,255,0.85)'
+          : hovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.32)';
+        cx.lineWidth = chosen ? 2.5 : 1.5;
+        cx.beginPath();
+        cx.roundRect(x0 + 18, y, w - 36, rowH - 8, 14);
+        cx.fill();
+        cx.stroke();
+      }
+
+      const cover = 52;
+      drawDeckCover(cx, x0 + pad, y + 9, cover);
+      const tx = x0 + pad + cover + 16;
+      cx.font = fitFont(cx, p.name, w - pad * 2 - cover - 16, 24, 16);
+      cx.fillStyle = chosen ? '#ffffff' : 'rgba(255,255,255,0.85)';
+      cx.fillText(p.name, tx, y + 32);
+      cx.font = `600 14px ${FONT.ui}`;
+      cx.fillStyle = 'rgba(255,255,255,0.5)';
+      cx.fillText(`${p.questions} questions`, tx, y + 54);
+      y += rowH;
+    }
+  }
+  if (!decks.length) {
+    cx.font = `600 17px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.6)';
+    cx.fillText('No decks in questions/ yet.', x0 + pad, y + 26);
+    y += 40;
+  }
+
+  y += 18;
+
+  // ---- the two settings, side by side and quiet: set once, rarely touched
+  /** @type {Array<['time'|'look', string, string]>} */
+  const cells = [
+    ['time', 'Answer time', `${Math.round(menu.answerMs / 1000)}s`],
+    ['look', 'Background', menu.look === 'deck'
+      ? `deck${menu.deckTheme ? ` · ${menu.deckTheme}` : ''}`
+      : menu.look],
+  ];
+  const cellW = (w - pad * 2 - 12) / 2;
+  cells.forEach(([key, label, value], i) => {
+    const cxp = x0 + pad + i * (cellW + 12);
+    const active = sel === key || menu.hover === key;
+    hit(key, cxp, y, cellW, 58);
+    cx.fillStyle = active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)';
+    cx.strokeStyle = active ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.16)';
+    cx.lineWidth = 1.5;
+    cx.beginPath();
+    cx.roundRect(cxp, y, cellW, 58, 12);
+    cx.fill();
+    cx.stroke();
+    cx.font = `700 12px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.45)';
+    cx.fillText(label, cxp + 14, y + 22);
+    cx.font = `700 19px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.9)';
+    cx.fillText(active ? `${value}  ▸` : value, cxp + 14, y + 45);
+  });
+  y += 58 + 22;
+
+  // ---- Start, and the reason when it cannot run
+  const why = menu.startBlocked ?? null;
+  const cursorHere = sel === 'quiz';
+  const hoverHere = menu.hover === 'quiz';
+  const btnH = 74;
+  hit('quiz', x0 + 18, y, w - 36, btnH);
+  cx.save();
+  cx.beginPath();
+  cx.roundRect(x0 + 18, y, w - 36, btnH, 18);
+  if ((cursorHere || hoverHere) && !why) {
+    cx.shadowColor = 'rgba(255,255,255,0.85)';
+    cx.shadowBlur = 28;
+  }
+  cx.fillStyle = why
+    ? 'rgba(255,255,255,0.05)'
+    : cursorHere || hoverHere ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.11)';
+  cx.fill();
+  cx.shadowColor = 'rgba(0,0,0,0)';
+  cx.strokeStyle = why
+    ? 'rgba(255,255,255,0.16)'
+    : cursorHere || hoverHere ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
+  cx.lineWidth = cursorHere || hoverHere ? 2.5 : 1.5;
+  cx.stroke();
+  cx.restore();
+  cx.textAlign = 'center';
+  if (why) {
+    cx.font = `800 24px ${FONT.display}`;
+    cx.fillStyle = 'rgba(255,255,255,0.4)';
+    cx.fillText('Start', x0 + w / 2, y + 32);
+    cx.font = `600 14px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,215,120,0.8)';
+    cx.fillText(why, x0 + w / 2, y + 55);
+  } else {
+    cx.font = `800 30px ${FONT.display}`;
+    cx.fillStyle = '#ffffff';
+    cx.fillText(menu.loading ? 'loading…' : 'Start', x0 + w / 2, y + btnH / 2 + 11);
+  }
+  cx.textAlign = 'left';
+
+  // ---- the dev-tools tab: every key, one click away, folded up otherwise
   const devW = 132;
   const devH = 34;
   const devY = y0 + h + 14;
+  const devHover = menu.hover === 'dev';
   hit('dev', x0, devY, devW, devH);
-  cx.fillStyle = menu.dev ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)';
-  cx.strokeStyle = menu.dev ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)';
+  cx.fillStyle = menu.dev || devHover ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)';
+  cx.strokeStyle = menu.dev || devHover ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)';
   cx.lineWidth = 1.5;
   cx.beginPath();
   cx.roundRect(x0, devY, devW, devH, 10);
   cx.fill();
   cx.stroke();
   cx.font = `700 14px ${FONT.ui}`;
-  cx.fillStyle = menu.dev ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
+  cx.fillStyle = menu.dev || devHover ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
   cx.fillText('⌨  dev tools', x0 + 14, devY + 22);
   if (menu.dev) drawDevPanel(cx, x0, devY + devH + 12);
-}
-
-/** A brighter piece of glass behind whatever the cursor is on.
- * @param {CanvasRenderingContext2D} cx
- * @param {number} x @param {number} y @param {number} w @param {number} h */
-function selPill(cx, x, y, w, h) {
-  cx.fillStyle = 'rgba(255,255,255,0.10)';
-  cx.strokeStyle = 'rgba(255,255,255,0.38)';
-  cx.lineWidth = 1.5;
-  cx.beginPath();
-  cx.roundRect(x, y, w, h, 14);
-  cx.fill();
-  cx.stroke();
-}
-
-/**
- * Step one: how is tonight played? A deck belongs to exactly one mode, so
- * this is the question that decides which decks exist — asking it first is
- * what keeps the two from ever disagreeing.
- * @param {CanvasRenderingContext2D} cx @param {MenuView} menu
- * @param {(id: string, x: number, y: number, w: number, h: number) => void} hit
- * @param {number} x0 @param {number} y0 @param {number} w @param {number} pad
- * @returns {number} the card's height
- */
-function drawModeStage(cx, menu, hit, x0, y0, w, pad) {
-  const btnH = 108;
-  const h = pad + 40 + btnH * 2 + 16 + pad - 10;
-  panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
-
-  cx.font = `700 15px ${FONT.ui}`;
-  cx.fillStyle = 'rgba(255,255,255,0.55)';
-  cx.fillText('HOW ARE WE PLAYING?', x0 + pad, y0 + pad + 14);
-
-  /** @type {Array<['solo'|'teams', string, string]>} */
-  const choices = [
-    ['solo', 'Free-for-all', 'everyone plays for themselves'],
-    ['teams', 'Teams', 'PGY years score together'],
-  ];
-  let y = y0 + pad + 40;
-  for (const [id, label, sub] of choices) {
-    const selected = menu.items[menu.sel] === id;
-    const n = menu.packs.filter((p) => (p.mode ?? 'solo') === id).length;
-    hit(id, x0 + 24, y, w - 48, btnH - 12);
-    cx.save();
-    cx.beginPath();
-    cx.roundRect(x0 + 24, y, w - 48, btnH - 12, 18);
-    if (selected) {
-      cx.shadowColor = 'rgba(255,255,255,0.85)';
-      cx.shadowBlur = 26;
-    }
-    cx.fillStyle = selected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.09)';
-    cx.fill();
-    cx.shadowColor = 'rgba(0,0,0,0)';
-    cx.strokeStyle = selected ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.28)';
-    cx.lineWidth = selected ? 2.5 : 1.5;
-    cx.stroke();
-    cx.restore();
-
-    cx.textAlign = 'center';
-    cx.font = `800 32px ${FONT.display}`;
-    cx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.85)';
-    cx.fillText(label, x0 + w / 2, y + 42);
-    cx.font = `600 15px ${FONT.ui}`;
-    cx.fillStyle = 'rgba(255,255,255,0.5)';
-    cx.fillText(sub, x0 + w / 2, y + 66);
-    cx.font = `700 14px ${FONT.ui}`;
-    cx.fillStyle = 'rgba(255,255,255,0.4)';
-    cx.fillText(`${n} deck${n === 1 ? '' : 's'}`, x0 + w / 2, y + 86);
-    cx.textAlign = 'left';
-    y += btnH;
-  }
-  return h;
-}
-
-/**
- * Step two: the decks written for the chosen mode, then the two settings
- * that matter and the start. No mode row here — the mode is already
- * answered, and every deck on this list belongs to it.
- * @param {CanvasRenderingContext2D} cx @param {MenuView} menu
- * @param {(id: string, x: number, y: number, w: number, h: number) => void} hit
- * @param {number} x0 @param {number} y0 @param {number} w @param {number} pad
- * @returns {number} the card's height
- */
-function drawDeckStage(cx, menu, hit, x0, y0, w, pad) {
-  const decks = menu.packs.filter((p) => (p.mode ?? 'solo') === menu.mode);
-  const rowH = 84;
-  const setH = 54;
-  const btnH = 68;
-  const teams = menu.mode === 'teams';
-  const stripH = teams ? 56 : 0;
-  const h = pad + 34 + Math.max(1, decks.length) * rowH + 14 + setH * 2 + 18
-    + stripH + btnH + 26 + pad - 12;
-  panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
-
-  const sel = menu.items[menu.sel];
-
-  // eyebrow: which mode we are in, and the way back
-  cx.font = `700 15px ${FONT.ui}`;
-  cx.fillStyle = 'rgba(255,255,255,0.55)';
-  cx.fillText(teams ? 'TEAMS  ·  PICK A DECK' : 'FREE-FOR-ALL  ·  PICK A DECK', x0 + pad, y0 + pad + 12);
-  const backSel = sel === 'back';
-  cx.textAlign = 'right';
-  cx.font = `700 14px ${FONT.ui}`;
-  cx.fillStyle = backSel ? '#ffffff' : 'rgba(255,255,255,0.5)';
-  cx.fillText('◂ change mode', x0 + w - pad, y0 + pad + 12);
-  cx.textAlign = 'left';
-  hit('back', x0 + w - pad - 140, y0 + pad - 6, 146, 26);
-
-  let y = y0 + pad + 34;
-  if (!decks.length) {
-    cx.font = `600 18px ${FONT.ui}`;
-    cx.fillStyle = 'rgba(255,255,255,0.6)';
-    cx.fillText('No decks written for this mode yet.', x0 + pad, y + 34);
-  }
-  for (const p of decks) {
-    const id = `deck:${p.file}`;
-    const selected = sel === id;
-    const playing = p.file === menu.packs[menu.packIndex]?.file;
-    if (selected) selPill(cx, x0 + 16, y, w - 32, rowH - 10);
-    hit(id, x0 + 16, y, w - 32, rowH - 10);
-
-    const cover = 58;
-    drawDeckCover(cx, x0 + pad, y + 8, cover);
-    const tx = x0 + pad + cover + 16;
-    cx.font = fitFont(cx, p.name, w - pad * 2 - cover - 16 - 40, 26, 16);
-    cx.fillStyle = playing ? '#ffffff' : 'rgba(255,255,255,0.82)';
-    cx.fillText(p.name, tx, y + 34);
-    cx.font = `600 14px ${FONT.ui}`;
-    cx.fillStyle = 'rgba(255,255,255,0.5)';
-    cx.fillText(`${p.questions} questions`, tx, y + 56);
-    if (playing) {
-      cx.textAlign = 'right';
-      cx.font = `800 13px ${FONT.ui}`;
-      cx.fillStyle = 'rgba(255,255,255,0.75)';
-      cx.fillText('● LOADED', x0 + w - pad, y + 34);
-      cx.textAlign = 'left';
-    }
-    y += rowH;
-  }
-  y += 14;
-
-  // ---- the two settings that are not the deck
-  /** @type {Array<['time'|'look', string, string]>} */
-  const settingRows = [
-    ['time', 'Answer time', `${Math.round(menu.answerMs / 1000)}s`],
-    ['look', 'Background', menu.look === 'deck'
-      ? `from deck${menu.deckTheme ? ` · ${menu.deckTheme}` : ''}`
-      : menu.look],
-  ];
-  for (const [key, label, value] of settingRows) {
-    const selected = sel === key;
-    if (selected) selPill(cx, x0 + 16, y + 2, w - 32, setH - 4);
-    hit(key, x0 + 16, y + 2, w - 32, setH - 4);
-    const base = y + setH / 2 + 8;
-    cx.font = `700 23px ${FONT.display}`;
-    cx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.8)';
-    cx.fillText(label, x0 + pad, base);
-    cx.textAlign = 'right';
-    cx.font = `600 22px ${FONT.ui}`;
-    cx.fillStyle = selected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
-    cx.fillText(selected ? `◂  ${value}  ▸` : value, x0 + w - pad, base);
-    cx.textAlign = 'left';
-    y += setH;
-  }
-  y += 18;
-
-  // ---- who is in, per year. Teams only: in a free-for-all it is noise.
-  const counts = menu.cohortCounts ?? [0, 0, 0];
-  if (teams) {
-    cx.strokeStyle = 'rgba(255,255,255,0.14)';
-    cx.lineWidth = 1;
-    cx.beginPath();
-    cx.moveTo(x0 + 24, y - 8);
-    cx.lineTo(x0 + w - 24, y - 8);
-    cx.stroke();
-    const colW = (w - pad * 2) / 3;
-    const baseline = y + stripH / 2 + 12;
-    for (let c = 0; c < 3; c++) {
-      const cxp = x0 + pad + colW * c + 6;
-      cx.font = `800 24px ${FONT.display}`;
-      cx.fillStyle = counts[c] ? TEAM_COLORS[c] : 'rgba(255,255,255,0.3)';
-      cx.fillText(COHORTS[c].label, cxp, baseline);
-      cx.fillStyle = counts[c] ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.3)';
-      cx.fillText(`×${counts[c]}`, cxp + 74, baseline);
-    }
-    y += stripH + 24;
-  }
-
-  // ---- start
-  const selected = sel === 'quiz';
-  const ready = decks.length > 0;
-  hit('quiz', x0 + 24, y, w - 48, btnH);
-  cx.save();
-  cx.beginPath();
-  cx.roundRect(x0 + 24, y, w - 48, btnH, 16);
-  if (selected && ready) {
-    cx.shadowColor = 'rgba(255,255,255,0.85)';
-    cx.shadowBlur = 26;
-  }
-  cx.fillStyle = !ready
-    ? 'rgba(255,255,255,0.04)'
-    : selected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.09)';
-  cx.fill();
-  cx.shadowColor = 'rgba(0,0,0,0)';
-  cx.strokeStyle = !ready
-    ? 'rgba(255,255,255,0.12)'
-    : selected ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.28)';
-  cx.lineWidth = selected ? 2.5 : 1.5;
-  cx.stroke();
-  cx.restore();
-  cx.textAlign = 'center';
-  cx.font = `800 28px ${FONT.display}`;
-  cx.fillStyle = ready ? '#ffffff' : 'rgba(255,255,255,0.35)';
-  cx.fillText(menu.loading ? 'loading…' : 'Start', x0 + w / 2, y + btnH / 2 + 10);
-  cx.textAlign = 'left';
-
-  return h;
 }
 
 /**

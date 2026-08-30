@@ -340,11 +340,8 @@ const menu = {
   // The host's background override: 'deck' plays the pack's theme; any
   // other value pins the room's look regardless of what packs say.
   look: 'deck',
-  // The lobby asks one thing at a time: first how tonight is played, then
-  // which of that mode's decks to play. A deck belongs to exactly one mode,
-  // so the two can never disagree.
-  /** @type {'mode'|'decks'} */
-  stage: 'mode',
+  /** The row the pointer is over, for hover feedback. @type {string|null} */
+  hover: null,
   // The dev-tools tab: the full key list, folded away until clicked.
   dev: false,
 };
@@ -375,24 +372,45 @@ function decksFor(mode) {
   return menu.packs.filter((p) => (p.mode ?? 'solo') === mode);
 }
 
+/** The library in display order: free-for-all decks first, then teams. */
+function orderedPacks() {
+  return [...decksFor('solo'), ...decksFor('teams')];
+}
+
 /**
- * The rows the cursor moves through, which depend on the stage: the mode
- * question first, then that mode's decks with the settings and Start.
+ * The rows the cursor moves through: every deck, then the two settings,
+ * then Start last — so one ArrowUp from the top of the list reaches Start
+ * however many decks there are.
  *
- * Control Room and Showdown are deliberately absent. Both still parse,
- * validate and play — nothing in the engine changed — but neither is
- * authored in the editor or offered here any more.
+ * The mode is not a row. A deck is written for one mode and carries it, so
+ * choosing a deck IS choosing the mode; there is nothing to contradict.
+ * Control Room and Showdown are absent too: both still parse, validate and
+ * play, but neither is authored or offered any more.
  * @returns {string[]}
  */
 function menuItems() {
-  /** @type {string[]} */
-  const items = menu.stage === 'mode'
-    ? ['solo', 'teams']
-    : [...decksFor(menu.mode).map((p) => `deck:${p.file}`), 'time', 'look', 'quiz', 'back'];
+  const items = [...orderedPacks().map((p) => `deck:${p.file}`), 'time', 'look', 'quiz'];
   // A shorter list must never strand the cursor past its end.
   if (menu.sel >= items.length) menu.sel = items.length - 1;
   if (menu.sel < 0) menu.sel = 0;
   return items;
+}
+
+/**
+ * Why Start cannot be pressed, or null when it can.
+ *
+ * A teams deck with nobody on a team plays every team mechanic as a no-op —
+ * no coverage bonus, no team scoring — and looks fine while doing it. That
+ * is worth blocking with the reason rather than discovering mid-round.
+ * @returns {string|null}
+ */
+function startBlocked() {
+  const pack = menu.packs[menu.packIndex];
+  if (!pack) return 'no decks in questions/';
+  if ((pack.mode ?? 'solo') !== 'teams') return null;
+  return participatingTeams().length
+    ? null
+    : 'nobody has picked a PGY year yet — teams need at least one';
 }
 
 /**
@@ -480,6 +498,7 @@ function menuView() {
     controlCases: controlSpec?.questions.length ?? 0,
     deckTheme,
     hits: menuHits,
+    startBlocked: startBlocked(),
   };
 }
 
@@ -498,6 +517,8 @@ async function selectPack(index) {
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
       game.levelPool = levelPool;
+      // The deck carries the mode; loading one is how the mode is chosen.
+      menu.mode = pack.mode === 'teams' ? 'teams' : 'solo';
       applyMode();
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
       controlSpec = pack.controlRoom?.questions?.length ? pack.controlRoom : null;
@@ -541,35 +562,15 @@ function menuAdjust(item, dir) {
  * @param {string} item
  */
 function menuActivate(item) {
-  if (item === 'solo' || item === 'teams') {
-    chooseMode(item);
-  } else if (item.startsWith('deck:')) {
+  if (item.startsWith('deck:')) {
     const file = item.slice(5);
     const ix = menu.packs.findIndex((p) => p.file === file);
     if (ix >= 0) void selectPack(ix);
-  } else if (item === 'back') {
-    menu.stage = 'mode';
-    menu.sel = menu.mode === 'teams' ? 1 : 0;
   } else if (item === 'quiz') {
-    startConfiguredGame(false);
+    // The button itself carries the reason, so a blocked press stays quiet
+    // rather than repeating it in a banner.
+    if (!startBlocked()) startConfiguredGame(false);
   } else menuAdjust(item, 1);
-}
-
-/**
- * Pick how tonight is played, then show that mode's decks and load the
- * first one, so the card is never pointing at a deck of the other mode.
- * @param {'solo'|'teams'} mode
- */
-function chooseMode(mode) {
-  menu.mode = mode;
-  applyMode();
-  menu.stage = 'decks';
-  menu.sel = 0;
-  const decks = decksFor(mode);
-  const current = menu.packs[menu.packIndex];
-  if (decks.length && (!current || (current.mode ?? 'solo') !== mode)) {
-    void selectPack(menu.packs.indexOf(decks[0]));
-  }
 }
 
 // ------------------------------------------------------------------ showdown
@@ -952,11 +953,12 @@ addEventListener('pointerdown', unlockAudio);
 /** @type {any} */
 let cursorTimer = 0;
 function wakeCursor() {
-  document.body.style.cursor = 'default';
   clearTimeout(cursorTimer);
-  cursorTimer = setTimeout(() => { document.body.style.cursor = 'none'; }, 2500);
+  cursorTimer = setTimeout(() => {
+    document.body.style.cursor = 'none';
+    menu.hover = null;
+  }, 2500);
 }
-addEventListener('pointermove', wakeCursor);
 
 /**
  * Where a click landed in the 1920x1080 world. The canvas is letterboxed by
@@ -973,14 +975,29 @@ function stagePoint(e) {
   };
 }
 
+/** What the pointer is over, or null. @param {PointerEvent} e */
+function targetAt(e) {
+  const p = stagePoint(e);
+  if (!p) return null;
+  return menuHits.find(
+    (a) => p.x >= a.x && p.x <= a.x + a.w && p.y >= a.y && p.y <= a.y + a.h
+  ) ?? null;
+}
+
+// Hover is what makes a canvas feel like a UI: the row under the pointer
+// lights up, and the cursor becomes a hand over anything clickable.
+addEventListener('pointermove', (e) => {
+  const over = menuOpen() ? targetAt(/** @type {PointerEvent} */ (e)) : null;
+  menu.hover = over?.id ?? null;
+  document.body.style.cursor = over ? 'pointer' : 'default';
+  wakeCursor();
+});
+
 canvas.addEventListener('pointerdown', (e) => {
+  document.body.style.cursor = 'pointer';
   wakeCursor();
   if (!menuOpen()) return;
-  const p = stagePoint(e);
-  if (!p) return;
-  const target = menuHits.find(
-    (a) => p.x >= a.x && p.x <= a.x + a.w && p.y >= a.y && p.y <= a.y + a.h
-  );
+  const target = targetAt(e);
   // With the key list open, a click anywhere else puts it away.
   if (menu.dev && target?.id !== 'dev') {
     menu.dev = false;
@@ -991,14 +1008,13 @@ canvas.addEventListener('pointerdown', (e) => {
     menu.dev = !menu.dev;
     return;
   }
-  // Everything else on the card: move the cursor there, then act. A second
-  // click on the row that is already selected is what activates it, so one
-  // click never starts a game by accident.
+  // A click acts, the way a click does everywhere else. The cursor follows
+  // it so the keyboard picks up where the pointer left off.
   const items = menuItems();
-  const ix = items.indexOf(/** @type {any} */ (target.id));
+  const ix = items.indexOf(target.id);
   if (ix < 0) return;
-  if (menu.sel === ix) menuActivate(items[ix]);
-  else menu.sel = ix;
+  menu.sel = ix;
+  menuActivate(items[ix]);
 });
 // A window that loses focus must release, or the avatar runs forever.
 addEventListener('blur', () => {
@@ -1079,6 +1095,7 @@ async function init() {
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
     } else hud.note = 'no questions loaded — check the questions/ folder';
+    if (pack?.mode === 'teams' || pack?.mode === 'solo') menu.mode = pack.mode;
     applyMode();
     await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;
