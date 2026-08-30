@@ -178,8 +178,10 @@ export const GLASS_FAMILIES = {
     glassRim: 'rgba(255,255,255,0.95)',
     text: 'rgba(35,32,66,0.94)',
     textDim: 'rgba(35,32,66,0.48)',
-    floorBody: '#39406a',
-    floorTop: '#4a5280',
+    // Darker than the field wants, on purpose: the glossy floor needs depth
+    // for the reflections to read, even under frost's pale sky.
+    floorBody: '#232848',
+    floorTop: '#39406a',
     floorEdge: 'rgba(255,255,255,0.35)',
   },
   noir: {

@@ -95,12 +95,18 @@ export function drawFloor(cx, p) {
     : themeName() === 'glass'
       ? { body: glassFam().floorBody, top: glassFam().floorTop, edge: glassFam().floorEdge }
       : { body: STAGE.floorBody, top: STAGE.floorTop, edge: STAGE.floorEdge };
-  cx.fillStyle = c.body;
+  // Glossy dark deck: a lit lip right at the surface, then the body falls
+  // away to near-black. The depth is what the floor reflections (render.js)
+  // read against — a flat fill gave them nothing to sink into.
+  const g = cx.createLinearGradient(0, p.y, 0, p.y + visibleH);
+  g.addColorStop(0, c.top);
+  g.addColorStop(0.38, c.body);
+  g.addColorStop(1, '#020308');
+  cx.fillStyle = g;
   cx.fillRect(p.x, p.y, p.w, visibleH);
-  cx.fillStyle = c.top;
-  cx.fillRect(p.x, p.y, p.w, 14);
+  // Specular hairline at the very top — the wet edge that sells the gloss.
   cx.fillStyle = c.edge;
-  cx.fillRect(p.x, p.y + 14, p.w, 4);
+  cx.fillRect(p.x, p.y, p.w, 2);
 }
 
 /**

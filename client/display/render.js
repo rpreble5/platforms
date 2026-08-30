@@ -10,6 +10,7 @@ import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { accessoryHidesEyes } from '../../shared/avatar.js';
 import { ANSWER_H, FLAG_H, FLAG_POLE, RANGE_ID, signBelowExtent } from '../../sim/levels.js';
 import { PHASE, activeControlTeam, currentQuestion, isControlQuestion } from '../../sim/round.js';
+import { has } from './art.js';
 import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
@@ -144,6 +145,7 @@ export function render(cx, world, roster, game, opts) {
   }
 
   if (glass) drawGlassReflections(cx, items, roster, world, scale);
+  drawFloorReflections(cx, items, roster, world, scale);
 
   for (const it of items) {
     const p = it.p;
@@ -289,6 +291,68 @@ function drawGlassReflections(cx, items, roster, world, scale) {
     cx.clip();
     cx.globalAlpha = look.connected ? 0.08 : 0.03;
     cx.translate(midX, panel.y);
+    cx.scale(1, -1);
+    cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);
+    cx.restore();
+  }
+}
+
+/**
+ * The glossy floor mirrors the beans near it, every theme: a bean standing
+ * on the deck grows a faint upside-down twin, and a jump makes the twin
+ * sink away — the mirror plane is the floor surface, so the reflection
+ * drops as the body rises. Deliberately quieter than the glass panels'
+ * 0.08: the floor is a stage, not a showcase. Skipped when a custom floor
+ * tile is installed — no gloss assumption on someone else's artwork.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {Array<{x:number, y:number, w:number, p:Player}>} items
+ * @param {Map<number, Look>} roster
+ * @param {World} world
+ * @param {number} scale
+ */
+function drawFloorReflections(cx, items, roster, world, scale) {
+  if (has('floor')) return;
+  const floors = world.platforms.filter(
+    (p) => p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR'
+  );
+  if (!floors.length) return;
+
+  for (const it of items) {
+    const p = it.p;
+    const w = p.w * scale;
+    const h = p.h * scale;
+    // Feet in COLLISION space (p.h, unscaled) — same convention as the
+    // glass panels: the sim rests feet at platform tops in that space.
+    const feetY = it.y + p.h;
+    const midX = it.x + w / 2;
+    const f = floors.find((s) => midX > s.x - 6 && midX < s.x + s.w + 6);
+    if (!f) continue;
+    const gap = f.y - feetY;
+    // The visible band is ~100px tall, so a bean more than ~110px up has a
+    // reflection that is entirely below the frame — don't pay for it.
+    if (gap < -4 || gap > 110) continue;
+
+    const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', finish: 'flat', connected: true };
+    const cohort = COHORTS[clampCohort(look.cohortIndex ?? -1)];
+    const drawnH = h * cohort.height;
+    const sprite = getAvatar(
+      look.color,
+      look.finish ?? 'flat',
+      Math.round(w),
+      Math.round(drawnH),
+      cohort.shape,
+      true, // static eyes are fine at reflection alpha
+      look.accessory ?? 'none'
+    );
+
+    cx.save();
+    cx.beginPath();
+    // Clip starts under the specular lip so the reflection never brightens it.
+    cx.rect(f.x, f.y + 2, f.w, WORLD_H - f.y);
+    cx.clip();
+    cx.globalAlpha = look.connected ? 0.055 : 0.02;
+    // Mirror across the surface: reflected feet sit `gap` below the plane.
+    cx.translate(midX, f.y + gap);
     cx.scale(1, -1);
     cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);
     cx.restore();
