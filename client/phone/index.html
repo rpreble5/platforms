@@ -84,9 +84,10 @@
 
   #overlay {
     position:absolute; inset:0; z-index:20; background:#0b0d12;
-    display:grid; place-items:center; text-align:center; padding:28px;
-    /* The one place on this page allowed to scroll: a short phone plus an open
-       keyboard can leave the button below the fold. */
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:28px 28px calc(20px + env(safe-area-inset-bottom, 8px));
+    /* Scroll lives inside #stepScroll during setup; this fallback covers the
+       plain-message overlay on very short phones. */
     overflow-y:auto; touch-action:pan-y;
   }
   #overlay.hidden { display:none; }
@@ -96,11 +97,19 @@
   #nosleep { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 
   /* ---------------------------------------------------------------- setup */
-  /* One decision per screen: name+year, colour, extra, style. Nothing ever
-     scrolls — more taps, less thumb gymnastics. The live preview persists in
-     the header so the bean visibly assembles as the steps go by. */
+  /* One decision per screen: name+year, colour, style, extra. The card is a
+     column pinned to the viewport: header on top, Continue bar always visible
+     at the bottom, and only the middle (#stepScroll) scrolls — so a tall grid
+     like the accessories never buries the button. The live preview persists
+     in the header so the bean visibly assembles as the steps go by. */
   #setup { display:none; width:100%; max-width:380px; text-align:left; }
-  #setup.on { display:block; }
+  #setup.on { display:flex; flex-direction:column; flex:1; min-height:0; }
+
+  #stepScroll {
+    flex:1; min-height:0; overflow-y:auto; touch-action:pan-y;
+    overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+    padding-bottom:10px;
+  }
 
   #setupHead { display:grid; grid-template-columns:96px 1fr; gap:14px; align-items:end; margin-bottom:4px; }
   #setupHead h1 { text-align:left; font-size:24px; margin:0 0 10px; }
@@ -159,8 +168,9 @@
 
   /* Accessory tiles: a mini bean wearing each option, tinted live to the
      player's colour by the same shared renderer. Pure charm — nothing here
-     is contested, so nothing ever greys out. Four columns now that the step
-     owns the whole screen — bigger targets, still no scroll. */
+     is contested, so nothing ever greys out. The grid is taller than a
+     phone; it scrolls under the pinned nav bar, and picks land on pointerup
+     so a scroll-drag over a tile never selects it. */
   #accs { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
   .ac {
     aspect-ratio:0.92; border-radius:12px; background:#141822;
@@ -182,7 +192,9 @@
   .sw .n { position:absolute; bottom:3px; right:6px; font:700 10px/1 ui-monospace,monospace; color:rgba(0,0,0,.6); }
   #go, #back, .sw { touch-action:manipulation; }
 
-  #nav { display:grid; grid-template-columns:96px 1fr; gap:10px; margin-top:22px; }
+  /* The nav is a sibling of the scroller, not part of it: flex keeps it
+     parked at the bottom of the card no matter how tall the step is. */
+  #nav { display:grid; grid-template-columns:96px 1fr; gap:10px; margin-top:14px; flex:none; }
   #nav.first { grid-template-columns:1fr; }
   #nav.first #back { display:none; }
   #back {
@@ -232,21 +244,23 @@
         <div id="dots"><i class="on"></i><i></i><i></i><i></i></div>
       </div>
     </div>
-    <div class="step on" data-step="1">
-      <div class="lbl">Your name</div>
-      <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
-             autocapitalize="words" spellcheck="false" enterkeyhint="next">
-      <div class="lbl">Your year</div>
-      <div id="years"></div>
-    </div>
-    <div class="step" data-step="2">
-      <div id="swatches"></div>
-    </div>
-    <div class="step" data-step="3">
-      <div id="accs"></div>
-    </div>
-    <div class="step" data-step="4">
-      <div id="finishes"></div>
+    <div id="stepScroll">
+      <div class="step on" data-step="1">
+        <div class="lbl">Your name</div>
+        <input id="nameIn" maxlength="12" autocomplete="off" autocorrect="off"
+               autocapitalize="words" spellcheck="false" enterkeyhint="next">
+        <div class="lbl">Your year</div>
+        <div id="years"></div>
+      </div>
+      <div class="step" data-step="2">
+        <div id="swatches"></div>
+      </div>
+      <div class="step" data-step="3">
+        <div id="finishes"></div>
+      </div>
+      <div class="step" data-step="4">
+        <div id="accs"></div>
+      </div>
     </div>
     <div id="nav" class="first">
       <button id="back">Back</button>
@@ -274,6 +288,7 @@
   var elYears = $('years'), elFins = $('finishes');
   var elBack = $('back'), elNav = $('nav'), elTitle = $('stepTitle'), elDots = $('dots');
   var elPrev = $('preview'), elPrevWrap = $('prevWrap'), elAccs = $('accs');
+  var elScroll = $('stepScroll');
   var zones = { left: $('left'), right: $('right'), jump: $('jump') };
 
   // ------------------------------------------------------------------ identity
@@ -866,24 +881,40 @@
     }
   }
 
-  /** One delegated pointerdown per row, skipping anything greyed out. */
+  /**
+   * One delegated handler per row, skipping anything greyed out. The pick
+   * lands on pointerup, and only if the finger barely moved: a drag that
+   * starts on a tile scrolls the grid instead of selecting it. (The browser
+   * fires pointercancel when it claims the gesture as a pan, which also
+   * clears the pending tap.)
+   */
   function tapper(root, sel, fn) {
+    var downEl = null, downId = -1, downX = 0, downY = 0;
     root.addEventListener('pointerdown', function (e) {
       var el = e.target.closest ? e.target.closest(sel) : null;
       if (!el || el.classList.contains('out')) return;
+      downEl = el; downId = e.pointerId; downX = e.clientX; downY = e.clientY;
+    }, opts);
+    root.addEventListener('pointerup', function (e) {
+      if (e.pointerId !== downId || !downEl) return;
+      var el = downEl;
+      downEl = null; downId = -1;
+      if (Math.abs(e.clientX - downX) > 10 || Math.abs(e.clientY - downY) > 10) return;
       e.preventDefault();
       fn(Number(el.dataset.i));
       vibrate(8);
     }, opts);
+    root.addEventListener('pointercancel', function () { downEl = null; downId = -1; }, opts);
   }
 
   // ------------------------------------------------------------ the wizard
   //
-  // One decision per screen. More taps than the old single card, but no
-  // scrolling — each step fits a phone whole, and the header preview shows
-  // the bean assembling as the answers land.
+  // One decision per screen, in dependency order: colour first (every later
+  // preview is tinted with it), then style, then the accessory grid last —
+  // the only step tall enough to scroll, under the pinned nav bar. The
+  // header preview shows the bean assembling as the answers land.
   var step = 1;
-  var STEP_TITLES = ['Who are you?', 'Pick your colour', 'Pick your extra', 'Pick your style'];
+  var STEP_TITLES = ['Who are you?', 'Pick your colour', 'Pick your style', 'Pick your extra'];
 
   function setStep(n) {
     step = Math.max(1, Math.min(4, n));
@@ -896,6 +927,7 @@
     }
     elTitle.textContent = STEP_TITLES[step - 1];
     elNav.classList.toggle('first', step === 1);
+    elScroll.scrollTop = 0;
     if (step !== 1) elNameIn.blur();
     paintSwatches();
   }

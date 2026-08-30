@@ -243,7 +243,7 @@ const ACC = 10; // propeller cap
 
 await phonePage.fill('#nameIn', 'Bosco');
 
-// The setup is a 4-step wizard now: name+year, colour, extra, style. The
+// The setup is a 4-step wizard now: name+year, colour, style, extra. The
 // year gates the very first Next, because it is the one field with no
 // sensible default — nobody should end up in a cohort they did not choose.
 assert(await phonePage.locator('#go').isDisabled(), 'Next waits for a year to be picked');
@@ -264,8 +264,6 @@ assert(
     .evaluate((/** @type {Element} */ el) => el.classList.contains('sel')),
   'tapping a swatch selects that colour'
 );
-await phonePage.locator('#go').click(); // -> extra
-await phonePage.locator(`.ac[data-i="${ACC}"]`).click();
 await phonePage.locator('#go').click(); // -> style
 
 // The finish step offers every rendering in the palette.
@@ -274,6 +272,9 @@ assert(
   'the style step offers every finish'
 );
 await phonePage.locator(`.fin[data-i="${FIN}"]`).click();
+
+await phonePage.locator('#go').click(); // -> extra
+await phonePage.locator(`.ac[data-i="${ACC}"]`).click();
 
 const prevAfter = await phonePage
   .locator('#preview')
