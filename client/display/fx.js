@@ -53,11 +53,15 @@ let itemSeen = '';
 
 /**
  * Launch a burst along the top edge of a platform — the whole board pops at
- * once, like the platform itself is celebrating.
+ * once, like the platform itself is celebrating. `intensity` scales the
+ * party: 1 is a win, smaller values are a marker rather than a
+ * celebration (a sort item nobody landed still has to point at its
+ * bucket).
  * @param {{x:number, y:number, w:number}} plat
+ * @param {number} [intensity]
  */
-export function burstConfetti(plat) {
-  const count = Math.round(Math.min(150, Math.max(70, plat.w / 4)));
+export function burstConfetti(plat, intensity = 1) {
+  const count = Math.round(Math.min(150, Math.max(70, plat.w / 4)) * intensity);
   let spawned = 0;
   for (const p of pool) {
     if (spawned >= count) break;
@@ -114,8 +118,11 @@ export function drawConfetti(cx, game, world) {
   }
   if (game.phase !== PHASE.REVEAL && game.phase !== PHASE.SCORE) revealSeen = -1;
 
-  // A sort round celebrates every ITEM anyone landed: one burst on the
-  // winning bucket at each flash, keyed per item so the next call re-arms.
+  // A sort round marks EVERY item's winning bucket at the flash — the
+  // confetti doubles as the answer key, so it cannot be conditional on
+  // someone landing it. A landed item gets the full burst; a whiffed one
+  // gets a small marker pop, so the party still scales with success.
+  // Keyed per item so the next call re-arms.
   const sortQ = currentQuestion(game);
   if (
     sortQ &&
@@ -126,11 +133,10 @@ export function drawConfetti(cx, game, world) {
     const key = `${game.qIndex}:${game.itemIndex}`;
     if (itemSeen !== key) {
       itemSeen = key;
-      if ([...game.itemHits.values()].some(Boolean)) {
-        const keep = targetIds(sortQ, game.itemIndex);
-        for (const plat of world.platforms) {
-          if (plat.id && keep.has(plat.id)) burstConfetti(plat);
-        }
+      const anyHit = [...game.itemHits.values()].some(Boolean);
+      const keep = targetIds(sortQ, game.itemIndex);
+      for (const plat of world.platforms) {
+        if (plat.id && keep.has(plat.id)) burstConfetti(plat, anyHit ? 1 : 0.35);
       }
     }
   }
