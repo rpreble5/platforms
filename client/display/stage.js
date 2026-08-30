@@ -385,29 +385,24 @@ export function drawPerch(cx, p) {
 const RAIL_Y = FLOOR_Y - 210;
 
 /**
- * The number line for a range round: a subtle light line floating ABOVE the
- * crowd, numbers sitting above it, and a small single-colour triangle under
- * the line marking each exact value. Faint guide lines still drop to the
- * floor so lining your feet up with a value never means squinting across
- * empty space.
+ * The number line for a range round, drawn as SIGNPOSTS rather than an
+ * axis: each labelled value is a big number over a white post dropping
+ * toward (but never touching) the floor, so lining your feet up with a
+ * value means standing under its post. No horizontal rail — the posts ARE
+ * the line. The unit gets its own pill, centred mid-screen ("in bpm"),
+ * instead of riding the last number.
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/levels.js').RangeQuestion} q
  */
 export function drawNumberLine(cx, q) {
-  const x0 = rangeX(q, q.min);
-  const x1 = rangeX(q, q.max);
-  // Ink-side on every light field: terrazzo, and the light glass families
-  // (frost, cream) — paper-coloured rails vanish on a cream sky.
+  // Ink-side numbers on every light field: terrazzo, and the light glass
+  // families — ink vanishes on a dark sky, paper on a cream one.
   const inky = themeName() === 'terrazzo' || (themeName() === 'glass' && Boolean(glassFam().light));
-  const way = activeWay();
-  const lineColor = inky ? 'rgba(23,20,42,0.18)' : 'rgba(244,241,232,0.30)';
-  const guideColor = inky ? 'rgba(23,20,42,0.08)' : 'rgba(244,241,232,0.08)';
   const numColor = inky ? 'rgba(23,20,42,0.94)' : 'rgba(244,241,232,0.96)';
   // The values float over open sky with nothing behind them, so they take
   // the name-label recipe: a contrast halo in the opposite polarity. On a
   // panel the panel does this job; out here the stroke is the panel.
   const numHalo = inky ? 'rgba(255,255,255,0.85)' : 'rgba(8,10,22,0.7)';
-  const markColor = inky ? way.top : UI.paper;
 
   cx.save();
 
@@ -420,42 +415,60 @@ export function drawNumberLine(cx, q) {
   }
   ticks.push(q.max);
 
-  // Guide lines first, so everything else draws over them.
-  for (const v of ticks) {
-    const x = rangeX(q, v);
-    cx.fillStyle = guideColor;
-    cx.fillRect(x - 1, RAIL_Y + 14, 2, FLOOR_Y - RAIL_Y - 14);
-  }
-
-  // The line itself: thin and quiet.
-  cx.fillStyle = lineColor;
-  cx.fillRect(x0 - 4, RAIL_Y - 1.5, x1 - x0 + 8, 3);
-
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
-  cx.font = `700 30px ${FONT.display}`;
 
+  const postTop = RAIL_Y - 2;
+  const postLen = 140; // ends ~70px above the floor: a post, not a fence
   for (const v of ticks) {
     const x = rangeX(q, v);
-    const label = v === q.max && q.unit ? `${fmtValue(v)} ${q.unit}` : fmtValue(v);
-    // Numbers above the line, endpoints nudged inward so nothing crops.
+    // The post: white with a soft dark edge, so it stays a white post on a
+    // near-white sky instead of dissolving into it.
+    cx.fillStyle = 'rgba(10,10,24,0.30)';
+    cx.beginPath();
+    cx.roundRect(x - 4, postTop - 1.5, 8, postLen + 3, 4);
+    cx.fill();
+    cx.fillStyle = 'rgba(255,255,255,0.95)';
+    cx.beginPath();
+    cx.roundRect(x - 2.5, postTop, 5, postLen, 2.5);
+    cx.fill();
+
+    // The value on top of its post — big: this is what the room is
+    // squinting at while they run.
+    const label = fmtValue(v);
+    cx.font = `800 42px ${FONT.display}`;
     const half = cx.measureText(label).width / 2;
     const lx = Math.max(half + 10, Math.min(WORLD_W - half - 10, x));
     cx.lineJoin = 'round';
-    cx.lineWidth = 5;
+    cx.lineWidth = 6;
     cx.strokeStyle = numHalo;
     cx.strokeText(label, lx, RAIL_Y - 16);
     cx.fillStyle = numColor;
     cx.fillText(label, lx, RAIL_Y - 16);
+  }
 
-    // The exact mark: one small triangle just below the line, one colour.
-    cx.fillStyle = markColor;
+  // The unit as its own pill, centred mid-screen: set apart it reads as
+  // THE axis unit — "in bpm" — where a suffix glued to the last number
+  // just made 160 look longer. Same plate treatment as the reveal tag.
+  if (q.unit) {
+    const unitText = `in ${q.unit}`;
+    cx.font = `800 30px ${FONT.display}`;
+    const tw = cx.measureText(unitText).width;
+    const w = tw + 44;
+    const h = 54;
+    const ux = WORLD_W / 2;
+    const uy = 540;
+    const way = activeWay();
+    cx.fillStyle = inky ? way.face : 'rgba(12,10,22,0.92)';
     cx.beginPath();
-    cx.moveTo(x - 7, RAIL_Y + 3);
-    cx.lineTo(x + 7, RAIL_Y + 3);
-    cx.lineTo(x, RAIL_Y + 14);
-    cx.closePath();
+    cx.roundRect(ux - w / 2, uy - h / 2, w, h, 14);
     cx.fill();
+    cx.strokeStyle = inky ? INK : 'rgba(244,241,232,0.9)';
+    cx.lineWidth = 3;
+    cx.stroke();
+    cx.textBaseline = 'middle';
+    cx.fillStyle = inky ? way.text : UI.paper;
+    cx.fillText(unitText, ux, uy + 1);
   }
   cx.restore();
 }
@@ -483,7 +496,8 @@ export function drawRangeReveal(cx, band, q) {
   const [lo, hi] = q.answer;
   const text = `${fmtValue(lo)}–${fmtValue(hi)}${q.unit ? ` ${q.unit}` : ''}`;
   const cxp = Math.max(200, Math.min(WORLD_W - 200, band.x + band.w / 2));
-  const y = RAIL_Y - 74;
+  // High enough that the tag and its arrow clear the 42px numbers below.
+  const y = RAIL_Y - 128;
 
   cx.textAlign = 'center';
   cx.textBaseline = 'middle';
@@ -505,9 +519,9 @@ export function drawRangeReveal(cx, band, q) {
   // Arrow from the tag toward the surviving band.
   cx.fillStyle = terrazzo ? INK : 'rgba(244,241,232,0.9)';
   cx.beginPath();
-  cx.moveTo(cxp, y + h / 2 + 30);
-  cx.lineTo(cxp - 15, y + h / 2 + 6);
-  cx.lineTo(cxp + 15, y + h / 2 + 6);
+  cx.moveTo(cxp, y + h / 2 + 26);
+  cx.lineTo(cxp - 14, y + h / 2 + 6);
+  cx.lineTo(cxp + 14, y + h / 2 + 6);
   cx.closePath();
   cx.fill();
   cx.restore();
