@@ -46,7 +46,7 @@ import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from
 import { setRound, setTheme } from './themes.js';
 import { cycleVoice, tickAudio, toggleMuted, unlockAudio } from './audio.js';
 import { drawConfetti } from './fx.js';
-import { drawRoundOverlay } from './round-ui.js';
+import { drawRoundOverlay, maxScroll, windowCount } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
 import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
@@ -342,6 +342,9 @@ const menu = {
   look: 'deck',
   /** The row the pointer is over, for hover feedback. @type {string|null} */
   hover: null,
+  /** First list entry drawn: the deck list is a window, not the whole
+   *  library, so a big questions/ folder cannot outgrow the screen. */
+  deckScroll: 0,
   // The dev-tools tab: the full key list, folded away until clicked.
   dev: false,
 };
@@ -375,6 +378,45 @@ function decksFor(mode) {
 /** The library in display order: free-for-all decks first, then teams. */
 function orderedPacks() {
   return [...decksFor('solo'), ...decksFor('teams')];
+}
+
+/**
+ * The list the lobby draws: a mode heading, then that mode's decks. Used
+ * here only for scrolling arithmetic — the renderer builds its own from
+ * the same packs, and both agree because both read decksFor().
+ * @returns {Array<{kind: 'head'|'deck', file?: string}>}
+ */
+function listEntries() {
+  /** @type {Array<{kind: 'head'|'deck', file?: string}>} */
+  const out = [];
+  for (const mode of /** @type {const} */ (['solo', 'teams'])) {
+    const list = decksFor(mode);
+    if (!list.length) continue;
+    out.push({ kind: 'head' });
+    for (const p of list) out.push({ kind: 'deck', file: p.file });
+  }
+  return out;
+}
+
+/** Keep the cursor's deck inside the visible window. */
+function followScroll() {
+  const entries = listEntries();
+  const kinds = entries.map((e) => e.kind);
+  const max = maxScroll(kinds);
+  const item = menuItems()[menu.sel] ?? '';
+  if (item.startsWith('deck:')) {
+    const at = entries.findIndex((e) => e.kind === 'deck' && `deck:${e.file}` === item);
+    if (at >= 0) {
+      // A deck's heading is the entry above it; pull that in too when we can.
+      if (at < menu.deckScroll + 1) menu.deckScroll = Math.max(0, at - 1);
+      else if (at >= menu.deckScroll + windowCount(kinds, menu.deckScroll)) {
+        while (menu.deckScroll < max && at >= menu.deckScroll + windowCount(kinds, menu.deckScroll)) {
+          menu.deckScroll++;
+        }
+      }
+    }
+  }
+  menu.deckScroll = Math.max(0, Math.min(menu.deckScroll, max));
 }
 
 /**
@@ -875,6 +917,7 @@ function onKey(e, down) {
       if (k === 'arrowup') menu.sel = (menu.sel + items.length - 1) % items.length;
       else if (k === 'arrowdown') menu.sel = (menu.sel + 1) % items.length;
       else menuAdjust(items[menu.sel], k === 'arrowright' ? 1 : -1);
+      followScroll();
       e.preventDefault();
       return;
     }
@@ -993,6 +1036,14 @@ addEventListener('pointermove', (e) => {
   wakeCursor();
 });
 
+canvas.addEventListener('wheel', (e) => {
+  if (!menuOpen()) return;
+  const max = maxScroll(listEntries().map((e) => e.kind));
+  if (!max) return;
+  menu.deckScroll = Math.max(0, Math.min(max, menu.deckScroll + (e.deltaY > 0 ? 1 : -1)));
+  e.preventDefault();
+}, { passive: false });
+
 canvas.addEventListener('pointerdown', (e) => {
   document.body.style.cursor = 'pointer';
   wakeCursor();
@@ -1014,6 +1065,7 @@ canvas.addEventListener('pointerdown', (e) => {
   const ix = items.indexOf(target.id);
   if (ix < 0) return;
   menu.sel = ix;
+  followScroll();
   menuActivate(items[ix]);
 });
 // A window that loses focus must release, or the avatar runs forever.

@@ -107,6 +107,7 @@ function fallOffset(t) {
  * @property {boolean} loading
  * @property {string[]} items
  * @property {string|null} [hover] the row the pointer is over
+ * @property {number} [deckScroll] first list entry shown, for long libraries
  * @property {string|null} [startBlocked] why Start cannot run, or null
  * @property {number} answerMs
  * @property {'solo'|'teams'} mode
@@ -167,6 +168,44 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
  * sits here is what the room will call the game.
  */
 const WORDMARK = 'PLATFORMS';
+
+/**
+ * The deck list is a fixed-height window that the entries fill: the card is
+ * the same box for a library of two decks or thirty, and Start never moves
+ * under the pointer as you scroll. Headings are shorter than decks, so the
+ * window holds a varying NUMBER of entries — hence the shared arithmetic
+ * below rather than a row count.
+ */
+export const LIST_H = 366;
+const ENTRY_H = { head: 32, deck: 72 };
+
+/**
+ * How many entries fit in the window starting at `top`.
+ * @param {Array<'head'|'deck'>} kinds @param {number} top
+ */
+export function windowCount(kinds, top) {
+  let used = 0;
+  let n = 0;
+  for (let i = top; i < kinds.length; i++) {
+    const next = used + ENTRY_H[kinds[i]];
+    if (next > LIST_H) break;
+    used = next;
+    n++;
+  }
+  return Math.max(1, n);
+}
+
+/**
+ * The furthest the list can scroll: the offset whose window still ends on
+ * the final entry, so the tail of the library is always reachable.
+ * @param {Array<'head'|'deck'>} kinds
+ */
+export function maxScroll(kinds) {
+  for (let top = 0; top < kinds.length; top++) {
+    if (top + windowCount(kinds, top) >= kinds.length) return top;
+  }
+  return 0;
+}
 
 /**
  * Stand-in cover art for a deck: the game in miniature. Packs will be able
@@ -239,86 +278,128 @@ function drawMenu(cx, menu, playerCount) {
   const counts = menu.cohortCounts ?? [0, 0, 0];
   const onTeams = counts.reduce((a, b) => a + b, 0);
 
-  const rowH = 78;
-  const headH = 34;
-  const groups = [
+  const rowH = ENTRY_H.deck;
+  const headH = ENTRY_H.head;
+
+  // The list is a fixed window: mode headings and decks in one flat run,
+  // scrolled, so ten decks draw the same box as two and the card can never
+  // grow off the bottom of the screen.
+  /** @type {Array<{kind:'head', title:string, note:string, warn:boolean} | {kind:'deck', pack:any}>} */
+  const entries = [];
+  for (const [title, blurb, list] of /** @type {any[]} */ ([
     ['Free-for-all', 'everyone plays for themselves', solo],
     ['Teams', 'PGY years score together', teams],
-  ].filter(([, , list]) => /** @type {any[]} */ (list).length);
+  ])) {
+    if (!list.length) continue;
+    const isTeams = title === 'Teams';
+    entries.push({
+      kind: 'head',
+      title,
+      note: isTeams
+        ? onTeams ? `${onTeams} player${onTeams === 1 ? '' : 's'} on a team` : 'waiting for players to pick a year'
+        : blurb,
+      warn: isTeams && !onTeams,
+    });
+    for (const pack of list) entries.push({ kind: 'deck', pack });
+  }
 
-  const listH = groups.reduce((t, [, , list]) => t + headH + /** @type {any[]} */ (list).length * rowH, 0);
-  const h = pad + 24 + listH + 18 + 64 + 20 + 74 + pad - 16;
+  const kinds = entries.map((e) => e.kind);
+  const top = Math.max(0, Math.min(menu.deckScroll ?? 0, maxScroll(kinds)));
+  const shown = windowCount(kinds, top);
+  const listH = LIST_H;
+  const h = pad + 24 + listH + 18 + 58 + 22 + 74 + pad - 16;
   panel(cx, x0, y0, w, h, undefined, { veil: lobbyVeil() });
 
   cx.font = `700 14px ${FONT.ui}`;
   cx.fillStyle = 'rgba(255,255,255,0.45)';
   cx.fillText('PICK A DECK', x0 + pad, y0 + pad + 8);
+  if (entries.length > shown) {
+    const nDecks = decks.length;
+    cx.textAlign = 'right';
+    cx.font = `700 13px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.45)';
+    cx.fillText(`${nDecks} decks  ·  scroll`, x0 + w - pad, y0 + pad + 8);
+    cx.textAlign = 'left';
+  }
 
   let y = y0 + pad + 24;
-  for (const [title, blurb, list] of groups) {
-    const isTeams = title === 'Teams';
-    cx.font = `800 17px ${FONT.display}`;
-    cx.fillStyle = 'rgba(255,255,255,0.9)';
-    cx.fillText(/** @type {string} */ (title), x0 + pad, y + 22);
-    cx.font = `600 14px ${FONT.ui}`;
-    cx.fillStyle = isTeams && !onTeams ? 'rgba(255,215,120,0.8)' : 'rgba(255,255,255,0.45)';
-    const note = isTeams
-      ? onTeams
-        ? `${onTeams} player${onTeams === 1 ? '' : 's'} on a team`
-        : 'waiting for players to pick a year'
-      : /** @type {string} */ (blurb);
-    cx.textAlign = 'right';
-    cx.fillText(note, x0 + w - pad, y + 22);
-    cx.textAlign = 'left';
-    y += headH;
-
-    for (const p of /** @type {any[]} */ (list)) {
-      const id = `deck:${p.file}`;
-      const chosen = p.file === menu.packs[menu.packIndex]?.file;
-      const cursor = sel === id;
-      const hovered = menu.hover === id;
-      hit(id, x0 + 18, y, w - 36, rowH - 8);
-
-      // EVERY deck is drawn as a card, not just the chosen one: a row that
-      // only looks like a control once the pointer crosses it reads as a
-      // label, and nobody clicks a label.
-      cx.fillStyle = chosen
-        ? 'rgba(255,255,255,0.20)'
-        : cursor || hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)';
-      cx.strokeStyle = chosen
-        ? 'rgba(255,255,255,0.85)'
-        : cursor || hovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)';
-      cx.lineWidth = chosen ? 2.5 : 1.5;
-      cx.beginPath();
-      cx.roundRect(x0 + 18, y, w - 36, rowH - 8, 14);
-      cx.fill();
-      cx.stroke();
-
-      const cover = 52;
-      drawDeckCover(cx, x0 + pad, y + 9, cover);
-      const tx = x0 + pad + cover + 16;
-      cx.font = fitFont(cx, p.name, w - pad * 2 - cover - 16, 24, 16);
-      cx.fillStyle = chosen ? '#ffffff' : 'rgba(255,255,255,0.85)';
-      cx.fillText(p.name, tx, y + 32);
-      cx.font = `600 14px ${FONT.ui}`;
-      cx.fillStyle = 'rgba(255,255,255,0.5)';
-      cx.fillText(`${p.questions} questions`, tx, y + 54);
-      cx.textAlign = 'right';
-      cx.font = `700 13px ${FONT.ui}`;
-      cx.fillStyle = chosen ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.38)';
-      cx.fillText(chosen ? 'PLAYING' : 'click to pick', x0 + w - pad, y + 42);
-      cx.textAlign = 'left';
-      y += rowH;
-    }
-  }
+  const listTop = y;
   if (!decks.length) {
     cx.font = `600 17px ${FONT.ui}`;
     cx.fillStyle = 'rgba(255,255,255,0.6)';
     cx.fillText('No decks in questions/ yet.', x0 + pad, y + 26);
-    y += 40;
+  }
+  for (const entry of entries.slice(top, top + shown)) {
+    if (entry.kind === 'head') {
+      cx.font = `800 17px ${FONT.display}`;
+      cx.fillStyle = 'rgba(255,255,255,0.9)';
+      cx.fillText(entry.title, x0 + pad, y + 22);
+      cx.font = `600 14px ${FONT.ui}`;
+      cx.fillStyle = entry.warn ? 'rgba(255,215,120,0.8)' : 'rgba(255,255,255,0.45)';
+      cx.textAlign = 'right';
+      cx.fillText(entry.note, x0 + w - pad, y + 22);
+      cx.textAlign = 'left';
+      y += headH;
+      continue;
+    }
+    const p = entry.pack;
+    const id = `deck:${p.file}`;
+    const chosen = p.file === menu.packs[menu.packIndex]?.file;
+    const cursor = sel === id;
+    const hovered = menu.hover === id;
+    // Only what is on screen is clickable — an off-window row must never
+    // leave a live hit box behind.
+    hit(id, x0 + 18, y, w - 46, rowH - 8);
+
+    // EVERY deck is drawn as a card, not just the chosen one: a row that
+    // only looks like a control once the pointer crosses it reads as a
+    // label, and nobody clicks a label.
+    cx.fillStyle = chosen
+      ? 'rgba(255,255,255,0.20)'
+      : cursor || hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)';
+    cx.strokeStyle = chosen
+      ? 'rgba(255,255,255,0.85)'
+      : cursor || hovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)';
+    cx.lineWidth = chosen ? 2.5 : 1.5;
+    cx.beginPath();
+    cx.roundRect(x0 + 18, y, w - 46, rowH - 8, 14);
+    cx.fill();
+    cx.stroke();
+
+    const cover = 46;
+    drawDeckCover(cx, x0 + pad, y + 9, cover);
+    const tx = x0 + pad + cover + 14;
+    cx.font = fitFont(cx, p.name, w - pad * 2 - cover - 110, 22, 15);
+    cx.fillStyle = chosen ? '#ffffff' : 'rgba(255,255,255,0.85)';
+    cx.fillText(p.name, tx, y + 30);
+    cx.font = `600 13px ${FONT.ui}`;
+    cx.fillStyle = 'rgba(255,255,255,0.5)';
+    cx.fillText(`${p.questions} questions`, tx, y + 50);
+    cx.textAlign = 'right';
+    cx.font = `700 12px ${FONT.ui}`;
+    cx.fillStyle = chosen ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.38)';
+    cx.fillText(chosen ? 'PLAYING' : 'click to pick', x0 + w - pad - 10, y + 40);
+    cx.textAlign = 'left';
+    y += rowH;
   }
 
-  y += 18;
+  // the scrollbar: how much of the library you are looking at
+  if (entries.length > shown) {
+    const trackX = x0 + w - 26;
+    const trackH = listH - 8;
+    cx.fillStyle = 'rgba(255,255,255,0.10)';
+    cx.beginPath();
+    cx.roundRect(trackX, listTop, 4, trackH, 2);
+    cx.fill();
+    const thumbH = Math.max(28, (shown / entries.length) * trackH);
+    const thumbY = listTop + (top / (entries.length - shown)) * (trackH - thumbH);
+    cx.fillStyle = 'rgba(255,255,255,0.5)';
+    cx.beginPath();
+    cx.roundRect(trackX, thumbY, 4, thumbH, 2);
+    cx.fill();
+  }
+
+  y = listTop + listH + 18;
 
   // ---- the two settings, side by side and quiet: set once, rarely touched
   /** @type {Array<['time'|'look', string, string]>} */
