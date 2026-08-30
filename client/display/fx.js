@@ -92,6 +92,29 @@ export function burstConfetti(plat, intensity = 1) {
 }
 
 /**
+ * The reveal-bounce choreography owns the burst on rounds where the correct
+ * board hops: main defers the auto-fire below and calls revealBurst at the
+ * board's apex instead, so full height, the toss and the confetti all land
+ * on one frame. Rounds without a hop (range, control, nobody aboard) keep
+ * the auto-fire.
+ * @param {number} qIndex
+ */
+export function deferRevealBurst(qIndex) {
+  revealSeen = qIndex;
+}
+
+/** @param {Game} game @param {World} world */
+export function revealBurst(game, world) {
+  if (!FX.confetti) return;
+  const q = currentQuestion(game);
+  if (!q) return;
+  const keep = targetIds(q);
+  for (const plat of world.platforms) {
+    if (plat.id && keep.has(plat.id)) burstConfetti(plat);
+  }
+}
+
+/**
  * Per-frame entry point. Detects the reveal beat, then updates and draws.
  * Call between the world render and the round overlay, so confetti falls
  * over the stage but under the scoreboard panel.

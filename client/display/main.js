@@ -46,7 +46,7 @@ import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
 import { setRound, setTheme } from './themes.js';
 import { cycleVoice, tickAudio, toggleMuted, unlockAudio } from './audio.js';
-import { drawConfetti } from './fx.js';
+import { deferRevealBurst, drawConfetti, revealBurst } from './fx.js';
 import { drawRoundOverlay, menuPlatforms } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
 import { loadArt } from './art.js';
@@ -395,27 +395,37 @@ function trackMenuLandings() {
 
 // ------------------------------------------------------ the reveal bounce
 //
-// When a choice reveal lands, the correct board does one happy hop — and
-// genuinely tosses whoever is standing on it. The board is a real platform,
-// so the hop is done in the sim: on the way up it works as an elevator
-// (feet re-pinned to the rising top each frame, because the one-way landing
-// check refuses feet that are already below the surface), and at the apex
-// the riders get a small upward kick and are released — ordinary physics
-// brings them back down onto the settled board. Winners get bounced;
-// nobody's score can change (results are already frozen at LOCK).
+// REVEAL is two beats. Beat one, on entry: the wrong boards crumble and the
+// phones buzz — the verdict, given room to read. Beat two, ~600ms later:
+// the correct board crouches, springs, and at the exact apex three things
+// happen on the same frame — the riders are released with an upward kick,
+// and the confetti bursts (deferred from the auto-fire in fx.js). The toss
+// IS the apex; nothing celebratory happens before it.
 //
-// Sort rounds keep their per-item confetti (a summary hop would re-judge),
-// range rounds have no board to hop (the target is a floor band), and
-// control turns run on their own stage.
+// The board is a real platform, so the hop runs in the sim: while crouching
+// and rising it works as an elevator (feet re-pinned to the moving top each
+// frame, because the one-way landing check refuses feet already below the
+// surface), and after the release ordinary physics brings everyone back
+// down onto the settled board. Scores can't change — results froze at LOCK.
+//
+// No riders → no hop and no deferral: a board celebrating an empty room
+// reads wrong, and the auto-fire path stays correct (nobody aboard means
+// nobody scored, so it stays quiet too). Sort rounds keep their per-item
+// confetti, range rounds have no board to hop, control turns run on their
+// own stage.
 
 /** @typedef {import('../../sim/collide.js').Platform} Platform */
 /** @typedef {import('../../sim/player.js').Player} Player */
 
-const HOP_MS = 360;
+const HOP_DELAY_MS = 600; // beat one: let the crumble read first
+const CROUCH_MS = 120;
+const CROUCH_PX = 7;
+const RISE_MS = 180;
+const FALL_MS = 350;
 const HOP_PX = 26;
-const HOP_KICK = 300; // px/s upward, a polite fraction of a real jump
+const HOP_KICK = 540; // px/s up at release — a clear pop, about half a jump
 
-/** @type {{plats: Array<{plat: Platform, base: number}>, riders: Array<{p: Player, plat: Platform}>, t0: number, kicked: boolean} | null} */
+/** @type {{plats: Array<{plat: Platform, base: number}>, riders: Map<Player, Platform>, t0: number, kicked: boolean} | null} */
 let hop = null;
 
 /** Arm the hop on the frame the game enters REVEAL. */
@@ -427,45 +437,72 @@ function startRevealHop() {
     .filter((p) => p.id?.startsWith('ans') && ids.has(p.id))
     .map((plat) => ({ plat, base: plat.y }));
   if (!plats.length) return;
-  /** @type {Array<{p: Player, plat: Platform}>} */
-  const riders = [];
+  /** @type {Map<Player, Platform>} */
+  const riders = new Map();
   for (const pl of world.players.values()) {
     if (pl.standingOn && plats.some((e) => e.plat === pl.standingOn)) {
-      riders.push({ p: pl, plat: pl.standingOn });
+      riders.set(pl, pl.standingOn);
     }
   }
+  if (!riders.size) return;
   hop = { plats, riders, t0: world.t, kicked: false };
+  deferRevealBurst(game.qIndex);
 }
 
 /** One frame of the hop; restores the exact base y when done or cut short. */
 function tickRevealHop() {
   if (!hop) return;
-  const t = world.t - hop.t0;
-  if (game.phase !== PHASE.REVEAL || t >= HOP_MS) {
+  const t = world.t - hop.t0 - HOP_DELAY_MS;
+  if (game.phase !== PHASE.REVEAL || t >= CROUCH_MS + RISE_MS + FALL_MS) {
     for (const e of hop.plats) e.plat.y = e.base;
+    // A skip mid-choreography must not eat the party the deferral promised.
+    if (!hop.kicked) revealBurst(game, world);
     hop = null;
     return;
   }
-  const lift = HOP_PX * Math.sin((Math.PI * t) / HOP_MS);
+  if (t < 0) return; // beat one: boards falling, nothing moves here yet
+
+  let lift; // px above base; negative is the crouch
+  if (t < CROUCH_MS) {
+    // Ease down into the crouch and hold at the bottom — the gather.
+    lift = -CROUCH_PX * Math.sin(((Math.PI / 2) * t) / CROUCH_MS);
+  } else if (t < CROUCH_MS + RISE_MS) {
+    // Spring: crouch bottom to full height, decelerating into the apex.
+    const u = (t - CROUCH_MS) / RISE_MS;
+    lift = -CROUCH_PX + (HOP_PX + CROUCH_PX) * Math.sin((Math.PI / 2) * u);
+  } else {
+    // Past the apex: fall away with acceleration. The riders are already
+    // airborne, so the widening gap under them is what sells the toss.
+    const u = (t - CROUCH_MS - RISE_MS) / FALL_MS;
+    lift = HOP_PX * (1 - u * u);
+  }
   for (const e of hop.plats) e.plat.y = e.base - lift;
-  if (t < HOP_MS / 2) {
-    // Rising: re-pin every rider's feet to the moving top BEFORE the next
-    // physics step sees it, so they ride the board instead of sinking in.
-    for (const r of hop.riders) {
-      r.p.y = r.plat.y - r.p.h;
-      r.p.vy = 0;
-      r.p.onGround = true;
-      r.p.standingOn = r.plat;
+
+  if (t < CROUCH_MS + RISE_MS) {
+    // Crouching or rising: adopt any late lander, then re-pin every rider's
+    // feet to the moving top BEFORE the next physics step sees it.
+    for (const pl of world.players.values()) {
+      if (pl.standingOn && !hop.riders.has(pl) && hop.plats.some((e) => e.plat === pl.standingOn)) {
+        hop.riders.set(pl, pl.standingOn);
+      }
+    }
+    for (const [p, plat] of hop.riders) {
+      p.y = plat.y - p.h;
+      p.vy = 0;
+      p.onGround = true;
+      p.standingOn = plat;
     }
   } else if (!hop.kicked) {
-    // Apex: let go with a flick. From here on it's all regular physics.
+    // THE apex frame: release with a flick and burst the confetti — toss,
+    // full height and party on the same frame. Regular physics from here.
     hop.kicked = true;
-    for (const r of hop.riders) {
-      r.p.vy = -HOP_KICK;
-      r.p.onGround = false;
-      r.p.standingOn = null;
+    for (const [p] of hop.riders) {
+      p.vy = -HOP_KICK;
+      p.onGround = false;
+      p.standingOn = null;
     }
-    hop.riders = [];
+    hop.riders.clear();
+    revealBurst(game, world);
   }
 }
 
