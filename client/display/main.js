@@ -329,21 +329,22 @@ function onJson(msg) {
 let holdPref = false;
 
 const menu = {
-  /** @type {Array<{file:string, name:string, questions:number, showdown:boolean, controlRoom?:number}>} */
+  /** @type {Array<{file:string, name:string, questions:number, mode?:'solo'|'teams', showdown:boolean, controlRoom?:number}>} */
   packs: [],
   packIndex: 0,
-  // The cursor starts on "Start quiz" (row 4), so a plain Enter in the lobby
-  // still does what it has always done — including for the smoke test.
-  sel: 4,
+  // The lobby opens on its first question with the first answer highlighted.
+  sel: 0,
   loading: false,
   /** @type {'solo'|'teams'} */
   mode: 'solo',
   // The host's background override: 'deck' plays the pack's theme; any
   // other value pins the room's look regardless of what packs say.
   look: 'deck',
-  // The deck browser: a modal list over the card, for real libraries.
-  browse: false,
-  browseSel: 0,
+  // The lobby asks one thing at a time: first how tonight is played, then
+  // which of that mode's decks to play. A deck belongs to exactly one mode,
+  // so the two can never disagree.
+  /** @type {'mode'|'decks'} */
+  stage: 'mode',
   // The dev-tools tab: the full key list, folded away until clicked.
   dev: false,
 };
@@ -369,15 +370,28 @@ function applyTheme() {
   setTheme(menu.look === 'deck' ? deckTheme : menu.look);
 }
 
-/** Menu rows, in display order. Optional modes appear only when the pack has content. */
+/** The decks written for one mode, in library order. @param {'solo'|'teams'} mode */
+function decksFor(mode) {
+  return menu.packs.filter((p) => (p.mode ?? 'solo') === mode);
+}
+
+/**
+ * The rows the cursor moves through, which depend on the stage: the mode
+ * question first, then that mode's decks with the settings and Start.
+ *
+ * Control Room and Showdown are deliberately absent. Both still parse,
+ * validate and play — nothing in the engine changed — but neither is
+ * authored in the editor or offered here any more.
+ * @returns {string[]}
+ */
 function menuItems() {
-  /** @type {Array<'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'>} */
-  const items = ['pack', 'time', 'mode', 'look', 'quiz'];
-  if (controlSpec) items.push('control');
-  if (showdownSpec) items.push('showdown');
-  // Switching to a pack without a showdown can strand the cursor one row past
-  // the end; pull it back rather than crash the key handler.
+  /** @type {string[]} */
+  const items = menu.stage === 'mode'
+    ? ['solo', 'teams']
+    : [...decksFor(menu.mode).map((p) => `deck:${p.file}`), 'time', 'look', 'quiz', 'back'];
+  // A shorter list must never strand the cursor past its end.
   if (menu.sel >= items.length) menu.sel = items.length - 1;
+  if (menu.sel < 0) menu.sel = 0;
   return items;
 }
 
@@ -412,7 +426,6 @@ function participatingTeams() {
 
 /** @param {boolean} controlOnly */
 function startConfiguredGame(controlOnly) {
-  menu.browse = false; // a host-page start can arrive mid-browse
   if (controlOnly) menu.mode = 'teams';
   applyMode();
   game.activeTeams = participatingTeams();
@@ -485,9 +498,6 @@ async function selectPack(index) {
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
       game.levelPool = levelPool;
-      // A pack that states how it is meant to play presets the menu; the
-      // host can still flip the Mode row afterwards.
-      if (pack.mode === 'solo' || pack.mode === 'teams') menu.mode = pack.mode;
       applyMode();
       showdownSpec = pack.showdown?.statements?.length ? pack.showdown : null;
       controlSpec = pack.controlRoom?.questions?.length ? pack.controlRoom : null;
@@ -515,14 +525,10 @@ function cycleTime(dir) {
   lastCheckpoint = 0;
 }
 
-/** @param {'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'} item @param {number} dir */
+/** @param {string} item @param {number} dir */
 function menuAdjust(item, dir) {
-  if (item === 'pack') void selectPack(menu.packIndex + dir);
-  else if (item === 'time') cycleTime(dir);
-  else if (item === 'mode') {
-    menu.mode = menu.mode === 'teams' ? 'solo' : 'teams';
-    applyMode();
-  } else if (item === 'look') {
+  if (item === 'time') cycleTime(dir);
+  else if (item === 'look') {
     const at = Math.max(0, LOOKS.indexOf(menu.look));
     menu.look = LOOKS[(at + dir + LOOKS.length) % LOOKS.length];
     // Applied on the spot: the lobby sky is the preview.
@@ -530,18 +536,40 @@ function menuAdjust(item, dir) {
   }
 }
 
-/** @param {'pack'|'time'|'mode'|'look'|'quiz'|'control'|'showdown'} item */
+/**
+ * Enter, or a click on the row the cursor is already on.
+ * @param {string} item
+ */
 function menuActivate(item) {
-  if (item === 'quiz') {
+  if (item === 'solo' || item === 'teams') {
+    chooseMode(item);
+  } else if (item.startsWith('deck:')) {
+    const file = item.slice(5);
+    const ix = menu.packs.findIndex((p) => p.file === file);
+    if (ix >= 0) void selectPack(ix);
+  } else if (item === 'back') {
+    menu.stage = 'mode';
+    menu.sel = menu.mode === 'teams' ? 1 : 0;
+  } else if (item === 'quiz') {
     startConfiguredGame(false);
-  } else if (item === 'control') {
-    startConfiguredGame(true);
-  } else if (item === 'showdown') startShowdown();
-  else if (item === 'pack') {
-    // Left/Right still quick-cycles; Enter opens the whole library.
-    menu.browse = true;
-    menu.browseSel = menu.packIndex;
   } else menuAdjust(item, 1);
+}
+
+/**
+ * Pick how tonight is played, then show that mode's decks and load the
+ * first one, so the card is never pointing at a deck of the other mode.
+ * @param {'solo'|'teams'} mode
+ */
+function chooseMode(mode) {
+  menu.mode = mode;
+  applyMode();
+  menu.stage = 'decks';
+  menu.sel = 0;
+  const decks = decksFor(mode);
+  const current = menu.packs[menu.packIndex];
+  if (decks.length && (!current || (current.mode ?? 'solo') !== mode)) {
+    void selectPack(menu.packs.indexOf(decks[0]));
+  }
 }
 
 // ------------------------------------------------------------------ showdown
@@ -831,23 +859,6 @@ function onKey(e, down) {
       printTuning();
       return;
     }
-    // The deck browser is modal: while it's open it owns the keyboard, so
-    // nothing underneath can start a game or toggle settings by accident.
-    if (menuOpen() && menu.browse) {
-      const clampSel = (/** @type {number} */ v) =>
-        Math.max(0, Math.min(menu.packs.length - 1, v));
-      if (k === 'arrowup') menu.browseSel = clampSel(menu.browseSel - 1);
-      else if (k === 'arrowdown') menu.browseSel = clampSel(menu.browseSel + 1);
-      else if (k === 'arrowleft') menu.browseSel = clampSel(menu.browseSel - 8);
-      else if (k === 'arrowright') menu.browseSel = clampSel(menu.browseSel + 8);
-      else if (k === 'enter') {
-        void selectPack(menu.browseSel);
-        menu.browse = false;
-      } else if (k === 'q' || k === 'escape') menu.browse = false;
-      e.preventDefault();
-      return;
-    }
-
     if (k === 'enter') {
       if (showdown) sdSkip(showdown, world);
       else if (menuOpen()) menuActivate(menuItems()[menu.sel]);
@@ -964,7 +975,7 @@ function stagePoint(e) {
 
 canvas.addEventListener('pointerdown', (e) => {
   wakeCursor();
-  if (!menuOpen() || menu.browse) return;
+  if (!menuOpen()) return;
   const p = stagePoint(e);
   if (!p) return;
   const target = menuHits.find(
@@ -1067,8 +1078,7 @@ async function init() {
     const pack = await fetch('/api/questions').then((r) => r.json());
     if (pack?.questions?.length || pack?.controlRoom?.questions?.length) {
       game = createGame(pack.questions ?? [], pack.answerMs);
-    } else hud.note = 'no questions loaded — check questions/default.json';
-    if (pack?.mode === 'solo' || pack?.mode === 'teams') menu.mode = pack.mode;
+    } else hud.note = 'no questions loaded — check the questions/ folder';
     applyMode();
     await refreshLevels();
     if (pack?.showdown?.statements?.length) showdownSpec = pack.showdown;

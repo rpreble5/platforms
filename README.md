@@ -57,16 +57,29 @@ with no phone at all.
 | `T` | live physics tuning (`←→` pick, `↑↓` adjust, shift for ×5, `P` prints a paste-able block) |
 | `F` | arm the flash-test target |
 
-Questions live in `questions/*.json` — every file there is a selectable pack
-in the lobby menu (name it with a top-level `"pack"` field). Packs are re-read
-on every selection, so editing one and re-picking it is the whole edit loop.
-**`showcase.json` is the demo night**: a medicine + trivia mix that exercises
-every mechanic (choices, ranges, select-alls, a picture question, two
-lightning sorts, three Control Room cases — one per PGY team — and a
-showdown). Its picture question ships with a placeholder strip: drop a
-de-identified EKG at `questions/images/your-ekg-here.png` (same filename)
-and the question uses it as-is. Verify the medical answer keys before a
-real session — they're board-classic, but they're the author's word.
+Questions live in `questions/*.json` — every file there is a deck in the
+lobby (name it with a top-level `"pack"` field). Decks are re-read on every
+selection, so editing one and re-picking it is the whole edit loop.
+
+**A deck is played one way, and says so**: `"mode": "solo"` for a
+free-for-all or `"mode": "teams"`. The lobby asks which kind of night it is
+first and then lists only that mode's decks, so a deck is never played the
+way it was not written for. A deck that does not say is read from its
+questions — select-all only works in teams, so a deck using one is a teams
+deck. Two ship:
+
+- **`mixed.json`** — free-for-all, 14 questions of general knowledge and
+  medicine, one of every type a single player can answer.
+- **`showcase.json`** — teams, the demo night: a medicine + trivia mix with
+  choices, ranges, select-alls, a picture question and two lightning sorts.
+  Its picture question ships with a placeholder strip: drop a de-identified
+  EKG at `questions/images/your-ekg-here.png` (same filename) and the
+  question uses it as-is. Verify the medical answer keys before a real
+  session — they're board-classic, but they're the author's word.
+
+Control Room cases and Showdown statements still parse, validate and play,
+but nothing authors or offers them any more: the editor does not write them
+and the lobby does not list them. Packs that carry them keep them.
 The lobby is a live arena: players join, run and warm up underneath the menu
 while the host picks a pack and answer time.
 

@@ -1,91 +1,59 @@
 {
   "pack": "Showcase night",
-  "answerMs": 12000,
+  "mode": "teams",
   "theme": "blanc",
-  "showdown": {
-    "answerMs": 6000,
-    "statements": [
-      { "text": "Kussmaul respirations are a compensation, not a primary lung problem", "answer": true },
-      { "text": "You lose most of your body heat through your head", "answer": false },
-      { "text": "Surgeons in ancient Egypt stitched wounds with sutures", "answer": true },
-      { "text": "Cracking your knuckles causes arthritis", "answer": false },
-      { "text": "The liver can regrow to full size from about a quarter of itself", "answer": true },
-      { "text": "A normal EKG rules out long QT syndrome", "answer": false },
-      { "text": "You swallow about a liter of your own saliva every day", "answer": true },
-      { "text": "Hair and fingernails keep growing after death", "answer": false },
-      { "text": "O negative red cells can be given to any patient", "answer": true },
-      { "text": "Metformin is cleared by the kidneys, not the liver", "answer": true }
-    ]
-  },
-  "controlRoom": {
-    "perTeam": 1,
-    "answerMs": 40000,
-    "questions": [
-      {
-        "text": "DKA, hour one — set the first orders",
-        "context": "Glucose 480 - pH 7.12 - K 3.1 - anion gap 28",
-        "controls": [
-          { "label": "NS bolus", "kind": "number", "initial": 0, "answer": 1, "min": 0, "max": 3, "step": 1, "unit": "L" },
-          { "label": "Insulin drip now", "kind": "toggle", "initial": false, "answer": false },
-          { "label": "Replete K first", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "IV bicarbonate", "kind": "toggle", "initial": false, "answer": false },
-          { "label": "q1h glucose", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "Empiric abx", "kind": "toggle", "initial": false, "answer": false }
-        ]
-      },
-      {
-        "text": "Suspected bacterial meningitis, hour one",
-        "context": "24yo - alert - no focal deficits - no immunosuppression",
-        "controls": [
-          { "label": "Blood cultures", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "Ceftriaxone", "kind": "number", "initial": 0, "answer": 2, "min": 0, "max": 4, "step": 1, "unit": "g" },
-          { "label": "Vancomycin", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "Dexamethasone", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "Hold abx until LP", "kind": "toggle", "initial": false, "answer": false },
-          { "label": "CT before LP", "kind": "toggle", "initial": false, "answer": false }
-        ]
-      },
-      {
-        "text": "Cirrhosis with hematemesis, hour one",
-        "context": "HR 110 - BP 95/60 - Hgb 8.9 - known varices",
-        "controls": [
-          { "label": "2 large-bore IVs", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "Octreotide", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "Ceftriaxone", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "IV PPI", "kind": "toggle", "initial": false, "answer": true },
-          { "label": "NG lavage", "kind": "toggle", "initial": false, "answer": false },
-          { "label": "Activate MTP", "kind": "toggle", "initial": false, "answer": false },
-          { "label": "Transfuse at Hgb", "kind": "number", "initial": 9, "answer": 7, "min": 5, "max": 10, "step": 1, "unit": "g/dL" }
-        ]
-      }
-    ]
-  },
+  "answerMs": 12000,
   "questions": [
     {
       "text": "Which was invented FIRST?",
-      "answers": ["The stethoscope", "The hypodermic syringe", "The BP cuff", "The X-ray"],
+      "answers": [
+        "The stethoscope",
+        "The hypodermic syringe",
+        "The BP cuff",
+        "The X-ray"
+      ],
       "correct": 0,
       "layout": "row"
     },
     {
       "text": "Laennec invented the stethoscope. What killed him at 45?",
-      "answers": ["Tuberculosis", "Syphilis", "Cholera", "A duel"],
+      "answers": [
+        "Tuberculosis",
+        "Syphilis",
+        "Cholera",
+        "A duel"
+      ],
       "correct": 0
     },
     {
       "text": "Which drug did Bayer once sell over the counter as a cough medicine?",
-      "answers": ["Heroin", "Cocaine", "Methamphetamine", "Thalidomide"],
+      "answers": [
+        "Heroin",
+        "Cocaine",
+        "Methamphetamine",
+        "Thalidomide"
+      ],
       "correct": 0,
       "layout": "pyramid"
     },
     {
       "text": "After neck surgery a patient can't shrug one shoulder. Which nerve?",
-      "answers": ["Vagus", "Spinal accessory", "Long thoracic", "Axillary"],
+      "answers": [
+        "Vagus",
+        "Spinal accessory",
+        "Long thoracic",
+        "Axillary"
+      ],
       "correct": 1
     },
     {
       "text": "Classic acid-base picture of an aspirin overdose?",
-      "answers": ["Resp alk + AG acidosis", "Pure AG acidosis", "Resp acidosis", "Pure resp alkalosis"],
+      "answers": [
+        "Resp alk + AG acidosis",
+        "Pure AG acidosis",
+        "Resp acidosis",
+        "Pure resp alkalosis"
+      ],
       "correct": 0,
       "layout": "reverse-pyramid"
     },
@@ -94,7 +62,10 @@
       "text": "Maximum daily acetaminophen for a healthy adult?",
       "min": 0,
       "max": 10,
-      "answer": [3, 4],
+      "answer": [
+        3,
+        4
+      ],
       "unit": "g"
     },
     {
@@ -102,7 +73,10 @@
       "text": "How many liters a day do the kidneys filter into primary filtrate?",
       "min": 0,
       "max": 300,
-      "answer": [150, 200],
+      "answer": [
+        150,
+        200
+      ],
       "unit": "L"
     },
     {
@@ -110,57 +84,150 @@
       "text": "How many times does a heart beat in an average lifetime?",
       "min": 0,
       "max": 10,
-      "answer": [2, 4],
+      "answer": [
+        2,
+        4
+      ],
       "unit": "billion"
     },
     {
       "text": "Select every component of CURB-65",
-      "answers": ["Confusion", "Urea > 7 mmol/L", "RR ≥ 30", "SBP < 90", "Age ≥ 65", "O2 sat < 92%"],
-      "correct": [0, 1, 2, 3, 4]
+      "answers": [
+        "Confusion",
+        "Urea > 7 mmol/L",
+        "RR ≥ 30",
+        "SBP < 90",
+        "Age ≥ 65",
+        "O2 sat < 92%"
+      ],
+      "correct": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
     },
     {
       "text": "Select every organ you can live without",
-      "answers": ["Spleen", "Gallbladder", "Appendix", "Stomach", "Liver", "Heart"],
-      "correct": [0, 1, 2, 3]
+      "answers": [
+        "Spleen",
+        "Gallbladder",
+        "Appendix",
+        "Stomach",
+        "Liver",
+        "Heart"
+      ],
+      "correct": [
+        0,
+        1,
+        2,
+        3
+      ]
     },
     {
       "text": "Vomiting for 2 days, creatinine rising — select every home med to HOLD",
-      "answers": ["Metformin", "Lisinopril", "Empagliflozin", "Atorvastatin", "Ibuprofen", "Basal insulin"],
-      "correct": [0, 1, 2, 4]
+      "answers": [
+        "Metformin",
+        "Lisinopril",
+        "Empagliflozin",
+        "Atorvastatin",
+        "Ibuprofen",
+        "Basal insulin"
+      ],
+      "correct": [
+        0,
+        1,
+        2,
+        4
+      ]
     },
     {
       "text": "What rhythm is this?",
       "image": "your-ekg-here.png",
-      "answers": ["Atrial fibrillation", "Sinus tachycardia", "Atrial flutter", "SVT"],
+      "answers": [
+        "Atrial fibrillation",
+        "Sinus tachycardia",
+        "Atrial flutter",
+        "SVT"
+      ],
       "correct": 0
     },
     {
       "type": "sort",
       "text": "Gram positive or gram negative?",
-      "buckets": ["Gram positive", "Gram negative"],
+      "buckets": [
+        "Gram positive",
+        "Gram negative"
+      ],
       "items": [
-        { "label": "Staph aureus", "bucket": 0 },
-        { "label": "E. coli", "bucket": 1 },
-        { "label": "Strep pneumo", "bucket": 0 },
-        { "label": "Pseudomonas", "bucket": 1 },
-        { "label": "Listeria", "bucket": 0 },
-        { "label": "Neisseria", "bucket": 1 },
-        { "label": "Enterococcus", "bucket": 0 },
-        { "label": "Klebsiella", "bucket": 1 }
+        {
+          "label": "Staph aureus",
+          "bucket": 0
+        },
+        {
+          "label": "E. coli",
+          "bucket": 1
+        },
+        {
+          "label": "Strep pneumo",
+          "bucket": 0
+        },
+        {
+          "label": "Pseudomonas",
+          "bucket": 1
+        },
+        {
+          "label": "Listeria",
+          "bucket": 0
+        },
+        {
+          "label": "Neisseria",
+          "bucket": 1
+        },
+        {
+          "label": "Enterococcus",
+          "bucket": 0
+        },
+        {
+          "label": "Klebsiella",
+          "bucket": 1
+        }
       ],
       "itemMs": 6000
     },
     {
       "type": "sort",
       "text": "Eponyms: named for a DOCTOR or for a PATIENT?",
-      "buckets": ["Named for a doctor", "Named for a patient"],
+      "buckets": [
+        "Named for a doctor",
+        "Named for a patient"
+      ],
       "items": [
-        { "label": "Alzheimer's", "bucket": 0 },
-        { "label": "Lou Gehrig's", "bucket": 1 },
-        { "label": "Parkinson's", "bucket": 0 },
-        { "label": "Christmas disease", "bucket": 1 },
-        { "label": "Crohn's", "bucket": 0 },
-        { "label": "Hashimoto's", "bucket": 0 }
+        {
+          "label": "Alzheimer's",
+          "bucket": 0
+        },
+        {
+          "label": "Lou Gehrig's",
+          "bucket": 1
+        },
+        {
+          "label": "Parkinson's",
+          "bucket": 0
+        },
+        {
+          "label": "Christmas disease",
+          "bucket": 1
+        },
+        {
+          "label": "Crohn's",
+          "bucket": 0
+        },
+        {
+          "label": "Hashimoto's",
+          "bucket": 0
+        }
       ],
       "itemMs": 7000
     }

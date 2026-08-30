@@ -389,10 +389,16 @@ test('mode: rides the front matter and reaches the validated pack', () => {
   assert.equal(parseDoc('mode: teams\n\n# Q?\n✓ a\nb').raw.mode, 'teams');
   assert.equal(validatePack({ mode: 'teams', questions: [] }).pack.mode, 'teams');
   assert.equal(validatePack({ mode: 'solo', questions: [] }).pack.mode, 'solo');
-  assert.equal(validatePack({ questions: [] }).pack.mode, undefined);
+
+  // Every deck has a mode, including one written before decks declared it:
+  // select-all is teams-only, so a pack using one was written for teams.
+  assert.equal(validatePack({ questions: [] }).pack.mode, 'solo');
+  assert.equal(validatePack({ questions: [
+    { text: 'Q?', answers: ['a', 'b', 'c'], correct: [0, 1] },
+  ] }).pack.mode, 'teams');
 
   const bad = validatePack({ mode: 'cohort', questions: [] });
-  assert.equal(bad.pack.mode, undefined);
+  assert.equal(bad.pack.mode, 'solo'); // falls back rather than playing nothing
   assert.ok(bad.problems.some((m) => /use solo or teams/.test(m)));
 });
 

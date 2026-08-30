@@ -12,7 +12,7 @@
  */
 
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { validatePack } from '../shared/pack-validate.js';
+import { packMode, validatePack } from '../shared/pack-validate.js';
 // Re-exported so existing callers (and tests) keep one import site.
 export { suggestOrder } from '../shared/pack-validate.js';
 import { gzipSync } from 'node:zlib';
@@ -399,11 +399,12 @@ export function listPacks(root) {
         file,
         name: typeof j.pack === 'string' ? j.pack : file.replace(/\.json$/, ''),
         questions: Array.isArray(j.questions) ? j.questions.length : 0,
+        mode: packMode(j),
         showdown: !!j.showdown?.statements?.length,
         controlRoom: Array.isArray(j.controlRoom?.questions) ? j.controlRoom.questions.length : 0,
       };
     } catch {
-      return { file, name: `${file} (broken)`, questions: 0, showdown: false, controlRoom: 0 };
+      return { file, name: `${file} (broken)`, questions: 0, mode: 'solo', showdown: false, controlRoom: 0 };
     }
   });
 }
@@ -419,7 +420,14 @@ export function listPacks(root) {
  * @param {string} [packFile] basename within questions/; callers validate
  */
 export function loadQuestions(root, packFile = 'default.json') {
-  const file = path.join(root, 'questions', path.basename(packFile));
+  let name = path.basename(packFile);
+  // The library has no privileged filename: if the requested pack is gone,
+  // boot on the first one there is rather than refusing to start.
+  if (!existsSync(path.join(root, 'questions', name))) {
+    const first = listPacks(root)[0];
+    if (first) name = first.file;
+  }
+  const file = path.join(root, 'questions', name);
   const raw = JSON.parse(readFileSync(file, 'utf8'));
   const { pack, problems } = validatePack(raw);
 
@@ -432,7 +440,7 @@ export function loadQuestions(root, packFile = 'default.json') {
   }
 
   if (problems.length) {
-    console.log(`\n  \x1b[33m!\x1b[0m  questions/${path.basename(packFile)}:`);
+    console.log(`\n  \x1b[33m!\x1b[0m  questions/${name}:`);
     for (const m of problems) console.log(`       ${m}`);
     console.log('');
   }

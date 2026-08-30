@@ -62,12 +62,28 @@ export function suggestOrder(questions) {
 }
 
 /**
+ * How a deck is played, for any pack — including the ones written before
+ * decks declared it. A pack that never said is read from its questions:
+ * select-all only works in teams (covering every correct platform is a
+ * team act), so a deck that uses one was written for teams.
+ *
+ * Shared by the validator and the pack list so the lobby groups decks the
+ * same way the loader plays them.
+ * @param {any} raw @returns {'solo'|'teams'}
+ */
+export function packMode(raw) {
+  if (raw?.mode === 'teams' || raw?.mode === 'solo') return raw.mode;
+  const qs = Array.isArray(raw?.questions) ? raw.questions : [];
+  return qs.some((/** @type {any} */ q) => Array.isArray(q?.correct)) ? 'teams' : 'solo';
+}
+
+/**
  * Validate one raw pack object into the playable shape.
  *
  * @param {any} raw the parsed pack JSON
  * @returns {{ pack: {
  *   pack: string, answerMs: number, theme: string, questions: any[],
- *   mode?: 'solo'|'teams',
+ *   mode: 'solo'|'teams',
  *   showdown: {statements:any[], answerMs?:number} | null,
  *   controlRoom: {questions:any[], perTeam:number, answerMs:number} | null,
  * }, problems: string[] }}
@@ -94,15 +110,13 @@ export function validatePack(raw) {
     }
   };
 
-  // How the deck is meant to be played. The host can still switch modes on
-  // the display; this is the pack's own answer, so a teams deck arrives set
-  // up for teams instead of relying on someone remembering. Decided up here
-  // because select-all is a teams-only question type.
-  /** @type {'solo'|'teams'|undefined} */
-  let mode;
-  if (raw.mode !== undefined) {
-    if (raw.mode === 'solo' || raw.mode === 'teams') mode = raw.mode;
-    else problems.push(`mode "${raw.mode}" is unknown — use solo or teams`);
+  // How the deck is played. This is a property OF THE DECK, not a setting
+  // the host flips at game time: the lobby lists free-for-all decks and
+  // teams decks separately, so a deck is only ever played the way it was
+  // written. Decided up here because select-all is a teams-only type.
+  const mode = packMode(raw);
+  if (raw.mode !== undefined && raw.mode !== 'solo' && raw.mode !== 'teams') {
+    problems.push(`mode "${raw.mode}" is unknown — use solo or teams`);
   }
 
   const questions = (raw.questions ?? []).filter((/** @type {any} */ q, /** @type {number} */ i) => {

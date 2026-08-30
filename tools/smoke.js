@@ -403,6 +403,12 @@ await display.bringToFront();
 const deckSize = await display.evaluate(() => /** @type {any} */ (globalThis).__platforms.game.questions.length);
 assert(deckSize > 0, `question deck loaded (${deckSize} questions)`);
 
+// The lobby asks two questions: how it is played, then which deck. Enter
+// takes the first answer (free-for-all); from the top of the deck list,
+// two ArrowUps wrap round to Start whatever the library holds.
+await display.keyboard.press('Enter');
+await display.keyboard.press('ArrowUp');
+await display.keyboard.press('ArrowUp');
 await display.keyboard.press('Enter');
 await display.waitForFunction(
   () => /** @type {any} */ (globalThis).__platforms.game.phase === 'ANSWER',
