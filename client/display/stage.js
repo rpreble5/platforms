@@ -386,9 +386,9 @@ const RAIL_Y = FLOOR_Y - 210;
 
 /**
  * The number line for a range round, drawn as SIGNPOSTS rather than an
- * axis: each labelled value is a big number over a white post dropping
- * toward (but never touching) the floor, so lining your feet up with a
- * value means standing under its post. No horizontal rail — the posts ARE
+ * axis: each labelled value is a big number over a post planted on the
+ * floor — dark on the light skies, white on the dark ones — so lining
+ * your feet up with a value means standing at its post. No horizontal rail — the posts ARE
  * the line. The unit gets its own pill, centred mid-screen ("in bpm"),
  * instead of riding the last number.
  * @param {CanvasRenderingContext2D} cx
@@ -419,16 +419,18 @@ export function drawNumberLine(cx, q) {
   cx.textBaseline = 'alphabetic';
 
   const postTop = RAIL_Y - 2;
-  const postLen = 140; // ends ~70px above the floor: a post, not a fence
+  const postLen = FLOOR_Y - postTop; // planted: the post meets the floor
+  // Post polarity follows the sky, same as the numbers: dark posts on the
+  // light fields, white posts (with a dark edge) on the dark ones.
+  const postEdge = inky ? 'rgba(255,255,255,0.35)' : 'rgba(10,10,24,0.30)';
+  const postBody = inky ? 'rgba(23,20,42,0.82)' : 'rgba(255,255,255,0.95)';
   for (const v of ticks) {
     const x = rangeX(q, v);
-    // The post: white with a soft dark edge, so it stays a white post on a
-    // near-white sky instead of dissolving into it.
-    cx.fillStyle = 'rgba(10,10,24,0.30)';
+    cx.fillStyle = postEdge;
     cx.beginPath();
     cx.roundRect(x - 4, postTop - 1.5, 8, postLen + 3, 4);
     cx.fill();
-    cx.fillStyle = 'rgba(255,255,255,0.95)';
+    cx.fillStyle = postBody;
     cx.beginPath();
     cx.roundRect(x - 2.5, postTop, 5, postLen, 2.5);
     cx.fill();
