@@ -205,13 +205,16 @@ export function render(cx, world, roster, game, opts) {
     }
     cx.restore();
 
-    // Labels auto-hide once the room is crowded — 30 overlapping names is worse
-    // than none. Find-me always keeps its own label.
+    // Name labels are lobby furniture: that's where "find yourself on screen"
+    // happens. During a round they're clutter over the boards, and each phone
+    // now wears its own bean on the JUMP button as the in-game reference —
+    // so they draw in LOBBY only. Find-me keeps its label in any phase; the
+    // whole point of the gesture is putting a name over a body.
     //
-    // Keyed on the player count, not on `scale`, so the two can be tuned
-    // separately: raising the scale floor below should not silently switch
-    // thirty names back on. Raise this number if the room reads fine with them.
-    if (count <= 24 || findMe) {
+    // The crowd cap stays keyed on the player count, not on `scale`, so the
+    // two can be tuned separately: raising the scale floor below should not
+    // silently switch thirty names back on.
+    if ((game.phase === PHASE.LOBBY && count <= 24) || findMe) {
       const label = getLabel(look.name, findMe ? '#ffffff' : shade(look.color, 0.55));
       const lx = Math.round(it.x + w / 2 - label.width / 2);
       const ly = Math.round(top - 40);

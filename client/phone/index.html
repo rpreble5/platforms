@@ -66,7 +66,12 @@
     will-change:transform;
   }
   .zone:first-child { border-left:0; }
-  #jump { flex:2; background:rgba(26,32,48,.86); color:#4c5878; }
+  #jump { flex:2; background:rgba(26,32,48,.86); color:#4c5878; align-content:center; gap:8px; }
+  /* Your own bean, on the button you look at most. Names hide on the display
+     during rounds, so this is the in-game "which one am I" reference — same
+     renderer, same look, always in your pocket. Inert to input: the zones are
+     hit-tested by coordinates, but no sense leaving a target in the way. */
+  #jumpBean { width:80px; height:112px; pointer-events:none; }
   .zone.down { transform:scale(.96); background:rgba(47,58,82,.92); }
   #jump.down { background:rgba(61,74,107,.92); }
 
@@ -220,7 +225,7 @@
 <div id="surface">
   <div class="zone" id="left" data-btn="left">◀</div>
   <div class="zone" id="right" data-btn="right">▶</div>
-  <div class="zone" id="jump" data-btn="jump">JUMP</div>
+  <div class="zone" id="jump" data-btn="jump"><canvas id="jumpBean" width="160" height="224"></canvas><span>JUMP</span></div>
 </div>
 
 <div id="tint"></div>
@@ -479,7 +484,29 @@
       if (typeof msg.accessoryIndex === 'number') pickedAcc = msg.accessoryIndex;
     }
     if (msg.free) freeByColor = msg.free;
+    paintJumpBean(msg);
     paintSwatches();
+  }
+
+  /**
+   * The player's own bean, drawn on the JUMP button by the same shared
+   * renderer as the display. Names stay hidden on the projector during
+   * rounds, so this — plus the coloured bar — is how you know which body
+   * is yours. Painted from the identity frame, i.e. what the SERVER settled
+   * on, not what the picker is currently flirting with.
+   */
+  function paintJumpBean(msg) {
+    var c = $('jumpBean');
+    var g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
+    var cohort = COHORTS[msg.cohortSet ? msg.cohortIndex : DEFAULT_COHORT] || COHORTS[DEFAULT_COHORT];
+    var h = 56 * cohort.height;
+    var Z = 2.7; // tallest body (78.4 units) still clears the 224px canvas
+    g.save();
+    g.translate(c.width / 2 - (40 * Z) / 2, c.height - 4 - h * Z);
+    g.scale(Z, Z);
+    drawBean(g, msg.color, msg.finish || 'flat', 40, h, cohort.shape, true, msg.accessory || 'none');
+    g.restore();
   }
 
   function sendJson(obj) {
