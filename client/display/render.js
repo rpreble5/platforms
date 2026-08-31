@@ -416,13 +416,14 @@ function drawContactShadows(cx, items, roster, world, scale, anyFindMe) {
     const findMe = p.findMeUntil > world.t;
     const dim = !look.connected ? 0.35 : anyFindMe && !findMe ? 0.55 : 1;
 
-    // Wider than the bean on purpose: the body draws over the shadow, so
-    // only the flare past the feet is ever visible — same-width was invisible.
-    const sw = w * 1.4 * (0.55 + 0.45 * k);
+    // Clipped to BELOW the surface line: a contact shadow is occlusion under
+    // the feet, and the half-above version smudged over platform edges. The
+    // body never covers this half, so it needs no oversize flare either.
+    const sw = w * 1.08 * (0.6 + 0.4 * k);
     const sh = sw * 0.24;
     cx.save();
     cx.beginPath();
-    cx.rect(surf.x, surf.y - sh, surf.w, sh * 2);
+    cx.rect(surf.x, surf.y, surf.w, sh);
     cx.clip();
     cx.globalAlpha = SHADOW_ALPHA * k * k * dim;
     cx.drawImage(SHADOW_SPRITE, midX - sw / 2, surf.y - sh / 2, sw, sh);
