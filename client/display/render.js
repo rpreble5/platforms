@@ -381,14 +381,18 @@ const SHADOW_ALPHA = 0.5;
  * @param {boolean} anyFindMe
  */
 function drawContactShadows(cx, items, roster, world, scale, anyFindMe) {
-  /** @type {Array<{x:number, y:number, w:number}>} */
+  // `r` is the surface's top-corner rounding, so the clip below can follow
+  // the drawn silhouette: floor runs are square, everything else (boards,
+  // perches, furniture, podium steps) rounds its shoulders at ~18-20px. One
+  // constant tracks them all closely enough that no shadow lands on sky.
+  /** @type {Array<{x:number, y:number, w:number, r:number}>} */
   const surfaces = [];
-  for (const run of floorRuns(world.platforms)) surfaces.push(run);
+  for (const run of floorRuns(world.platforms)) surfaces.push({ x: run.x, y: run.y, w: run.w, r: 0 });
   for (const p of world.platforms) {
     if (!p.id) continue;
     if (p.id === 'floor' || p.id === 'floorL' || p.id === 'floorR' || p.id === RANGE_ID) continue;
     if (p.id === 'pit' || p.y >= WORLD_H) continue;
-    surfaces.push(p);
+    surfaces.push({ x: p.x, y: p.y, w: p.w, r: 18 });
   }
 
   for (const it of items) {
@@ -399,7 +403,7 @@ function drawContactShadows(cx, items, roster, world, scale, anyFindMe) {
     const midX = it.x + w / 2;
 
     // The highest surface at or below the feet, under the bean's midpoint.
-    /** @type {{x:number, y:number, w:number} | null} */
+    /** @type {{x:number, y:number, w:number, r:number} | null} */
     let surf = null;
     for (const s of surfaces) {
       if (midX < s.x - 2 || midX > s.x + s.w + 2) continue;
@@ -416,14 +420,16 @@ function drawContactShadows(cx, items, roster, world, scale, anyFindMe) {
     const findMe = p.findMeUntil > world.t;
     const dim = !look.connected ? 0.35 : anyFindMe && !findMe ? 0.55 : 1;
 
-    // Clipped to BELOW the surface line: a contact shadow is occlusion under
-    // the feet, and the half-above version smudged over platform edges. The
-    // body never covers this half, so it needs no oversize flare either.
+    // Clipped to the platform's own rounded silhouette, starting AT the
+    // surface line: only the below-line half shows (a contact shadow is
+    // occlusion under the feet) and near a corner the shadow ends where the
+    // shoulder curves away — it bends with the shape because the clip IS
+    // the shape, no geometry of its own.
     const sw = w * 1.08 * (0.6 + 0.4 * k);
     const sh = sw * 0.24;
     cx.save();
     cx.beginPath();
-    cx.rect(surf.x, surf.y, surf.w, sh);
+    cx.roundRect(surf.x, surf.y, surf.w, 64, [surf.r, surf.r, 0, 0]);
     cx.clip();
     cx.globalAlpha = SHADOW_ALPHA * k * k * dim;
     cx.drawImage(SHADOW_SPRITE, midX - sw / 2, surf.y - sh / 2, sw, sh);
