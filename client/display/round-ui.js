@@ -16,6 +16,7 @@ import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, isSor
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { drawFrostBlobs, glassFam, glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
+import { AVATAR_PAD, getAvatar } from './sprites.js';
 
 /**
  * The answer furniture for the current round: signboards for multiple choice,
@@ -974,50 +975,125 @@ function drawControlScoreboard(cx, g) {
   cx.textAlign = 'left';
 }
 
+/** Medal ink for the podium steps: gold, silver, bronze. */
+const MEDALS = ['#ffd86b', '#cfd6e4', '#d9a06b'];
+
 /**
+ * The finale is a podium, not a ranking: top three and nobody else. In
+ * free-for-all the steps hold the top three players; in teams mode they
+ * hold the years (by average, same maths as the rivalry strip). Everyone
+ * outside the medals simply isn't ranked in public — being 23rd of 28 is
+ * nobody's business but their own.
  * @param {CanvasRenderingContext2D} cx
  * @param {import('../../sim/round.js').Game} g
- * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
+ * @param {Map<number, {name:string, color:string, finish?:string, accessory?:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  */
 function drawFinal(cx, g, roster) {
-  const top = standings(g).slice(0, 10);
-  const teams = teamsFor(g, roster);
-  const w = 800;
-  const rowH = 50;
-  const teamH = teams ? 96 : 0;
-  const h = 150 + Math.max(1, top.length) * rowH + teamH;
+  /** @type {Array<{label:string, sub:string, color:string, sprite:HTMLCanvasElement, spriteW:number, spriteH:number}>} */
+  const steps = [];
+  const S = 52; // bean width on the podium
+
+  if (g.mode === 'teams') {
+    const teams = teamsFor(g, roster) ?? [];
+    const ranked = teams
+      .map((t, i) => ({ ...t, cohort: i }))
+      .filter((t) => t.count > 0)
+      .sort((a, b) => b.avg - a.avg || a.cohort - b.cohort)
+      .slice(0, 3);
+    for (const t of ranked) {
+      const cohort = COHORTS[t.cohort];
+      const bh = S * cohort.height;
+      steps.push({
+        label: cohort.label,
+        sub: `${t.avg} avg`,
+        color: TEAM_COLORS[t.cohort],
+        sprite: getAvatar(TEAM_COLORS[t.cohort], 'flat', S, Math.round(bh), cohort.shape, true, 'none'),
+        spriteW: S,
+        spriteH: bh,
+      });
+    }
+  } else {
+    for (const s of standings(g).slice(0, 3)) {
+      const look = roster.get(s.id) ?? { name: `#${s.id}`, color: UI.dim };
+      const cohort = COHORTS[clampCohort(look.cohortIndex ?? -1)];
+      const bh = S * cohort.height;
+      steps.push({
+        label: look.name.slice(0, 12),
+        sub: String(s.score),
+        color: look.color,
+        sprite: getAvatar(look.color, look.finish ?? 'flat', S, Math.round(bh), cohort.shape, true, look.accessory ?? 'none'),
+        spriteW: S,
+        spriteH: bh,
+      });
+    }
+  }
+
+  const w = 880;
+  const h = 500;
   const x = (WORLD_W - w) / 2;
   const y = (WORLD_H - h) / 2;
-
   panel(cx, x, y, w, h, UI.gold);
 
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
   cx.font = `800 54px ${FONT.display}`;
   cx.fillStyle = UI.gold;
-  cx.fillText('Final scores', WORLD_W / 2, y + 78);
-  cx.font = `600 24px ${FONT.ui}`;
+  cx.fillText(g.mode === 'teams' ? 'Winning year' : 'Champions', WORLD_W / 2, y + 76);
+  cx.font = `600 22px ${FONT.ui}`;
   cx.fillStyle = UI.faint;
-  cx.fillText('R  play again        Q  main menu', WORLD_W / 2, y + 114);
+  cx.fillText('R  play again        Q  main menu', WORLD_W / 2, y + 110);
 
-  // The year rivalry gets the top slot on the final board — it's the thing
-  // the whole room shares, where individual rank belongs to one person.
-  if (teams) drawTeamStrip(cx, teams, x, y + 156, w);
-
-  let ry = y + 178 + teamH;
-  top.forEach((s, i) => {
-    const look = roster.get(s.id) ?? { name: `#${s.id}`, color: UI.dim };
+  if (!steps.length) {
+    cx.font = `700 30px ${FONT.display}`;
+    cx.fillStyle = UI.dim;
+    cx.fillText('nobody scored', WORLD_W / 2, y + h / 2 + 40);
     cx.textAlign = 'left';
-    cx.font = `800 32px ${FONT.display}`;
-    cx.fillStyle = i < 3 ? UI.gold : UI.faint;
-    cx.fillText(ordinal(i + 1), x + 36, ry);
-    cx.fillStyle = look.color;
-    cx.fillText(look.name.slice(0, 14), x + 128, ry);
-    cx.textAlign = 'right';
-    cx.fillStyle = UI.paper;
-    cx.fillText(String(s.score), x + w - 36, ry);
-    ry += rowH;
-  });
+    return;
+  }
+
+  // Steps in show order: silver left, gold centre, bronze right. Heights
+  // stagger so the winner physically stands above the field.
+  const stepH = [176, 142, 118];
+  const order = steps.length === 1 ? [0] : steps.length === 2 ? [1, 0] : [1, 0, 2];
+  const bw = 236;
+  const gapX = 26;
+  const rowW = order.length * bw + (order.length - 1) * gapX;
+  const baseY = y + h - 44;
+  let bx = WORLD_W / 2 - rowW / 2;
+
+  for (const rank of order) {
+    const st = steps[rank];
+    const bh = stepH[rank];
+    const top = baseY - bh;
+    const medal = MEDALS[rank];
+
+    // The block: quiet body, solid medal cap for the bean to stand on.
+    cx.fillStyle = 'rgba(255,255,255,0.07)';
+    cx.beginPath();
+    cx.roundRect(bx, top, bw, bh, [10, 10, 0, 0]);
+    cx.fill();
+    cx.fillStyle = medal;
+    cx.beginPath();
+    cx.roundRect(bx, top, bw, 8, [10, 10, 0, 0]);
+    cx.fill();
+
+    // The bean, standing on its step.
+    cx.drawImage(st.sprite, bx + bw / 2 - st.spriteW / 2 - AVATAR_PAD, top - st.spriteH - AVATAR_PAD);
+
+    const tall = bh >= 140;
+    cx.font = `800 30px ${FONT.display}`;
+    cx.fillStyle = medal;
+    cx.fillText(ordinal(rank + 1), bx + bw / 2, top + (tall ? 44 : 40));
+    cx.font = `700 27px ${FONT.display}`;
+    cx.fillStyle = st.color;
+    cx.fillText(st.label, bx + bw / 2, top + (tall ? 80 : 74));
+    // Scores in dim-but-readable ink — UI.faint is for hints, and vanished
+    // against the podium body at TV distance.
+    cx.fillStyle = UI.dim;
+    cx.font = `600 ${tall ? 22 : 20}px ${FONT.mono}`;
+    cx.fillText(st.sub, bx + bw / 2, top + (tall ? 114 : 105));
+    bx += bw + gapX;
+  }
   cx.textAlign = 'left';
 }
 
