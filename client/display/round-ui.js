@@ -11,12 +11,11 @@
 
 import { WORLD_H, WORLD_W } from '../../shared/tuning.js';
 import { COHORTS, TEAM_COLORS, clampCohort } from '../../shared/palette.js';
-import { RANGE_ID } from '../../sim/levels.js';
+import { FLOOR_Y, RANGE_ID } from '../../sim/levels.js';
 import { PHASE, answerWindow, currentQuestion, isControlQuestion, isMulti, isSortQuestion, sortItemMs, standings, targetIds, teamStandings } from '../../sim/round.js';
 import { drawFloor, drawNumberLine, drawRangeReveal, drawSign, drawSignText, fitFont } from './stage.js';
 import { drawFrostBlobs, glassFam, glassFrost, themeName } from './themes.js';
 import { FONT, UI } from './theme.js';
-import { AVATAR_PAD, getAvatar } from './sprites.js';
 
 /**
  * The answer furniture for the current round: signboards for multiple choice,
@@ -128,8 +127,10 @@ function fallOffset(t) {
  * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
  * @param {number} playerCount
  * @param {MenuView | null} [menu]
+ * @param {import('../../sim/world.js').World | null} [world] needed at
+ *   GAME_OVER, where the finale draws onto the live podium platforms
  */
-export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
+export function drawRoundOverlay(cx, g, roster, playerCount, menu = null, world = null) {
   switch (g.phase) {
     case PHASE.LOBBY:
       if (menu) drawMenu(cx, menu, playerCount);
@@ -157,7 +158,7 @@ export function drawRoundOverlay(cx, g, roster, playerCount, menu = null) {
       }
       break;
     case PHASE.GAME_OVER:
-      drawFinal(cx, g, roster);
+      if (world) drawFinale(cx, g, roster, world);
       break;
     default:
       break;
@@ -976,124 +977,154 @@ function drawControlScoreboard(cx, g) {
 }
 
 /** Medal ink for the podium steps: gold, silver, bronze. */
-const MEDALS = ['#ffd86b', '#cfd6e4', '#d9a06b'];
+export const MEDALS = ['#ffd86b', '#cfd6e4', '#d9a06b'];
 
 /**
- * The finale is a podium, not a ranking: top three and nobody else. In
- * free-for-all the steps hold the top three players; in teams mode they
- * hold the years (by average, same maths as the rivalry strip). Everyone
- * outside the medals simply isn't ranked in public — being 23rd of 28 is
- * nobody's business but their own.
- * @param {CanvasRenderingContext2D} cx
+ * The finale stage as pure data: which podium steps exist, where they
+ * stand, and who belongs on them. main.js builds real platforms from it
+ * (the steps are furniture, exactly like the lobby menu) and the finale
+ * overlay draws the faces from the same source, so geometry can't drift.
+ *
+ * Top three and nobody else: free-for-all podiums the top three players,
+ * teams mode podiums the years (by average — the rivalry strip's maths).
+ * Everyone outside the medals simply isn't ranked in public; nothing is
+ * ever sent to phones either.
  * @param {import('../../sim/round.js').Game} g
- * @param {Map<number, {name:string, color:string, finish?:string, accessory?:string, cohortIndex?: number, cohortSet?: boolean}>} roster
+ * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
+ * @returns {{title: string, steps: Array<{rank: number, id: string, x: number, w: number, top: number, label: string, color: string, sub: string, riders: number[]}>}}
  */
-function drawFinal(cx, g, roster) {
-  /** @type {Array<{label:string, sub:string, color:string, sprite:HTMLCanvasElement, spriteW:number, spriteH:number}>} */
-  const steps = [];
-  const S = 52; // bean width on the podium
+export function finaleLayout(g, roster) {
+  const STEP_TOP = [FLOOR_Y - 190, FLOOR_Y - 140, FLOOR_Y - 100];
+
+  /** @param {Array<{rank:number, x:number, w:number}>} steps @param {number} gap */
+  const placeX = (steps, gap) => {
+    for (const st of steps) {
+      st.x =
+        st.rank === 0 ? 960 - st.w / 2
+        : st.rank === 1 ? 960 - st.w / 2 - gap - st.w
+        : 960 + st.w / 2 + gap;
+    }
+  };
 
   if (g.mode === 'teams') {
-    const teams = teamsFor(g, roster) ?? [];
-    const ranked = teams
+    const ranked = (teamsFor(g, roster) ?? [])
       .map((t, i) => ({ ...t, cohort: i }))
       .filter((t) => t.count > 0)
       .sort((a, b) => b.avg - a.avg || a.cohort - b.cohort)
       .slice(0, 3);
-    for (const t of ranked) {
-      const cohort = COHORTS[t.cohort];
-      const bh = S * cohort.height;
-      steps.push({
-        label: cohort.label,
-        sub: `${t.avg} avg`,
-        color: TEAM_COLORS[t.cohort],
-        sprite: getAvatar(TEAM_COLORS[t.cohort], 'flat', S, Math.round(bh), cohort.shape, true, 'none'),
-        spriteW: S,
-        spriteH: bh,
-      });
-    }
-  } else {
-    for (const s of standings(g).slice(0, 3)) {
-      const look = roster.get(s.id) ?? { name: `#${s.id}`, color: UI.dim };
-      const cohort = COHORTS[clampCohort(look.cohortIndex ?? -1)];
-      const bh = S * cohort.height;
-      steps.push({
-        label: look.name.slice(0, 12),
-        sub: String(s.score),
-        color: look.color,
-        sprite: getAvatar(look.color, look.finish ?? 'flat', S, Math.round(bh), cohort.shape, true, look.accessory ?? 'none'),
-        spriteW: S,
-        spriteH: bh,
-      });
-    }
+    // Wide steps: a whole year stands on each one.
+    const steps = ranked.map((t, rank) => ({
+      rank,
+      id: `podium:${rank}`,
+      x: 0,
+      w: 400,
+      top: STEP_TOP[rank],
+      label: COHORTS[t.cohort].label,
+      color: TEAM_COLORS[t.cohort],
+      sub: `${t.avg} avg`,
+      riders: [...roster.entries()]
+        .filter(([, l]) => l.cohortSet && clampCohort(l.cohortIndex ?? -1) === t.cohort)
+        .map(([id]) => id),
+    }));
+    placeX(steps, 44);
+    return {
+      title: ranked.length ? `${COHORTS[ranked[0].cohort].label} WINS` : 'THAT’S A WRAP',
+      steps,
+    };
   }
 
-  const w = 880;
-  const h = 500;
-  const x = (WORLD_W - w) / 2;
-  const y = (WORLD_H - h) / 2;
-  panel(cx, x, y, w, h, UI.gold);
+  const steps = standings(g)
+    .slice(0, 3)
+    .map((s, rank) => {
+      const look = roster.get(s.id);
+      return {
+        rank,
+        id: `podium:${rank}`,
+        x: 0,
+        w: 280,
+        top: STEP_TOP[rank],
+        label: '',
+        color: look?.color ?? UI.dim,
+        sub: String(s.score),
+        riders: [s.id],
+      };
+    });
+  placeX(steps, 44);
+  return { title: steps.length ? 'CHAMPIONS' : 'THAT’S A WRAP', steps };
+}
+
+/**
+ * One podium step's body, drawn in the world pass so beans stand IN FRONT
+ * of it and on top of it — the same ink furniture as the lobby cards, with
+ * a solid medal cap for a landing surface. The face text is drawn by the
+ * finale overlay, which owns the words.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {import('../../sim/collide.js').Platform} p
+ */
+export function drawPodiumBlock(cx, p) {
+  const rank = Number(p.id?.split(':')[1] ?? 0);
+  inkPanel(cx, p.x, p.y, p.w, FLOOR_Y - p.y + 12, INK.panel);
+  cx.fillStyle = MEDALS[rank] ?? MEDALS[2];
+  cx.beginPath();
+  cx.roundRect(p.x, p.y, p.w, 10, [12, 12, 0, 0]);
+  cx.fill();
+}
+
+/**
+ * The finale overlay: a huge outlined title in the open sky (where the
+ * question banner taught the room to look), ordinals and scores on the
+ * live podium faces — live, so the words ride the steps as they rise out
+ * of the floor — and the keyboard hints down in the floor band. The
+ * celebration itself is the WORLD: real champions' beans on real
+ * platforms, confetti from fx, shadows and reflections for free.
+ * @param {CanvasRenderingContext2D} cx
+ * @param {import('../../sim/round.js').Game} g
+ * @param {Map<number, {name:string, color:string, cohortIndex?: number, cohortSet?: boolean}>} roster
+ * @param {import('../../sim/world.js').World} world
+ */
+function drawFinale(cx, g, roster, world) {
+  const layout = finaleLayout(g, roster);
 
   cx.textAlign = 'center';
   cx.textBaseline = 'alphabetic';
-  cx.font = `800 54px ${FONT.display}`;
+  cx.font = `900 112px ${FONT.display}`;
+  cx.lineJoin = 'round';
+  cx.lineWidth = 14;
+  cx.strokeStyle = 'rgba(26,22,44,0.88)';
+  cx.strokeText(layout.title, 960, 196);
   cx.fillStyle = UI.gold;
-  cx.fillText(g.mode === 'teams' ? 'Winning year' : 'Champions', WORLD_W / 2, y + 76);
-  cx.font = `600 22px ${FONT.ui}`;
-  cx.fillStyle = UI.faint;
-  cx.fillText('R  play again        Q  main menu', WORLD_W / 2, y + 110);
+  cx.fillText(layout.title, 960, 196);
 
-  if (!steps.length) {
-    cx.font = `700 30px ${FONT.display}`;
-    cx.fillStyle = UI.dim;
-    cx.fillText('nobody scored', WORLD_W / 2, y + h / 2 + 40);
-    cx.textAlign = 'left';
-    return;
+  for (const p of world.platforms) {
+    if (!p.id?.startsWith('podium:')) continue;
+    const st = layout.steps[Number(p.id.split(':')[1])];
+    if (!st) continue;
+    const cxp = p.x + p.w / 2;
+    const face = FLOOR_Y - p.y;
+    cx.font = `800 42px ${FONT.display}`;
+    cx.fillStyle = MEDALS[st.rank];
+    cx.fillText(ordinal(st.rank + 1), cxp, p.y + 54);
+    if (g.mode === 'teams') {
+      if (face >= 88) {
+        cx.font = `800 34px ${FONT.display}`;
+        cx.fillStyle = st.color;
+        cx.fillText(st.label, cxp, p.y + 98);
+      }
+      if (face >= 132) {
+        cx.font = `700 24px ${FONT.display}`;
+        cx.fillStyle = 'rgba(244,241,232,0.7)';
+        cx.fillText(st.sub, cxp, p.y + 132);
+      }
+    } else if (face >= 92) {
+      cx.font = `700 28px ${FONT.display}`;
+      cx.fillStyle = 'rgba(244,241,232,0.78)';
+      cx.fillText(st.sub, cxp, p.y + 98);
+    }
   }
 
-  // Steps in show order: silver left, gold centre, bronze right. Heights
-  // stagger so the winner physically stands above the field.
-  const stepH = [176, 142, 118];
-  const order = steps.length === 1 ? [0] : steps.length === 2 ? [1, 0] : [1, 0, 2];
-  const bw = 236;
-  const gapX = 26;
-  const rowW = order.length * bw + (order.length - 1) * gapX;
-  const baseY = y + h - 44;
-  let bx = WORLD_W / 2 - rowW / 2;
-
-  for (const rank of order) {
-    const st = steps[rank];
-    const bh = stepH[rank];
-    const top = baseY - bh;
-    const medal = MEDALS[rank];
-
-    // The block: quiet body, solid medal cap for the bean to stand on.
-    cx.fillStyle = 'rgba(255,255,255,0.07)';
-    cx.beginPath();
-    cx.roundRect(bx, top, bw, bh, [10, 10, 0, 0]);
-    cx.fill();
-    cx.fillStyle = medal;
-    cx.beginPath();
-    cx.roundRect(bx, top, bw, 8, [10, 10, 0, 0]);
-    cx.fill();
-
-    // The bean, standing on its step.
-    cx.drawImage(st.sprite, bx + bw / 2 - st.spriteW / 2 - AVATAR_PAD, top - st.spriteH - AVATAR_PAD);
-
-    const tall = bh >= 140;
-    cx.font = `800 30px ${FONT.display}`;
-    cx.fillStyle = medal;
-    cx.fillText(ordinal(rank + 1), bx + bw / 2, top + (tall ? 44 : 40));
-    cx.font = `700 27px ${FONT.display}`;
-    cx.fillStyle = st.color;
-    cx.fillText(st.label, bx + bw / 2, top + (tall ? 80 : 74));
-    // Scores in dim-but-readable ink — UI.faint is for hints, and vanished
-    // against the podium body at TV distance.
-    cx.fillStyle = UI.dim;
-    cx.font = `600 ${tall ? 22 : 20}px ${FONT.mono}`;
-    cx.fillText(st.sub, bx + bw / 2, top + (tall ? 114 : 105));
-    bx += bw + gapX;
-  }
+  cx.font = `700 22px ${FONT.ui}`;
+  cx.fillStyle = 'rgba(244,241,232,0.55)';
+  cx.fillText('R  play again      Q  main menu', 960, 1046);
   cx.textAlign = 'left';
 }
 

@@ -9,13 +9,13 @@ import { FX, RENDER_PUSH_APART, WORLD_H, WORLD_W, avatarScale } from '../../shar
 import { COHORTS, clampCohort } from '../../shared/palette.js';
 import { accessoryHidesEyes } from '../../shared/avatar.js';
 import { ANSWER_H, FLAG_H, FLAG_POLE, RANGE_ID, signBelowExtent } from '../../sim/levels.js';
-import { PHASE, activeControlTeam, currentQuestion, isControlQuestion } from '../../sim/round.js';
+import { PHASE, activeControlTeam, currentQuestion, isControlQuestion, standings } from '../../sim/round.js';
 import { has } from './art.js';
 import { animFor, pruneAnim } from './anim.js';
 import { drawControlStage } from './control-stage.js';
 import { themeName } from './themes.js';
 import { AVATAR_PAD, EYES, eyeColorFor, getAvatar, getLabel, shade } from './sprites.js';
-import { drawDebris, drawSigns, inkPanel, lobbyVeil, panel } from './round-ui.js';
+import { drawDebris, drawPodiumBlock, drawSigns, inkPanel, lobbyVeil, panel } from './round-ui.js';
 import { GLASS_CHUNK_H, drawFloor, drawPerch, drawSky } from './stage.js';
 import { FONT, UI } from './theme.js';
 
@@ -85,6 +85,7 @@ export function render(cx, world, roster, game, opts) {
     drawDebris(cx, game);
     for (const p of world.platforms) {
       if (p.id?.startsWith('perch')) drawPerch(cx, p);
+      else if (p.id?.startsWith('podium:')) drawPodiumBlock(cx, p);
     }
     // A range round's floor comes in three physics pieces split at the exact
     // answer boundaries — but those are fractional pixels, and two opaque
@@ -123,6 +124,14 @@ export function render(cx, world, roster, game, opts) {
   items.sort((a, b) => b.coh - a.coh || a.y - b.y || a.p.id - b.p.id);
 
   const anyFindMe = items.some((it) => it.p.findMeUntil > world.t);
+
+  // At the finale the three champions get their names back — floating over
+  // their own live beans on the podium, lobby-label style. Teams mode stays
+  // nameless: the podium belongs to the years, not to individuals.
+  const champs =
+    game.phase === PHASE.GAME_OVER && game.mode !== 'teams'
+      ? new Set(standings(game).slice(0, 3).map((s) => s.id))
+      : null;
 
   // Answer text always beats a name label. The layouts keep standing surfaces
   // away from the space under the boards, but a player mid-jump (or crowding a
@@ -218,7 +227,7 @@ export function render(cx, world, roster, game, opts) {
     // The crowd cap stays keyed on the player count, not on `scale`, so the
     // two can be tuned separately: raising the scale floor below should not
     // silently switch thirty names back on.
-    if ((game.phase === PHASE.LOBBY && count <= 24) || findMe) {
+    if ((game.phase === PHASE.LOBBY && count <= 24) || findMe || champs?.has(p.id)) {
       const label = getLabel(look.name, findMe ? '#ffffff' : shade(look.color, 0.55));
       const lx = Math.round(it.x + w / 2 - label.width / 2);
       const ly = Math.round(top - 40);

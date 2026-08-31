@@ -19,6 +19,7 @@ import {
   PHYS,
   STEP_MS,
   TWEAKABLE,
+  WORLD_W,
 } from '../../shared/tuning.js';
 import { BTN_JUMP, BTN_LEFT, BTN_RIGHT, T_INPUT_FWD, T_JSON, encodeJson, decodeJson } from '../../shared/protocol.js';
 import { clampCohort } from '../../shared/palette.js';
@@ -46,8 +47,8 @@ import { FB_LANDED_CORRECT, FB_LANDED_WRONG } from '../../shared/protocol.js';
 import { SD_PHASE, createShowdown, currentStatement, sdSkip, stepShowdown } from '../../sim/showdown.js';
 import { setRound, setTheme } from './themes.js';
 import { cycleVoice, tickAudio, toggleMuted, unlockAudio } from './audio.js';
-import { deferRevealBurst, drawConfetti, revealBurst } from './fx.js';
-import { drawRoundOverlay, menuPlatforms } from './round-ui.js';
+import { burstConfetti, deferRevealBurst, drawConfetti, revealBurst } from './fx.js';
+import { drawRoundOverlay, finaleLayout, menuPlatforms } from './round-ui.js';
 import { drawShowdown } from './showdown-ui.js';
 import { loadArt } from './art.js';
 import { InputBus } from './input-bus.js';
@@ -448,6 +449,83 @@ function startRevealHop() {
   if (!riders.size) return;
   hop = { plats, riders, t0: world.t, kicked: false };
   deferRevealBurst(game.qIndex);
+}
+
+// ------------------------------------------------------------- the finale
+//
+// GAME_OVER rebuilds the stage as a podium IN THE WORLD: three real ink
+// platforms (silver, gold centre, bronze), risen out of the glossy floor
+// with the champions riding up on them — the same elevator glue as the
+// reveal hop. Everyone else respawns onto the floor and keeps free-running
+// around the structure; contact shadows and reflections apply because the
+// steps are ordinary platforms. finaleLayout (round-ui) is the single
+// source of geometry, shared with the overlay that draws the faces.
+
+const FINALE_RISE_MS = 800;
+
+/** @type {{steps: Array<{plat: Platform, top: number, riders: Player[]}>, t0: number, done: boolean} | null} */
+let finale = null;
+let lastDrizzle = 0;
+
+function startFinale() {
+  const layout = finaleLayout(game, roster);
+  world.platforms = [{ id: 'floor', x: -400, y: FLOOR_Y, w: WORLD_W + 800, h: 260 }];
+  respawnAll(world);
+  finale = null;
+  if (!layout.steps.length) return;
+
+  /** @type {Array<{plat: Platform, top: number, riders: Player[]}>} */
+  const steps = [];
+  for (const st of layout.steps) {
+    /** @type {Platform} */
+    const plat = { id: st.id, x: st.x, y: FLOOR_Y, w: st.w, h: 400 };
+    world.platforms.push(plat);
+    const riders = st.riders
+      .map((id) => world.players.get(id))
+      .filter((r) => r !== undefined);
+    // Spread the riders across their step before it starts to rise.
+    riders.forEach((r, i) => {
+      r.x = plat.x + ((i + 1) / (riders.length + 1)) * plat.w - r.w / 2;
+      r.y = FLOOR_Y - r.h;
+      r.vx = 0;
+      r.vy = 0;
+    });
+    steps.push({ plat, top: st.top, riders });
+  }
+  finale = { steps, t0: world.t, done: false };
+}
+
+/** Raise the steps out of the floor, champions aboard; then let physics own it. */
+function tickFinale() {
+  if (!finale) return;
+  if (game.phase !== PHASE.GAME_OVER) {
+    finale = null;
+    return;
+  }
+  const u = Math.min(1, (world.t - finale.t0) / FINALE_RISE_MS);
+  const e = 1 - Math.pow(1 - u, 3);
+  for (const s of finale.steps) {
+    s.plat.y = FLOOR_Y - (FLOOR_Y - s.top) * e;
+    if (u < 1) {
+      for (const r of s.riders) {
+        r.y = s.plat.y - r.h;
+        r.vy = 0;
+        r.onGround = true;
+        r.standingOn = s.plat;
+      }
+    }
+  }
+  if (u >= 1 && !finale.done) {
+    finale.done = true;
+    finale.steps.forEach((s, i) => burstConfetti(s.plat, i === 0 ? 1 : 0.45));
+    lastDrizzle = world.t;
+  }
+  // A light recurring drizzle on gold keeps the finale alive while the
+  // room free-runs; quiet enough to never upstage the structure.
+  if (finale.done && world.t - lastDrizzle > 4500) {
+    lastDrizzle = world.t;
+    burstConfetti(finale.steps[0].plat, 0.3);
+  }
 }
 
 /** One frame of the hop; restores the exact base y when done or cut short. */
@@ -913,9 +991,11 @@ function frame(now) {
   tickAudio(world);
   trackMenuLandings();
   tickRevealHop();
+  tickFinale();
 
   if (game.phase !== lastPhase) {
     if (game.phase === PHASE.REVEAL) startRevealHop();
+    if (game.phase === PHASE.GAME_OVER && !showdown) startFinale();
     // A sort round's phones already buzzed per item; the summary reveal
     // repeating the last verdict would read as a second judgement.
     if (game.phase === PHASE.REVEAL && !isSortQuestion(currentQuestion(game))) {
@@ -966,7 +1046,7 @@ function frame(now) {
   if (!showdown) drawConfetti(cx, game, world);
   flash.draw(cx);
   if (showdown) drawShowdown(cx, showdown, world, roster);
-  else drawRoundOverlay(cx, game, roster, world.players.size, menuOpen() ? menuView() : null);
+  else drawRoundOverlay(cx, game, roster, world.players.size, menuOpen() ? menuView() : null, world);
   drawHud(cx, {
     bus,
     roster,
