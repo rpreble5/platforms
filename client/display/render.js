@@ -352,7 +352,7 @@ const SHADOW_SPRITE = (() => {
  *  matched to the ~220px jump apex, so leaving the ground visibly detaches
  *  the shadow and it rushes back up to meet the landing. */
 const SHADOW_RANGE = 220;
-const SHADOW_ALPHA = 0.34;
+const SHADOW_ALPHA = 0.5;
 
 /**
  * Contact shadows: each bean casts a soft ellipse on the highest landable
@@ -407,8 +407,10 @@ function drawContactShadows(cx, items, roster, world, scale, anyFindMe) {
     const findMe = p.findMeUntil > world.t;
     const dim = !look.connected ? 0.35 : anyFindMe && !findMe ? 0.55 : 1;
 
-    const sw = w * 0.95 * (0.6 + 0.4 * k);
-    const sh = sw * 0.26;
+    // Wider than the bean on purpose: the body draws over the shadow, so
+    // only the flare past the feet is ever visible — same-width was invisible.
+    const sw = w * 1.4 * (0.55 + 0.45 * k);
+    const sh = sw * 0.24;
     cx.save();
     cx.beginPath();
     cx.rect(surf.x, surf.y - sh, surf.w, sh * 2);
