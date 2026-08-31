@@ -277,10 +277,20 @@ function drawGlassReflections(cx, items, roster, world, scale) {
     // with the crowd.
     const feetY = it.y + p.h;
     const midX = it.x + w / 2;
-    const panel = panels.find(
-      (s) => Math.abs(feetY - s.y) < 3 && midX > s.x - 6 && midX < s.x + s.w + 6
-    );
+    // Mirror geometry, same as the floor: the nearest panel top at or below
+    // the feet is the mirror plane, and the reflection sits `gap` below it.
+    // A jumping bean's twin slides down through the chunk and out of the
+    // clip instead of blinking off the moment its feet leave the surface.
+    /** @type {{x:number, y:number, w:number, h:number, r:number} | null} */
+    let panel = null;
+    for (const s of panels) {
+      if (midX < s.x - 6 || midX > s.x + s.w + 6) continue;
+      if (s.y < feetY - 4) continue;
+      if (!panel || s.y < panel.y) panel = s;
+    }
     if (!panel) continue;
+    const gap = Math.max(0, panel.y - feetY);
+    if (gap > panel.h) continue; // the twin is already fully below the clip
 
     const look = roster.get(p.id) ?? { name: `#${p.id}`, color: '#8892a6', finish: 'flat', connected: true };
     const cohort = COHORTS[clampCohort(look.cohortIndex ?? -1)];
@@ -301,7 +311,7 @@ function drawGlassReflections(cx, items, roster, world, scale) {
     cx.roundRect(panel.x, panel.y + 8, panel.w, panel.h - 8, Math.min(panel.r, (panel.h - 8) / 2));
     cx.clip();
     cx.globalAlpha = look.connected ? 0.08 : 0.03;
-    cx.translate(midX, panel.y);
+    cx.translate(midX, panel.y + gap);
     cx.scale(1, -1);
     cx.drawImage(sprite, -w / 2 - AVATAR_PAD, -drawnH - AVATAR_PAD);
     cx.restore();
