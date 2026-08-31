@@ -594,3 +594,21 @@ export function spawnFor(index) {
   const x = EDGE_MARGIN + ((lane + 0.5 + wrap * 0.5) / lanes) * (WORLD_W - EDGE_MARGIN * 2);
   return { x: x - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
 }
+
+/**
+ * Teams-mode spawn: each team owns one third of the floor — PGY1 left,
+ * PGY2 centre, PGY3 right — and its members line up evenly inside it.
+ * Teammates start shoulder to shoulder, and since a colour is claimed
+ * whole within a year, the two beans sharing a hue are always in
+ * different thirds and can never spawn side by side.
+ * @param {number} team cohort index, clamped into 0..2
+ * @param {number} member 0-based position within the team
+ * @param {number} count team size
+ * @returns {{x:number, y:number}}
+ */
+export function teamSpawnFor(team, member, count) {
+  const seg = (WORLD_W - EDGE_MARGIN * 2) / 3;
+  const x0 = EDGE_MARGIN + Math.min(Math.max(team, 0), 2) * seg;
+  const x = x0 + ((member + 0.5) / Math.max(1, count)) * seg;
+  return { x: x - PHYS.PLAYER_W / 2, y: FLOOR_Y - PHYS.PLAYER_H - 4 };
+}

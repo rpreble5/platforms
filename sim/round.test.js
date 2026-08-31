@@ -892,6 +892,43 @@ test('team standings average per resident and skip the unassigned', () => {
   assert.equal(summed, 3900, 'the excluded score is in no team');
 });
 
+test('teams mode spawns each year into its own third, teammates together', () => {
+  const { world, game } = rig();
+  game.mode = 'teams';
+  /** @type {Record<number, number>} */
+  const cohort = { 1: 0, 2: 2, 3: 0, 4: 1, 5: 2, 6: 1, 0: -1 };
+  game.cohortOf = (/** @type {number} */ id) => cohort[id] ?? -1;
+  for (const id of [0, 1, 2, 3, 4, 5, 6]) addPlayer(world, id);
+
+  startGame(game, world);
+
+  const thirds = 1920 / 3;
+  /** @param {number} id @returns {number} which third the player's centre is in */
+  const zoneOf = (id) => {
+    const p = /** @type {any} */ (world.players.get(id));
+    return Math.floor((p.x + p.w / 2) / thirds);
+  };
+  assert.equal(zoneOf(1), 0, 'PGY1 spawns in the left third');
+  assert.equal(zoneOf(3), 0, 'PGY1 teammates share the third');
+  assert.equal(zoneOf(4), 1, 'PGY2 spawns in the centre third');
+  assert.equal(zoneOf(6), 1, 'PGY2 teammates share the third');
+  assert.equal(zoneOf(2), 2, 'PGY3 spawns in the right third');
+  assert.equal(zoneOf(5), 2, 'PGY3 teammates share the third');
+
+  // Nobody stacks: every spawn x is unique.
+  const xs = [...world.players.values()].map((p) => Math.round(p.x));
+  assert.equal(new Set(xs).size, xs.length, 'no two players share a spawn pixel');
+
+  // Free-for-all is untouched: the same room falls back to the id-ordered
+  // lane spread, not cohort grouping — PGY is invisible in the line-up.
+  game.mode = 'solo';
+  startGame(game, world);
+  const laneXs = [1, 2, 3, 4, 5, 6].map((id) => /** @type {any} */ (world.players.get(id)).x);
+  for (let i = 1; i < laneXs.length; i++) {
+    assert.ok(laneXs[i] > laneXs[i - 1], 'solo lanes run in id order, ignoring cohorts');
+  }
+});
+
 // ---------------------------------------------------------------- debris
 
 test('crumbled platforms fall once, not once per phase', () => {

@@ -21,7 +21,7 @@
  * just doesn't drive the maths.
  */
 
-import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, buildRowArena, answerId, spawnFor } from './levels.js';
+import { RANGE_ID, buildArena, buildCustomArena, buildRangeArena, buildRowArena, answerId, spawnFor, teamSpawnFor } from './levels.js';
 import { CONTROL_LABEL_MAX_CHARS, buildControlArena, stepControls } from './control-boxes.js';
 import { step } from './world.js';
 
@@ -567,7 +567,9 @@ export function nextQuestion(g, world) {
             buildRowArena(q.buckets?.length ?? 2)
           : choiceArena(g, q);
   }
-  respawnAll(world);
+  // Teams line up by year — each team in its own third — so teammates start
+  // together and the colour twins across years never stand side by side.
+  respawnAll(world, g.mode === 'teams' ? g.cohortOf : null);
   enter(g, world, PHASE.INTRO);
 }
 
@@ -684,11 +686,17 @@ export function freezeInactiveControlInputs(g, world) {
   }
 }
 
-/** @param {import('./world.js').World} world */
-export function respawnAll(world) {
-  let i = 0;
-  for (const p of world.players.values()) {
-    const s = spawnFor(p.id + i);
+/**
+ * Line everyone up on the floor. Free-for-all uses the 24-lane spread
+ * (spawnFor); pass `teamOf` in teams mode and each team instead groups into
+ * its own third of the floor, teammates side by side. Players without a
+ * team (uncommitted, the keyboard avatar) fall back to the lane spread.
+ * @param {import('./world.js').World} world
+ * @param {((id: number) => number) | null} [teamOf]
+ */
+export function respawnAll(world, teamOf = null) {
+  /** @param {import('./player.js').Player} p @param {{x:number, y:number}} s */
+  const park = (p, s) => {
     p.x = s.x;
     p.y = s.y;
     p.vx = 0;
@@ -697,6 +705,33 @@ export function respawnAll(world) {
     p.coyote = 0;
     p.standingOn = null;
     p.lastStoodOn = null;
+  };
+
+  if (teamOf) {
+    /** @type {Map<number, import('./player.js').Player[]>} */
+    const teams = new Map();
+    /** @type {import('./player.js').Player[]} */
+    const loose = [];
+    for (const p of world.players.values()) {
+      const t = teamOf(p.id);
+      if (t < 0) loose.push(p);
+      else {
+        const list = teams.get(t) ?? [];
+        list.push(p);
+        teams.set(t, list);
+      }
+    }
+    for (const [t, members] of teams) {
+      members.sort((a, b) => a.id - b.id);
+      members.forEach((p, j) => park(p, teamSpawnFor(t, j, members.length)));
+    }
+    loose.forEach((p, j) => park(p, spawnFor(p.id + j)));
+    return;
+  }
+
+  let i = 0;
+  for (const p of world.players.values()) {
+    park(p, spawnFor(p.id + i));
     i++;
   }
 }
