@@ -1,0 +1,75 @@
+{
+  "pack": "Absurd but true: team night",
+  "mode": "teams",
+  "theme": "lagoon",
+  "answerMs": 12000,
+  "questions": [
+    {
+      "text": "Rapunzel syndrome is a real diagnosis. What is it?",
+      "answers": [
+        "A hairball with a tail",
+        "Fear of haircuts",
+        "Unstoppable hair growth",
+        "Tower-climbing vertigo"
+      ],
+      "correct": 0
+    },
+    {
+      "text": "Select ALL that pharmacies really sold over the counter, once upon a time:",
+      "answers": [
+        "Cocaine toothache drops",
+        "Heroin cough syrup",
+        "Arsenic beauty wafers",
+        "Mercury breath mints",
+        "Leech lollipops"
+      ],
+      "correct": [0, 1, 2]
+    },
+    {
+      "type": "sort",
+      "text": "Prescription drug, or Star Wars character?",
+      "buckets": ["Prescription drug", "Star Wars character"],
+      "items": [
+        { "label": "Xarelto", "bucket": 0 },
+        { "label": "Ponda Baba", "bucket": 1 },
+        { "label": "Farxiga", "bucket": 0 },
+        { "label": "Kit Fisto", "bucket": 1 },
+        { "label": "Entresto", "bucket": 0 },
+        { "label": "Plo Koon", "bucket": 1 },
+        { "label": "Lumigan", "bucket": 0 },
+        { "label": "Bossk", "bucket": 1 }
+      ],
+      "itemMs": 6000
+    },
+    {
+      "type": "range",
+      "text": "How many bones is a newborn born with, before they fuse?",
+      "min": 100,
+      "max": 400,
+      "answer": [260, 310],
+      "unit": "bones"
+    },
+    {
+      "text": "A famous BMJ study of sword swallowers found their main hazard was…",
+      "answers": [
+        "Sore throats",
+        "Rust poisoning",
+        "Stage fright",
+        "Losing tips"
+      ],
+      "correct": 0,
+      "layout": "row"
+    },
+    {
+      "text": "Out of boiling oil in 1537, surgeon Ambroise Paré dressed wounds with…",
+      "answers": [
+        "Egg yolk and rose oil",
+        "Honey and gunpowder",
+        "Brandy and prayer",
+        "Mustard and lard"
+      ],
+      "correct": 0,
+      "layout": "reverse-pyramid"
+    }
+  ]
+}

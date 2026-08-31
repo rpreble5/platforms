@@ -1,0 +1,72 @@
+{
+  "pack": "Absurd but true",
+  "mode": "solo",
+  "theme": "sorbet",
+  "answerMs": 12000,
+  "questions": [
+    {
+      "text": "Horace Wells discovered anesthesia after seeing a man feel no pain at a…",
+      "answers": [
+        "Laughing-gas stage show",
+        "Boxing match",
+        "Séance",
+        "Barbershop brawl"
+      ],
+      "correct": 0
+    },
+    {
+      "text": "Which of these is genuinely FDA-cleared for use in modern medicine?",
+      "answers": [
+        "Medical leeches",
+        "Emotional support spiders",
+        "Healing crystals",
+        "Fireflies"
+      ],
+      "correct": 0,
+      "layout": "row"
+    },
+    {
+      "text": "Three of these are real, documented syndromes. Which one is made up?",
+      "answers": [
+        "Alice in Wonderland",
+        "Exploding head",
+        "Snow White",
+        "Walking corpse"
+      ],
+      "correct": 2
+    },
+    {
+      "type": "range",
+      "text": "Charles Osborne hiccuped nonstop for the world record. How many YEARS?",
+      "min": 0,
+      "max": 100,
+      "answer": [60, 70],
+      "unit": "years"
+    },
+    {
+      "text": "In hospital slang, a 'code brown' usually means…",
+      "answers": [
+        "A very unglamorous cleanup",
+        "The coffee machine died",
+        "A VIP just arrived",
+        "Pudding day on ward 3"
+      ],
+      "correct": 0,
+      "layout": "pyramid"
+    },
+    {
+      "type": "sort",
+      "text": "Real body part, or made up?",
+      "buckets": ["Real anatomy", "Made up"],
+      "items": [
+        { "label": "Anatomical snuffbox", "bucket": 0 },
+        { "label": "Islets of Langerhans", "bucket": 0 },
+        { "label": "Duct of Flimwell", "bucket": 1 },
+        { "label": "Crypts of Lieberkühn", "bucket": 0 },
+        { "label": "Gland of Marzipan", "bucket": 1 },
+        { "label": "The antihelix", "bucket": 0 }
+      ],
+      "itemMs": 6000
+    }
+  ]
+}
