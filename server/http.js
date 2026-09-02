@@ -114,17 +114,16 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
     }
 
     if (pathname === '/api/packs' && req.method === 'POST') {
-      // Publishing from the Studio: passcode-gated when FACULTY_PASSCODE
-      // (or the AI_PASSCODE faculty already have) is set; writes the deck
+      // Publishing from the Studio: gated by the same AI_PASSCODE faculty
+      // already use for drafting (one code to hand out); writes the deck
       // into questions/ here, and commits it to the repository when this
       // server holds a GitHub token, so the venue laptop pulls it later.
       const fail = (/** @type {number} */ code, /** @type {object} */ body) => {
         res.writeHead(code, { 'Content-Type': MIME['.json'] });
         res.end(JSON.stringify(body));
       };
-      const passcode = process.env.FACULTY_PASSCODE || process.env.AI_PASSCODE;
-      const given = req.headers['x-passcode'] ?? req.headers['x-ai-passcode'];
-      if (passcode && given !== passcode) {
+      const passcode = process.env.AI_PASSCODE;
+      if (passcode && req.headers['x-ai-passcode'] !== passcode) {
         fail(401, { error: 'wrong or missing passcode' });
         return;
       }

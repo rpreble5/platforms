@@ -1172,7 +1172,7 @@ async function publish(o = {}) {
   try {
     const res = await fetch('/api/packs', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-passcode': code },
+      headers: { 'Content-Type': 'application/json', 'x-ai-passcode': code },
       body: JSON.stringify({ pack: exportable(), file: meta.file || undefined, baseRev: meta.rev || undefined, force: !!o.force, by }),
     });
     r = { ok: res.ok, status: res.status, json: await res.json().catch(() => ({})) };
