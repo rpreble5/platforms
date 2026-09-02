@@ -1047,6 +1047,7 @@ function adoptDoc(t, opts = {}) {
   } else if (meta.mode !== 'teams') {
     meta.mode = 'solo';
   }
+  draftKey = String(meta.pack ?? '').trim();
   if (opts.boot) {
     doc.value = text;
     docText = text;
@@ -1261,13 +1262,21 @@ function loadDrafts() {
   try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 
+/** The name the current editing session's draft is stored under. */
+let draftKey = '';
+
 function saveDraftEntry() {
   const name = String(meta.pack ?? '').trim();
   if (!name) return;
   try {
     const drafts = loadDrafts();
+    // Drafts are keyed by name and saved on every keystroke, so typing a
+    // name would leave one draft per letter. A rename MOVES this session's
+    // draft instead: the entry under the previous name goes with it.
+    if (draftKey && draftKey !== name && drafts[draftKey]) delete drafts[draftKey];
     drafts[name] = { doc: docText, meta: { ...meta }, carried, levels, at: Date.now() };
     localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+    draftKey = name;
   } catch { /* full/blocked: drafts are a convenience */ }
 }
 
@@ -1324,6 +1333,7 @@ async function openPacksDlg() {
     row(draftsHolder, name, `${current ? 'open now · ' : ''}${new Date(d.at).toLocaleString()}`, () => {
       saveDraftEntry();
       meta = { ...d.meta };
+      draftKey = name;
       const { text: deckOnly, carried: found } = splitSections(d.doc);
       const { text, levels: pins } = extractLevels(deckOnly);
       carried = Object.keys(found).length ? found : (d.carried ?? {});
