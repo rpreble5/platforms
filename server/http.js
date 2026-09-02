@@ -19,6 +19,7 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
 import { deleteLevel, listLevels, saveLevel } from './levels-store.js';
+import { commitToGitHub, packRev, publishPack } from './pack-store.js';
 import { NOTES_CAP, draftPack, suggestShorter, underDailyLimit } from './ai-draft.js';
 
 /** @type {Record<string, string>} */
@@ -109,6 +110,55 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
         res.writeHead(500, { 'Content-Type': MIME['.json'] });
         res.end(JSON.stringify({ error: String(err) }));
       }
+      return;
+    }
+
+    if (pathname === '/api/packs' && req.method === 'POST') {
+      // Publishing from the Studio: passcode-gated when FACULTY_PASSCODE
+      // (or the AI_PASSCODE faculty already have) is set; writes the deck
+      // into questions/ here, and commits it to the repository when this
+      // server holds a GitHub token, so the venue laptop pulls it later.
+      const fail = (/** @type {number} */ code, /** @type {object} */ body) => {
+        res.writeHead(code, { 'Content-Type': MIME['.json'] });
+        res.end(JSON.stringify(body));
+      };
+      const passcode = process.env.FACULTY_PASSCODE || process.env.AI_PASSCODE;
+      const given = req.headers['x-passcode'] ?? req.headers['x-ai-passcode'];
+      if (passcode && given !== passcode) {
+        fail(401, { error: 'wrong or missing passcode' });
+        return;
+      }
+      readBody(req, 512 * 1024)
+        .then(async (body) => {
+          const parsed = JSON.parse(body);
+          const saved = publishPack(root, parsed);
+          /** @type {any} */
+          const out = { ok: true, file: saved.file, rev: saved.rev, created: saved.created, committed: false };
+          const token = process.env.GITHUB_TOKEN;
+          const repo = process.env.GITHUB_REPO;
+          if (token && repo) {
+            const by = typeof parsed.by === 'string' && parsed.by.trim() ? ` (by ${parsed.by.trim().slice(0, 60)})` : '';
+            try {
+              const c = await commitToGitHub({
+                token, repo,
+                branch: process.env.GITHUB_BRANCH || process.env.RENDER_GIT_BRANCH || 'main',
+                file: saved.file, content: saved.text,
+                message: `Publish deck: ${String(parsed.pack.pack).slice(0, 80)}${by}`,
+              });
+              out.committed = true;
+              out.commitUrl = c.url;
+            } catch (err) {
+              out.commitError = String(err instanceof Error ? err.message : err);
+            }
+          }
+          fail(200, out);
+        })
+        .catch((/** @type {any} */ err) => {
+          if (err?.code === 'CONFLICT') return fail(409, { error: err.message, current: err.current });
+          if (err?.code === 'BAD_PACK') return fail(400, { error: err.message });
+          if (err instanceof SyntaxError) return fail(400, { error: 'not valid JSON' });
+          return fail(500, { error: 'publish failed — try again' });
+        });
       return;
     }
 
@@ -385,7 +435,8 @@ function readBody(req, cap) {
  * when the file is really in questions/images, so the lobby never chases a
  * 404 for a picture that was never sent along with the pack.
  * @returns {Array<{file:string, name:string, questions:number,
- *   mode:'solo'|'teams', cover?:string, showdown:boolean, controlRoom:number}>}
+ *   mode:'solo'|'teams', cover?:string, showdown:boolean, controlRoom:number,
+ *   rev:string, by:string, at:string}>}
  */
 export function listPacks(root) {
   const dir = path.join(root, 'questions');
@@ -398,7 +449,8 @@ export function listPacks(root) {
   }
   return files.map((file) => {
     try {
-      const j = JSON.parse(readFileSync(path.join(dir, file), 'utf8'));
+      const text = readFileSync(path.join(dir, file), 'utf8');
+      const j = JSON.parse(text);
       /** @type {any} */
       const row = {
         file,
@@ -407,6 +459,11 @@ export function listPacks(root) {
         mode: packMode(j),
         showdown: !!j.showdown?.statements?.length,
         controlRoom: Array.isArray(j.controlRoom?.questions) ? j.controlRoom.questions.length : 0,
+        // The Studio sends this rev back on publish so a stale overwrite is
+        // refused; who/when comes from the last publish, if any.
+        rev: packRev(text),
+        by: typeof j.published?.by === 'string' ? j.published.by : '',
+        at: typeof j.published?.at === 'string' ? j.published.at : '',
       };
       if (plainImageName(j.cover) && existsSync(path.join(dir, 'images', j.cover))) row.cover = j.cover;
       return row;

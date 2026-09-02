@@ -274,6 +274,11 @@
   .keyq .n { color: var(--ink3); font-weight: 700; font-variant-numeric: tabular-nums; }
   .keyq .k { color: var(--ink2); margin-top: 2px; }
   .keyq .k b { color: var(--ink); }
+  .pubRow { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; margin-top: 12px; }
+  .pubRow label { margin: 0; }
+  .pubConflict { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--gold-bg); color: var(--gold-ink); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin-top: 12px; }
+  .pubConflict span { flex: 1; min-width: 200px; }
+  dialog .dlgActions .spacer { flex: 1; }
   .keyWarn { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin-top: 8px; }
   #toast {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: min(680px, 92vw); z-index: 40; cursor: pointer;
@@ -394,9 +399,25 @@
     <div class="hint">Check every key before the night — this is what the room will be scored against. It doubles as your crib sheet.</div>
     <div id="keyWarn" class="keyWarn" hidden></div>
     <div id="keyBody"></div>
+    <div class="pubRow">
+      <label for="pubName">Published by</label>
+      <input type="text" id="pubName" autocomplete="off" spellcheck="false" placeholder="your name, for the deck list" maxlength="60">
+    </div>
+    <div class="pubRow" id="pubCodeRow" hidden>
+      <label for="pubCode">Faculty passcode</label>
+      <input type="text" id="pubCode" name="faculty-passcode" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" placeholder="ask the host">
+    </div>
+    <div class="pubConflict" id="pubConflict" hidden>
+      <span>This deck changed on the server since you opened it.</span>
+      <button class="btn small quiet" id="pubReload">Open theirs</button>
+      <button class="btn small danger" id="pubForce">Publish mine anyway</button>
+    </div>
     <div class="dlgActions">
+      <span class="hint" id="pubStatus"></span>
+      <span class="spacer"></span>
       <button class="btn ghost" id="keyCancel">Back to editing</button>
-      <button class="btn primary" id="download">Download deck file</button>
+      <button class="btn ghost" id="download">Download file</button>
+      <button class="btn primary" id="publish">Publish to the game</button>
     </div>
   </div>
 </dialog>

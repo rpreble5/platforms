@@ -162,6 +162,22 @@ drafter or a first question; the inspector beside the document shows the
 live preview, the focused question's settings, problems, and the deck's
 question count and estimated play time.
 
+**Publishing (optional).** Finish → answer key → **Publish to the game**
+saves the deck straight into `questions/` on the server the Studio came
+from — the host laptop, or the Render test instance — so faculty never
+email a file. It is gated by `FACULTY_PASSCODE` (falling back to
+`AI_PASSCODE`, so faculty need one code), and asks for a name once so the
+deck list can say who published what and when. If the server also has a
+`GITHUB_TOKEN` that can write the repository (`GITHUB_REPO`, and
+`GITHUB_BRANCH` if not the deploy branch), every publish is committed to
+`questions/` too — the repo is the database, git keeps every version — and
+`start.command` / `start.bat` pull before starting, so the venue laptop
+has everything published since last time (offline it just carries on).
+Two people on one deck can't silently overwrite each other: a publish
+sends the rev it opened, a stale one is refused, and the author chooses
+between opening the server copy and pushing through. Nothing plays
+unreviewed — the host still picks the deck in the lobby.
+
 **AI drafting (optional).** The Studio's "✨ Draft from notes" button
 turns pasted rough material — lecture notes, half-written questions, a
 list of facts — into formatted questions, and "✨ Tighten to fit"

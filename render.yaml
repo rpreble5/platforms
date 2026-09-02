@@ -39,3 +39,16 @@ services:
         sync: false
       - key: AI_PASSCODE
         sync: false
+      # Publishing decks from the Studio (optional). FACULTY_PASSCODE gates
+      # Publish (falls back to AI_PASSCODE, so faculty need one code). With
+      # a GitHub token that can write this repository, every publish is
+      # also committed to questions/ on the deploy branch, and the venue
+      # laptop picks it up with the pull in start.command / start.bat.
+      # A publish on the deploy branch triggers a redeploy of this test
+      # instance — harmless here, and it comes back with the new deck.
+      - key: FACULTY_PASSCODE
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        value: rpreble5/platforms

@@ -30,6 +30,17 @@ if not exist node_modules (
   )
 )
 
+REM Decks published from the Studio land in the repository; pick them up.
+REM Offline (the venue) this just prints a line and carries on.
+if exist .git (
+  where git >nul 2>nul
+  if not errorlevel 1 (
+    echo.
+    echo   Fetching any decks published since last time...
+    git pull --ff-only --quiet 2>nul || echo   ^(couldn't pull - offline, or local changes; playing with the decks already here^)
+  )
+)
+
 echo.
 echo   Starting. Leave this window open; Ctrl+C stops the game.
 echo.

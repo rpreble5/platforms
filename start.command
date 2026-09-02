@@ -22,6 +22,14 @@ if [ ! -d node_modules ]; then
   npm install || { read -r -p "  Install failed. Press Enter to close." _; exit 1; }
 fi
 
+# Decks published from the Studio land in the repository; pick them up.
+# Offline (the venue) this just prints a line and carries on.
+if [ -d .git ] && command -v git >/dev/null 2>&1; then
+  echo ""
+  echo "  Fetching any decks published since last time…"
+  git pull --ff-only --quiet 2>/dev/null || echo "  (couldn't pull — offline, or local changes; playing with the decks already here)"
+fi
+
 echo ""
 echo "  Starting. Leave this window open; Ctrl+C stops the game."
 echo ""

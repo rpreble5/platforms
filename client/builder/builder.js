@@ -46,7 +46,7 @@ const doc = $('doc');
 let docText = '';
 /** The always-there pack settings live in the pack bar, never the doc.
  *  order has no UI — an imported pack's value survives the round trip. */
-let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo', cover: '' };
+let meta = { pack: 'New pack', theme: 'blanc', answerMs: 12000, order: 'authored', mode: 'solo', cover: '', file: '', rev: '' };
 /**
  * Control Room cases and Showdown statements belonging to a pack that was
  * opened here. The Studio authors decks only, so they never enter the
@@ -1007,7 +1007,7 @@ function loadDraft() {
  * Adopt a document wholesale (boot, Open, Paste, Load sample): any
  * front-matter block on top is absorbed into the Pack panel and stripped,
  * so the doc itself only ever shows questions.
- * @param {string} t @param {{boot?: boolean}} [opts]
+ * @param {string} t @param {{boot?: boolean, file?: string, rev?: string}} [opts]
  */
 function adoptDoc(t, opts = {}) {
   const { meta: fm, text: whole } = extractFrontMatter(t);
@@ -1025,6 +1025,13 @@ function adoptDoc(t, opts = {}) {
   // Like the mode: the cover belongs to the pack being opened. Without this
   // the last pack's picture would follow you into the next one.
   if (!opts.boot) meta.cover = typeof fm.cover === 'string' ? fm.cover : '';
+  // Where this deck came from, for publishing: the server file and its
+  // rev when opened from the server, nothing otherwise (a file from disk
+  // or a paste publishes as a new deck under its own name).
+  if (!opts.boot) {
+    meta.file = opts.file ?? '';
+    meta.rev = opts.rev ?? '';
+  }
   // The mode always comes from the pack being opened, never from whatever
   // was open before. When the pack does not say, select-all decides it:
   // only a teams deck can hold one, so a pack using them was written for
@@ -1134,6 +1141,89 @@ $('download').onclick = () => {
   a.click();
   $('keyDlg').close();
   toast(`Downloaded ${safe}.json — send it to your host, who drops it in the game's questions folder.`);
+};
+
+// ------------------------------------------------------------ publishing
+//
+// Publish lands the deck in questions/ on the server this page came from
+// (and in the repository when that server holds a GitHub token). The rev
+// the deck was opened with travels along, so two people editing the same
+// deck can't silently overwrite each other: a stale publish comes back
+// 409 and the author chooses — open theirs, or push through.
+
+const AUTHOR_KEY = 'packstudio-author';
+/** The text as it was last published — the Saved chip says Published while it holds. */
+let publishedText = '';
+
+/** @param {{force?: boolean}} [o] */
+async function publish(o = {}) {
+  const status = $('pubStatus');
+  const by = $('pubName').value.trim();
+  try { localStorage.setItem(AUTHOR_KEY, by); } catch { /* no store */ }
+  const typed = $('pubCode').value.trim();
+  if (typed) { try { localStorage.setItem(AI_CODE_KEY, typed); } catch { /* no store */ } }
+  let code = '';
+  try { code = localStorage.getItem(AI_CODE_KEY) ?? ''; } catch { /* no store */ }
+  $('publish').disabled = true;
+  $('pubConflict').hidden = true;
+  status.textContent = 'Publishing…';
+  /** @type {{ok: boolean, status: number, json: any}} */
+  let r;
+  try {
+    const res = await fetch('/api/packs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-passcode': code },
+      body: JSON.stringify({ pack: exportable(), file: meta.file || undefined, baseRev: meta.rev || undefined, force: !!o.force, by }),
+    });
+    r = { ok: res.ok, status: res.status, json: await res.json().catch(() => ({})) };
+  } catch {
+    r = { ok: false, status: 0, json: { error: 'no server reachable — publishing works from the game server or the test instance, not from a static copy of this page' } };
+  }
+  $('publish').disabled = false;
+  if (r.status === 401) {
+    $('pubCodeRow').hidden = false;
+    $('pubCode').focus();
+    status.textContent = 'Enter the faculty passcode to publish.';
+    return;
+  }
+  if (r.status === 409) {
+    $('pubConflict').hidden = false;
+    status.textContent = '';
+    return;
+  }
+  if (!r.ok) {
+    status.textContent = r.json.error ?? `publish failed (${r.status})`;
+    return;
+  }
+  meta.file = String(r.json.file ?? '');
+  meta.rev = String(r.json.rev ?? '');
+  publishedText = docText;
+  save();
+  refresh({ keepPanel: true });
+  $('keyDlg').close();
+  toast(
+    r.json.committed
+      ? `Published "${meta.pack}" — it's on the server and committed to the repository. The venue laptop picks it up on its next start.`
+      : r.json.commitError
+        ? `Published "${meta.pack}" on this server, but the repository commit failed (${r.json.commitError}). It plays here; tell the host.`
+        : `Published "${meta.pack}" — it's in this server's deck list now.`
+  );
+}
+$('publish').onclick = () => void publish();
+$('pubForce').onclick = () => void publish({ force: true });
+$('pubReload').onclick = async () => {
+  // Open the server's copy over mine: my text is kept as a local draft
+  // under this name, so nothing is lost, only set aside.
+  try {
+    const packs = await fetch('/api/packs').then((r) => r.json());
+    const pk = (Array.isArray(packs) ? packs : []).find((/** @type {any} */ p) => p.file === meta.file);
+    if (!pk) { $('pubStatus').textContent = 'That deck is no longer on the server.'; return; }
+    const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
+    saveDraftEntry();
+    $('keyDlg').close();
+    adoptDoc(serializeDoc(pack), { file: pk.file, rev: pk.rev });
+    toast(`Opened the server's "${pk.name}"${pk.by ? ` (published by ${pk.by})` : ''}. Your version is under Decks as a draft.`);
+  } catch { $('pubStatus').textContent = 'Could not load the server copy.'; }
 };
 $('copyJson').onclick = async () => {
   await navigator.clipboard.writeText(JSON.stringify(exportable(), null, 2));
@@ -1250,12 +1340,15 @@ async function openPacksDlg() {
   try {
     const packs = await fetch('/api/packs').then((r) => r.ok ? r.json() : Promise.reject());
     for (const pk of Array.isArray(packs) ? packs : []) {
-      row(serverHolder, pk.name, `${pk.questions} questions — opens as a local draft`, async () => {
+      const when = pk.at ? new Date(pk.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      const who = pk.by ? `by ${pk.by}` : '';
+      const sub = [`${pk.questions} question${pk.questions === 1 ? '' : 's'}`, [who, when].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
+      row(serverHolder, pk.name, sub, async () => {
         try {
           const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
           saveDraftEntry();
-          adoptDoc(serializeDoc(pack));
-          toast(`Opened "${pk.name}" from the server — your edits stay in this browser until you finish and send the file.`);
+          adoptDoc(serializeDoc(pack), { file: pk.file, rev: pk.rev });
+          toast(`Opened "${pk.name}" from the server — your edits stay in this browser until you publish.`);
         } catch { toast('Could not load that deck from the server.'); }
       }, null);
     }
@@ -1617,7 +1710,7 @@ function syncChrome(vproblems) {
   const qs = /** @type {any[]} */ (parsed.raw.questions);
   $('statCount').textContent = String(qs.length);
   $('statTime').textContent = qs.length ? `≈ ${runtimeLabel(qs)}` : '—';
-  $('savedChip').textContent = 'Saved';
+  $('savedChip').textContent = meta.rev && docText === publishedText ? 'Published' : 'Saved';
   const empty = !parsed.blocks.length && !docText.trim();
   if (emptyShown !== empty) {
     emptyShown = empty;
@@ -1676,6 +1769,9 @@ $('finish').onclick = () => {
     h.textContent = 'No questions yet.';
     body.appendChild(h);
   }
+  try { $('pubName').value = localStorage.getItem(AUTHOR_KEY) ?? ''; } catch { /* no store */ }
+  $('pubStatus').textContent = meta.file ? `Opened from the server as ${meta.file}` : '';
+  $('pubConflict').hidden = true;
   $('keyDlg').showModal();
 };
 $('keyCancel').onclick = () => $('keyDlg').close();
