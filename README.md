@@ -81,8 +81,9 @@ only works in teams, so a deck using one is a teams deck. Two ship:
 
 **Cover art** (dormant): a deck may carry a top-level
 `"cover": "night.png"` — a bare filename in `questions/images/`, same rules
-as a question picture, set with the Cover button in the Pack Studio's pack
-bar. The current lobby lists decks as text rows and does not draw covers;
+as a question picture. The Studio no longer offers a cover control (the
+field survives in a pack that has one). The current lobby lists decks as
+text rows and does not draw covers;
 the field, the Studio button and the server-side checks are all kept for
 when deck art returns to the display.
 
@@ -150,10 +151,16 @@ until they export.
   the repo itself; if the repo is private, use `/builder` on a laptop
   instead.)
 
-The workflow: type → watch the live preview → **Download pack.json** →
-send the file to the host, who drops it in `questions/` (plus any
-referenced images in `questions/images/`). Drafts autosave in the
-browser; Open/Paste round-trips existing packs for editing.
+The workflow: type → watch the live preview → **Finish** → check the
+answer key it shows you → **Download deck file** → send the file to the
+host, who drops it in `questions/` (plus any referenced images in
+`questions/images/`). Drafts autosave in the browser (the Saved chip
+says so); the ··· menu holds Decks (your drafts plus everything on the
+game server), Open a file, Paste JSON and Copy JSON for round-tripping
+existing packs. A new deck opens on a first-run page that offers the
+drafter or a first question; the inspector beside the document shows the
+live preview, the focused question's settings, problems, and the deck's
+question count and estimated play time.
 
 **AI drafting (optional).** The Studio's "✨ Draft from notes" button
 turns pasted rough material — lecture notes, half-written questions, a
@@ -173,8 +180,9 @@ document: `#` starts a question, its answers go on the lines below, and
 everything updates live as you type. Correct answers are picked with the
 checkbox beside each line (typing `✓ ` or `* ` at the start of the line
 does the same); two checks make a select-all automatically. The
-always-there settings — pack name, cover, theme, answer time, how it's
-played — never appear in the doc: they live in the pack bar above it. Each
+always-there settings — deck name, theme, seconds to answer, how it's
+played — never appear in the doc: the name is the title in the top bar,
+and the rest live in the settings popover under the chips beside it. Each
 question's type shows as a chip in the left margin, and clicking the
 chip switches the type. The full format:
 

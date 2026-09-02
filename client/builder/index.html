@@ -3,474 +3,444 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pack Studio</title>
+<title>Studio — Platforms</title>
 <style>
+  /* Self-hosted like the display face: no internet at the venue, and the
+     GitHub Pages copy must look the same as the laptop one. */
+  @font-face { font-family: 'Manrope'; src: url('/assets/fonts/ui.woff2') format('woff2'); font-weight: 200 800; font-display: swap; }
+  @font-face { font-family: 'PlatformsDisplay'; src: url('/assets/fonts/display.woff2') format('woff2'); font-weight: 400 800; font-display: swap; }
+
+  /* ------------------------------------------------------------ tokens */
   :root {
-    color-scheme: light;
-    --bg: #f6f7f8;
-    --card: #ffffff;
-    --line: #e4e6ea;
-    --line-soft: #eef0f2;
-    --text: #1c1e24;
-    --mut: #667085;
-    --faint: #98a2b3;
-    --acc: #047857;
-    --acc-hover: #059669;
-    --acc-soft: #ecfdf5;
-    --acc-line: #a7e3cd;
-    --warn: #b45309;
-    --err: #b91c1c;
-    --err-line: #f0b6bd;
-    --shadow: 0 1px 2px rgba(16,18,24,.05);
+    color-scheme: light dark;
+    --paper: #fbfaf7; --panel: #f3f1ec; --panel2: #eae7e0; --field: #ffffff;
+    --ink: #26233b; --ink2: #4a4761; --ink3: #7c7990; --hair: rgba(38,35,59,0.10); --hair2: rgba(38,35,59,0.18);
+    --gold: #f5b944; --gold-ink: #7a5300; --gold-bg: rgba(245,185,68,0.18);
+    --teal: #1f9d8a; --teal-bg: rgba(31,157,138,0.12);
+    --red: #d8375e; --red-bg: #fdeef1;
+    --sel: rgba(38,35,59,0.14);
+    --radius: 14px; --shadow: 0 10px 30px rgba(38,35,59,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #16151f; --panel: #1f1d2a; --panel2: #2b2937; --field: #23212e;
+      --ink: #f4f1e8; --ink2: #c9c5d8; --ink3: #8b879c; --hair: rgba(244,241,232,0.10); --hair2: rgba(244,241,232,0.2);
+      --gold-ink: #f5b944; --gold-bg: rgba(245,185,68,0.16);
+      --teal: #3fc4af; --teal-bg: rgba(63,196,175,0.14);
+      --red: #ff6f8e; --red-bg: rgba(255,111,142,0.14);
+      --sel: rgba(244,241,232,0.18);
+      --shadow: 0 10px 30px rgba(0,0,0,0.45);
+    }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 460 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); }
+  body { font: 500 15px/1.5 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; border-radius: 10px; }
+  button:disabled { opacity: .45; cursor: default; }
+  a { color: inherit; }
+  code { background: var(--panel2); border-radius: 5px; padding: 1px 5px; font-size: .92em; color: var(--ink2); }
+  ::selection { background: var(--sel); }
 
-  /* ------------------------------------------------------------- header */
-  header {
-    height: 56px; padding: 0 20px; background: var(--card);
-    border-bottom: 1px solid var(--line);
-    display: flex; gap: 10px; align-items: center;
-    position: sticky; top: 0; z-index: 5;
+  /* ------------------------------------------------------------ top bar */
+  #top {
+    height: 60px; display: flex; align-items: center; gap: 14px; padding: 0 28px;
+    border-bottom: 1px solid var(--hair); position: sticky; top: 0; z-index: 8; background: var(--paper);
   }
-  h1 { font-size: 13.5px; margin: 0; letter-spacing: .1em; color: var(--acc); font-weight: 800; }
-  header .sub { color: var(--faint); font-size: 12.5px; margin-left: 4px; }
-  header .spacer { flex: 1; }
-  header .divider { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
-  header a.guide {
-    color: var(--mut); font-size: 13px; font-weight: 600; text-decoration: none;
-    padding: 6px 10px; border-radius: 8px;
+  .wordmark { font: 800 22px/1 'PlatformsDisplay', sans-serif; letter-spacing: .02em; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+  .wordmark small { font: 600 13px 'Manrope', sans-serif; color: var(--ink3); letter-spacing: 0; }
+  #titleWrap { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  #packName {
+    font: 700 17px/1.2 inherit; color: var(--ink); background: none; border: 0; border-radius: 8px;
+    padding: 7px 10px; margin-left: -10px; min-width: 0; width: min(40vw, 420px); text-overflow: ellipsis;
   }
-  header a.guide:hover { color: var(--acc); background: var(--acc-soft); }
+  #packName:hover { background: var(--panel); }
+  #packName:focus { outline: none; background: var(--panel); box-shadow: 0 0 0 2px var(--hair2); }
+  #settingsBtn { display: flex; gap: 6px; padding: 0; }
+  .chip { font-size: 12.5px; font-weight: 600; color: var(--ink2); background: var(--panel); padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+  #settingsBtn:hover .chip { background: var(--panel2); }
+  .chip.ok { color: var(--teal); background: var(--teal-bg); }
+  #actions { display: flex; align-items: center; gap: 8px; }
+  .btn { padding: 9px 14px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .btn.primary:hover { filter: brightness(1.15); }
+  .btn.quiet { background: var(--panel); color: var(--ink2); }
+  .btn.quiet:hover { background: var(--panel2); color: var(--ink); }
+  .btn.ghost { color: var(--ink2); }
+  .btn.ghost:hover { background: var(--panel); color: var(--ink); }
+  .btn.icon { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; font-size: 18px; color: var(--ink2); }
+  .btn.icon:hover { background: var(--panel); }
+  .btn.danger { color: var(--red); }
+  .btn.danger:hover { background: var(--red-bg); }
+  .btn.small { padding: 6px 10px; font-size: 13px; }
+  .pill { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--red); color: #fff; font-size: 11.5px; font-weight: 800; }
 
-  /* ------------------------------------------------------------ buttons */
-  button {
-    background: var(--card); color: var(--text); border: 1px solid var(--line);
-    border-radius: 9px; padding: 7px 12px; font: 620 13px/1.2 inherit; cursor: pointer;
+  /* popovers: settings under the chips, the overflow under ··· */
+  .pop {
+    position: absolute; top: 54px; z-index: 20; background: var(--field); border: 1px solid var(--hair);
+    border-radius: 14px; box-shadow: var(--shadow); padding: 14px; min-width: 260px;
   }
-  button:hover { border-color: var(--acc); color: var(--acc); }
-  button:disabled { opacity: .4; cursor: default; }
-  button:disabled:hover { border-color: var(--line); color: var(--text); }
-  button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
-  button.primary:hover { background: var(--acc-hover); border-color: var(--acc-hover); color: #fff; }
-  button.ghost { border-color: transparent; color: var(--mut); }
-  button.ghost:hover { color: var(--acc); background: var(--acc-soft); border-color: transparent; }
-  button.ai { background: var(--acc-soft); border-color: var(--acc-line); color: var(--acc); }
-  button.ai:hover { border-color: var(--acc); }
-  button.small { padding: 5px 9px; font-size: 12.5px; }
-  button.danger { border-color: var(--err-line); color: var(--err); }
-  button.danger:hover { border-color: var(--err); }
+  #settingsPop { left: 0; width: 340px; }
+  #morePop { right: 0; padding: 8px; }
+  #morePop button, #morePop a {
+    display: block; width: 100%; text-align: left; padding: 9px 12px; border-radius: 9px;
+    font-weight: 600; font-size: 14px; color: var(--ink); text-decoration: none;
+  }
+  #morePop button:hover, #morePop a:hover { background: var(--panel); }
+  #morePop hr { border: 0; border-top: 1px solid var(--hair); margin: 6px 0; }
+  .popAnchor { position: relative; }
+  .pop label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink3); margin: 10px 0 5px; }
+  .pop label:first-child { margin-top: 0; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--panel); border-radius: 10px; padding: 3px; }
+  .seg button { padding: 7px 0; font-size: 13.5px; font-weight: 700; color: var(--ink3); border-radius: 8px; }
+  .seg button.on { background: var(--field); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.10); }
+  .seg button:not(.on):hover { color: var(--ink); }
 
-  /* -------------------------------------------------------------- shell */
-  main {
-    display: grid;
-    grid-template-columns: minmax(500px, 1fr) clamp(560px, 40vw, 820px);
-    gap: 16px; padding: 16px 20px 40px; align-items: start;
-    min-width: 1080px;
-  }
-  #center { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-  /* the pack bar: every pack-level setting in one slim strip above the doc */
-  #packBar { display: flex; flex-direction: column; padding: 12px 16px 0; }
-  #packBar .fields { display: flex; gap: 14px; align-items: flex-end; }
-  #packBar .f { display: flex; flex-direction: column; gap: 4px; }
-  #packBar .f label { margin: 0; font-size: 11px; }
-  #packBar .f.name { flex: 2; min-width: 160px; }
-  #packBar .f.theme { flex: 1; min-width: 110px; }
-  #packBar .f.time { width: 92px; flex: none; }
-  /* the cover: the picture this deck wears on its card in the lobby */
-  #packBar .f.cover { width: 54px; flex: none; }
-  #coverTile {
-    width: 54px; height: 54px; border-radius: 12px; border: 1px solid var(--line);
-    background: var(--bg); padding: 0; overflow: hidden; position: relative;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #coverTile:hover { border-color: var(--acc-line); }
-  #packBar .coverWrap { position: relative; width: 54px; height: 54px; }
-  /* inside the tile's corner, not outside it: the pack bar's cells sit
-     shoulder to shoulder, so a badge hanging off the edge lands on the
-     neighbouring label. */
-  #coverClear {
-    position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
-    padding: 0; border-radius: 50%; font-size: 13px; line-height: 1;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(20, 18, 30, 0.62); border-color: rgba(255, 255, 255, 0.35);
-    color: #fff;
-  }
-  #coverClear:hover { background: var(--err); border-color: transparent; }
-  #coverTile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  #coverTile .ph { font-size: 17px; color: var(--faint); line-height: 1; }
-  #docHead .hint { margin-right: auto; }
-  #docHead button { flex: none; }
-  /* what the doc adds up to, and which game mode each part needs */
-  #plays {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    border-top: 1px solid var(--line-soft); margin-top: 12px; padding: 9px 0 11px;
-  }
-  #plays .pnote { font-size: 11.5px; color: var(--faint); margin: 0; }
-  /* the one thing a deck decides about itself: how it is played */
-  .modeSeg { display: flex; gap: 0; }
-  .modeSeg button {
-    border-radius: 0; padding: 8px 12px; font-size: 13px; font-weight: 650;
-    border-color: var(--line); color: var(--mut); background: var(--bg);
-  }
-  .modeSeg button:first-child { border-radius: 9px 0 0 9px; }
-  .modeSeg button:last-child { border-radius: 0 9px 9px 0; margin-left: -1px; }
-  .modeSeg button.on {
-    background: var(--acc); border-color: var(--acc); color: #fff; position: relative; z-index: 1;
-  }
-  .modeSeg button:not(.on):hover { color: var(--acc); border-color: var(--acc-line); }
-  .card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-    box-shadow: var(--shadow);
-  }
-  .cardHead {
-    display: flex; align-items: center; gap: 8px;
-    padding: 12px 16px 0;
-  }
-  .cardHead h2 {
-    margin: 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--faint); font-weight: 750;
-  }
-  .cardHead .headHint { color: var(--faint); font-size: 12px; }
-  .cardHead .spacer { flex: 1; }
-  .cardBody { padding: 12px 16px 16px; }
-
-  label { display: block; margin: 10px 0 4px; color: var(--mut); font-size: 12px; font-weight: 620; }
-  label:first-child { margin-top: 0; }
+  /* ---------------------------------------------------------- fields */
   input[type=text], input[type=number], select, textarea {
-    width: 100%; background: var(--bg); color: var(--text); border: 1px solid transparent;
-    border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13.5px;
+    width: 100%; background: var(--panel); color: var(--ink); border: 1px solid transparent;
+    border-radius: 10px; padding: 8px 11px; font: inherit; font-size: 14px;
   }
-  input:hover, select:hover, textarea:hover { border-color: var(--line); }
-  input:focus, select:focus, textarea:focus { outline: none; background: var(--card); border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
+  input:hover, select:hover, textarea:hover { border-color: var(--hair2); }
+  input:focus, select:focus, textarea:focus { outline: none; background: var(--field); border-color: var(--ink2); }
+  label { display: block; margin: 12px 0 5px; color: var(--ink3); font-size: 12.5px; font-weight: 700; }
+  label:first-child { margin-top: 0; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
+  .hint { color: var(--ink3); font-size: 13px; line-height: 1.5; }
+  .checkline { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; }
+  .checkline input { width: auto; }
 
+  /* ------------------------------------------------------------ layout */
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 40px;
+    padding: 24px 28px 80px; max-width: 1240px; margin: 0 auto; align-items: start;
+  }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; gap: 28px; }
+    #settingsBtn { display: none; }
+    #packName { width: 100%; }
+    #side { position: static !important; }
+  }
 
-  /* ------------------------------------------------------------ the doc */
-  #docCard { padding: 0; overflow: hidden; }
-  #docwrap { display: flex; position: relative; border-top: 1px solid var(--line-soft); }
-  #gutter { width: 92px; flex-shrink: 0; position: relative; overflow: hidden; background: #fbfbfc; border-right: 1px solid var(--line-soft); }
+  /* --------------------------------------------------------- the doc */
+  #docTools { display: flex; align-items: center; gap: 6px; padding: 0 0 10px 96px; }
+  #docTools .spacer { flex: 1; }
+  #docCard { max-width: 780px; }
+  #docwrap { display: flex; position: relative; }
+  #gutter { width: 96px; flex-shrink: 0; position: relative; overflow: hidden; }
   #gutterInner { position: absolute; inset: 0 0 auto 0; }
-  #gutterInner .g { position: absolute; left: 5px; display: flex; gap: 3px; align-items: center; }
-  /* the question number doubles as the drag handle for reordering */
+  #gutterInner .g { position: absolute; right: 12px; display: flex; gap: 5px; align-items: center; justify-content: flex-end; }
   #gutterInner .qnum {
-    min-width: 13px; text-align: center; padding: 1px 4px; font-size: 10.5px; line-height: 1.5;
-    border-radius: 6px; font-weight: 700; font-variant-numeric: tabular-nums;
-    background: var(--card); border: 1px solid var(--line); color: var(--faint);
-    cursor: grab; user-select: none;
+    font-size: 12px; font-weight: 700; color: var(--ink3); font-variant-numeric: tabular-nums;
+    padding: 2px 4px; border-radius: 6px; cursor: grab; user-select: none;
   }
   #gutterInner .qnum:active { cursor: grabbing; }
-  #gutterInner .g.dropHint .qnum,
-  #gutterInner .g.dropHint .chip { border-color: var(--acc); background: var(--acc-soft); color: var(--acc); }
-  #gutterInner button {
-    padding: 1px 5px; font-size: 11px; line-height: 1.4; border-radius: 6px;
-    background: var(--card); border-color: var(--line); color: var(--faint);
+  #gutterInner .g.dropHint .qnum, #gutterInner .g.dropHint .chip { outline: 2px solid var(--gold); outline-offset: 1px; }
+  /* the correct-answer mark: a filled ink circle when it counts */
+  #gutterInner button.mark {
+    width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--hair2);
+    display: grid; place-items: center; font-size: 12px; line-height: 1; color: transparent; background: none;
   }
-  #gutterInner button.on { border-color: var(--acc-line); color: var(--acc); background: var(--acc-soft); }
-  #gutterInner button.off { border-color: #f3d9b0; color: var(--warn); background: #fdf6ea; }
+  #gutterInner button.mark:hover { border-color: var(--ink2); }
+  #gutterInner button.mark.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  /* T/F and on/off pills for the carried sections */
+  #gutterInner button:not(.mark) {
+    padding: 2px 7px; font-size: 11.5px; font-weight: 700; line-height: 1.5; border-radius: 999px;
+    background: var(--panel); color: var(--ink3);
+  }
+  #gutterInner button:not(.mark).on { background: var(--teal-bg); color: var(--teal); }
+  #gutterInner button:not(.mark).off { background: var(--gold-bg); color: var(--gold-ink); }
+  .chip.type, select.chip, span.chip.type {
+    appearance: none; -webkit-appearance: none;
+    font: 700 11.5px/1.5 inherit; letter-spacing: .01em; text-transform: capitalize;
+    padding: 2px 8px; border-radius: 6px; background: var(--panel2); color: var(--ink2);
+    border: 0; max-width: 70px; width: auto; cursor: pointer;
+  }
+  select.chip:hover { background: var(--hair2); }
+  .chip.bad { background: var(--red-bg); color: var(--red); }
+  span.chip { cursor: default; }
   #editorArea { position: relative; flex: 1; min-width: 0; overflow: hidden; }
   /* The mirror IS the visible text: the textarea above it is transparent and
-     contributes only the caret and selection. Both layers share identical
-     metrics (font, padding, width), so wraps line up glyph for glyph — which
-     is why every style below changes ONLY color/background, never metrics. */
+     contributes only the caret and selection. Both share identical metrics
+     (font, weight, padding, width), so wraps line up glyph for glyph — every
+     style below changes ONLY color/background, never metrics. */
   textarea#doc, #mirror {
-    font: 450 15px/1.8 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-    padding: 14px 16px 40vh 14px;
+    font: 500 17px/1.75 'Manrope', system-ui, sans-serif;
+    /* right padding is the meter lane, so a len/limit pill never sits on text */
+    padding: 12px 84px 40vh 14px;
     white-space: pre-wrap; overflow-wrap: break-word;
   }
   textarea#doc {
-    display: block; width: 100%; height: calc(100vh - 200px); min-height: 480px; resize: vertical;
+    display: block; width: 100%; height: calc(100vh - 220px); min-height: 480px; resize: vertical;
     background: transparent; border: 0; border-radius: 0; outline: none; box-shadow: none;
-    overflow-y: auto;
-    color: transparent; caret-color: var(--text);
-    position: relative; z-index: 1;
+    overflow-y: auto; color: transparent; caret-color: var(--ink); position: relative; z-index: 1;
   }
-  textarea#doc::selection { background: rgba(4, 120, 87, 0.16); color: transparent; }
-  #mirror {
-    position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0;
-    color: #454b57;
-  }
-  /* :not(#blockHi) matters — a bare "#mirror > div" outranks "#blockHi" and
-     would drag the highlight rect back into the flow, inflating the mirror. */
-  #mirror > div:not(#blockHi) { min-height: 1.8em; }
-  #mirror .mk { color: var(--acc); }                /* #, ✓, [on], true: */
-  #mirror .mko { color: var(--warn); }              /* [off], false: */
-  #mirror .mh, #mirror .mb { color: #12151c; }      /* question text, bucket names */
-  #mirror .mchk { color: var(--acc); }              /* a checked answer's label */
-  #mirror .md { color: var(--faint); }              /* directives, (starts on), (0-20, …) */
-  #mirror .me { color: var(--err); }                /* lines the parser rejected */
-  #mirror div.sec { background: #eef1f4; color: var(--mut); border-radius: 6px; }
-  /* The block the caret is in: ONE rect behind the whole question rather
-     than a band per line, so it reads as a single card. It sits in the
-     mirror's left padding, clear of the text, and behind it (z-index -1
-     inside the mirror's own stacking context). */
+  textarea#doc::selection { background: var(--sel); color: transparent; }
+  #mirror { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0; color: var(--ink2); }
+  #mirror > div:not(#blockHi) { min-height: 1.75em; }
+  #mirror .mk { color: var(--ink3); }                /* #, ✓, [on], true: */
+  #mirror .mko { color: var(--gold-ink); }           /* [off], false: */
+  #mirror .mh, #mirror .mb { color: var(--ink); }    /* question text, bucket names */
+  #mirror .mchk { color: var(--ink); }               /* a checked answer */
+  #mirror .md { color: var(--ink3); }                /* directives */
+  #mirror .me { color: var(--red); }                 /* rejected lines */
+  #mirror div.sec { background: var(--panel2); color: var(--ink2); border-radius: 6px; }
+  /* the block the caret is in: one soft panel behind the whole question */
   #blockHi {
     position: absolute; left: 2px; right: 6px; z-index: -1;
-    background: #f2f8f4; border-left: 3px solid var(--acc);
-    border-radius: 4px 10px 10px 4px;
-    display: none;
+    background: var(--panel); border-radius: 12px; display: none;
   }
   #blockHi.on { display: block; }
-  .chip {
-    appearance: none; -webkit-appearance: none;
-    font: 700 9.5px/1.5 ui-sans-serif, system-ui, sans-serif; letter-spacing: .05em;
-    padding: 2px 5px; border-radius: 6px; text-transform: uppercase;
-    background: var(--acc-soft); color: var(--acc); border: 1px solid var(--acc-line);
-    max-width: 58px; width: auto; cursor: pointer;
-  }
-  select.chip:hover { border-color: var(--acc); }
-  .chip.bad { border-color: var(--err-line); color: var(--err); background: #fdf1f2; }
-  span.chip { cursor: default; }
-  #docHint {
-    padding: 9px 16px; border-top: 1px solid var(--line-soft);
-    color: var(--faint); font-size: 12px;
-  }
-  code { background: var(--line-soft); border-radius: 5px; padding: 1px 5px; font-size: .92em; color: var(--mut); }
-
-  /* inline shorter-phrasing suggestions (and character-limit meters) */
   #sugRail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
-  .meter {
-    position: absolute; right: 8px; pointer-events: none;
-    font: 650 10px/1.7 ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums;
-    color: var(--faint); background: rgba(255, 255, 255, 0.88);
-    border: 1px solid var(--line); border-radius: 999px; padding: 0 6px;
-  }
-  .meter.over { color: var(--err); border-color: var(--err-line); background: #fdf1f2; }
-
-  /* designed-level picker in the Details panel */
-  .lvlgrid { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
-  .lvlbtn {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 6px 7px; border-radius: 10px;
-    background: var(--card); border: 1px solid var(--line);
-    color: var(--mut); font-size: 11px; font-weight: 650; line-height: 1.2;
-  }
-  .lvlbtn:hover { border-color: var(--acc); color: var(--acc); }
-  .lvlbtn.on { border-color: var(--acc); background: var(--acc-soft); color: var(--acc); }
-  .lvlbtn canvas { width: 84px; height: 47px; border-radius: 6px; display: block; }
-  .lvlbtn.autol { justify-content: center; min-width: 64px; min-height: 74px; }
   #sugInner { position: absolute; inset: 0 0 auto 0; }
-  .sugrow { position: absolute; right: 8px; display: flex; gap: 4px; pointer-events: auto; }
-  .sugrow button {
-    padding: 2px 8px; font-size: 11.5px; line-height: 1.5; border-radius: 999px;
-    background: var(--acc-soft); border: 1px solid var(--acc-line); color: var(--acc); font-weight: 650;
+  .meter {
+    position: absolute; right: 10px; pointer-events: none; white-space: nowrap;
+    font: 700 11px/1.7 inherit; font-variant-numeric: tabular-nums;
+    color: var(--ink3); background: var(--panel); border-radius: 999px; padding: 0 7px;
   }
-  .sugrow button:hover { border-color: var(--acc); background: #d9f5e8; }
+  .meter.over { color: var(--red); background: var(--red-bg); }
+  .sugrow { position: absolute; right: 10px; display: flex; gap: 4px; pointer-events: auto; }
+  .sugrow button { padding: 2px 9px; font-size: 12px; line-height: 1.6; border-radius: 999px; background: var(--gold-bg); color: var(--gold-ink); font-weight: 700; }
+  .sugrow button:hover { filter: brightness(.95); }
   #editorArea.withSugs textarea#doc, #editorArea.withSugs #mirror { padding-right: 250px; }
 
-  /* ------------------------------------------------------- right column */
-  #rightcol { display: flex; flex-direction: column; gap: 14px; }
-  canvas#preview {
-    width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; display: block;
-  }
-  #previewCard .cardBody { padding-top: 10px; }
-  #pvRow { display: flex; gap: 8px; margin-top: 10px; }
-  #pvRow #replay { flex: 1; }
-  #previewCard.big {
-    position: fixed; z-index: 30; inset: 50% auto auto 50%;
-    transform: translate(-50%, -50%);
-    width: min(88vw, calc((100vh - 120px) * 16 / 9 + 34px));
-    box-shadow: 0 24px 80px rgba(16,18,24,.35);
-  }
-  #pvBackdrop { position: fixed; inset: 0; background: rgba(16,18,24,.45); z-index: 29; display: none; }
-  #pvBackdrop.on { display: block; }
-  #problems { font: 450 12px/1.7 ui-monospace, Menlo, monospace; color: var(--warn); white-space: pre-wrap; }
-  #problems.ok { color: var(--acc); }
-  #problems .jump { cursor: pointer; text-decoration: underline dotted; }
-  #problems .jump:hover { color: #92400e; }
+  /* the empty deck: the drafter front and centre, or start typing */
+  #empty { padding: 28px 0 0 0; max-width: 680px; }
+  #empty h1 { font-size: 32px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 6px; }
+  #empty p.lead { color: var(--ink3); margin: 0 0 22px; font-size: 16px; }
+  .hero { background: var(--panel); border-radius: 18px; padding: 22px 24px; }
+  .hero h2 { margin: 0 0 6px; font-size: 18px; }
+  .hero p { margin: 0 0 14px; color: var(--ink3); font-size: 14px; }
+  .or { text-align: center; color: var(--ink3); margin: 20px 0; font-size: 13px; font-weight: 600; }
+  #emptyWrite { font-size: 18px; font-weight: 600; color: var(--ink3); padding: 10px 14px; }
+  #emptyWrite b { color: var(--ink2); }
+  #emptyWrite:hover { background: var(--panel); color: var(--ink); }
 
-  .hint { color: var(--faint); font-size: 12px; }
-  .checkline { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
-  .checkline input { width: auto; }
+  /* ------------------------------------------------------- inspector */
+  #side { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 22px; }
+  .sec h3 { margin: 0 0 10px; font-size: 12.5px; font-weight: 700; color: var(--ink3); display: flex; align-items: center; gap: 8px; }
+  .sec h3 .spacer { flex: 1; }
+  #previewCard { position: relative; }
+  .tv { border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); background: #000; position: relative; }
+  canvas#preview { width: 100%; aspect-ratio: 16/9; background: #000; display: block; }
+  #pvRow { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
+  #pvRow button { background: rgba(0,0,0,.55); color: #fff; font-size: 12.5px; font-weight: 700; padding: 6px 10px; border-radius: 8px; backdrop-filter: blur(6px); }
+  #pvRow button:hover { background: rgba(0,0,0,.75); }
+  #previewCard.big { position: fixed; z-index: 30; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(88vw, calc((100vh - 120px) * 16 / 9)); }
+  #previewCard.big h3 { display: none; }
+  #pvBackdrop { position: fixed; inset: 0; background: rgba(10,8,20,.55); z-index: 29; display: none; }
+  #pvBackdrop.on { display: block; }
+  #detailBody select:not(.chip) { margin-bottom: 2px; }
+  .lvlgrid { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 4px; }
+  .lvlbtn {
+    display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px; border-radius: 10px;
+    border: 1.5px solid var(--hair); color: var(--ink2); font-size: 12px; font-weight: 600; line-height: 1.2;
+  }
+  .lvlbtn:hover { border-color: var(--hair2); }
+  .lvlbtn.on { border-color: var(--ink); color: var(--ink); }
+  .lvlbtn canvas { width: 84px; height: 47px; border-radius: 6px; display: block; }
+  .lvlbtn.autol { justify-content: center; min-width: 64px; min-height: 76px; }
+  #problems { font-size: 13.5px; color: var(--ink2); display: flex; flex-direction: column; gap: 6px; }
+  #problems > div { background: var(--red-bg); border-radius: 10px; padding: 9px 12px; }
+  #problems.ok { color: var(--teal); }
+  #problems.ok > div, #problems.ok { background: none; padding: 0; }
+  #problems .jump { cursor: pointer; font-weight: 700; color: var(--red); }
+  #problems .jump:hover { text-decoration: underline; }
+  .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--panel); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 18px; font-weight: 800; }
+  .stat span { font-size: 12px; color: var(--ink3); font-weight: 600; }
+  #plays .pnote { color: var(--ink3); font-size: 13px; margin: 10px 0 0; line-height: 1.5; }
 
   /* ------------------------------------------------------------ dialogs */
   dialog {
-    background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 16px;
-    width: min(720px, 90vw); box-shadow: 0 20px 60px rgba(16,18,24,.25); padding: 0;
+    background: var(--field); color: var(--ink); border: 1px solid var(--hair); border-radius: 18px;
+    width: min(720px, 92vw); box-shadow: var(--shadow); padding: 0;
   }
-  dialog::backdrop { background: rgba(16,18,24,.4); }
-  dialog h2 { font-size: 17px; margin: 0 0 8px; }
-  .packrow {
-    display: flex; gap: 10px; align-items: center; padding: 8px 10px; margin-bottom: 6px;
-    background: var(--bg); border: 1px solid transparent; border-radius: 10px;
-  }
-  .packrow:hover { border-color: var(--line); }
-  .packrow .t { flex: 1; font-weight: 600; font-size: 13.5px; }
-  .packrow .sub { color: var(--faint); font-size: 12px; }
-  .packsHead {
-    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--faint); font-weight: 750; margin: 14px 0 8px;
-  }
+  dialog::backdrop { background: rgba(10,8,20,.5); }
+  dialog .dlgBody { padding: 22px 24px 20px; }
+  dialog h2 { font-size: 20px; font-weight: 800; margin: 0 0 6px; }
+  dialog .dlgActions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .packrow { display: flex; gap: 10px; align-items: center; padding: 9px 12px; margin-bottom: 6px; background: var(--panel); border-radius: 10px; }
+  .packrow .t { flex: 1; font-weight: 700; font-size: 14px; }
+  .packrow .sub { color: var(--ink3); font-size: 12.5px; }
+  .packrow button { padding: 6px 10px; font-size: 13px; font-weight: 700; }
+  .packrow button.primary { background: var(--ink); color: var(--paper); }
+  .packsHead { font-size: 12.5px; color: var(--ink3); font-weight: 700; margin: 14px 0 8px; }
+  /* the answer key: every question with its correct answers, before download */
+  #keyBody { max-height: 56vh; overflow: auto; margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+  .keyq { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: baseline; font-size: 14.5px; }
+  .keyq .n { color: var(--ink3); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .keyq .k { color: var(--ink2); margin-top: 2px; }
+  .keyq .k b { color: var(--ink); }
+  .keyWarn { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin-top: 8px; }
   #toast {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
-    max-width: min(680px, 92vw); z-index: 40; cursor: pointer;
-    background: var(--acc-soft); border: 1px solid var(--acc-hover); color: #065f46;
-    border-radius: 10px; padding: 11px 16px; font-size: 13.5px; font-weight: 550;
-    box-shadow: 0 8px 28px rgba(16,18,24,.16); display: none;
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: min(680px, 92vw); z-index: 40; cursor: pointer;
+    background: var(--ink); color: var(--paper); border-radius: 12px; padding: 12px 16px; font-size: 14px; font-weight: 600;
+    box-shadow: var(--shadow); display: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .btn, .chip, .lvlbtn, #gutterInner button, .packrow { transition: background-color .15s, color .15s, border-color .15s; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>PACK STUDIO</h1>
-  <span class="sub">type the pack as a document — nothing leaves your browser until you export</span>
-  <span class="spacer"></span>
-  <a class="guide" href="../training/">Writer's guide ↗</a>
-  <span class="divider"></span>
-  <button id="aiShorten" class="small ai" title="AI suggests shorter phrasings — you pick" disabled>✨ Shorter phrasings…</button>
-  <button id="aiDraft" class="small ai">✨ Draft from notes…</button>
-  <span class="divider"></span>
-  <button id="packsBtn" class="small ghost">Packs…</button>
-  <button id="newPack" class="small ghost">New</button>
-  <button id="openFile" class="small ghost">Open…</button>
-  <button id="pasteJson" class="small ghost">Paste JSON</button>
-  <button id="copyJson" class="small ghost">Copy JSON</button>
-  <button id="download" class="primary">Download pack.json</button>
-</header>
+<div id="top">
+  <div class="wordmark">PLATFORMS <small>Studio</small></div>
+  <div id="titleWrap">
+    <input type="text" id="packName" placeholder="Untitled deck" autocomplete="off" spellcheck="false" aria-label="deck name">
+    <div class="popAnchor">
+      <button id="settingsBtn" type="button" title="how it's played, theme, seconds to answer">
+        <span class="chip" id="chipMode">Free-for-all</span><span class="chip" id="chipTheme">blanc</span><span class="chip" id="chipTime">12 s to answer</span>
+      </button>
+      <div class="pop" id="settingsPop" hidden>
+        <label>How it's played</label>
+        <div class="seg"><button id="modeSolo" type="button">Free-for-all</button><button id="modeTeams" type="button">Teams</button></div>
+        <label>Sky theme</label>
+        <select id="packTheme"></select>
+        <label>Seconds to answer</label>
+        <input type="number" id="packAnswerMs" min="5" max="60" step="1" value="12">
+      </div>
+    </div>
+  </div>
+  <div id="actions">
+    <span class="chip ok" id="savedChip" title="drafts autosave in this browser">Saved</span>
+    <button class="btn primary" id="finish">Finish<span class="pill" id="finishPill" hidden>0</span></button>
+    <div class="popAnchor">
+      <button class="btn icon" id="moreBtn" type="button" title="open, decks, paste, copy">···</button>
+      <div class="pop" id="morePop" hidden>
+        <button id="packsBtn" type="button">Decks…</button>
+        <button id="newPack" type="button">New deck</button>
+        <button id="openFile" type="button">Open a file…</button>
+        <hr>
+        <button id="pasteJson" type="button">Paste JSON…</button>
+        <button id="copyJson" type="button">Copy JSON</button>
+        <hr>
+        <a class="guide" href="/client/training/" target="_blank" rel="noopener">Writer's guide ↗</a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <main>
   <section id="center">
-    <div class="card" id="packBar">
-      <div class="fields">
-      <div class="f cover">
-        <label for="coverTile">Cover</label>
-        <div class="coverWrap">
-          <button type="button" id="coverTile" title="the picture this deck wears in the lobby deck list">
-            <span class="ph">🖼</span>
-          </button>
-          <button type="button" id="coverClear" title="remove the cover" hidden>×</button>
+    <div id="docTools">
+      <button id="addQ" class="btn quiet small">+ Question</button>
+      <button id="addRange" class="btn ghost small">+ Range</button>
+      <button id="addSort" class="btn ghost small">+ Sort</button>
+      <span class="spacer"></span>
+      <button id="aiShorten" class="btn ghost small" title="AI suggests shorter phrasings — you pick" disabled>✨ Shorter phrasings…</button>
+      <button id="aiDraft" class="btn ghost small">✨ Draft from notes…</button>
+    </div>
+    <div id="docCard">
+      <div id="empty" hidden>
+        <h1>New deck</h1>
+        <p class="lead">Type it, or let the drafter start from your notes. Nothing leaves your browser until you finish.</p>
+        <div class="hero">
+          <h2>Draft from your notes ✨</h2>
+          <p>Paste lecture notes, a handout, a list of facts — you get formatted questions to edit. Answers are only marked correct when your notes say so.</p>
+          <button class="btn primary" id="emptyDraft">Draft from notes…</button>
+        </div>
+        <div class="or">— or start typing —</div>
+        <button id="emptyWrite"><b>#</b> Your first question…</button>
+      </div>
+      <div id="docwrap">
+        <div id="gutter"><div id="gutterInner"></div></div>
+        <div id="editorArea">
+          <textarea id="doc" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+          <div id="sugRail"><div id="sugInner"></div></div>
+          <div id="mirror" aria-hidden="true"><div id="blockHi"></div></div>
         </div>
       </div>
-      <div class="f name">
-        <label for="packName">Pack name</label>
-        <input type="text" id="packName" placeholder="Cardiology night">
-      </div>
-      <div class="f theme">
-        <label for="packTheme">Theme</label>
-        <select id="packTheme"></select>
-      </div>
-      <div class="f time">
-        <label for="packAnswerMs">Answer (s)</label>
-        <input type="number" id="packAnswerMs" min="5" max="60" step="1" value="12">
-      </div>
-      <div class="f mode">
-        <label>How it's played</label>
-        <div class="modeSeg">
-          <button id="modeSolo" type="button" title="everyone plays for themselves">Free-for-all</button>
-          <button id="modeTeams" type="button" title="players pick a team on their phone and score together">Teams</button>
+    </div>
+  </section>
+
+  <aside id="side">
+    <div class="sec" id="previewCard">
+      <h3><span id="pvLabel">Live preview</span><span class="spacer"></span><span class="hint">the real game engine</span></h3>
+      <div class="tv">
+        <canvas id="preview" width="1920" height="1080"></canvas>
+        <div id="pvRow">
+          <button id="replay">▶ Replay</button>
+          <button id="pvExpand" title="expand the preview (Esc closes)">⛶</button>
         </div>
       </div>
+    </div>
+    <div class="sec">
+      <h3 id="detailTitle">This question</h3>
+      <div id="detailBody"><span class="hint">Click into a question in the doc.</span></div>
+    </div>
+    <div class="sec">
+      <h3>Problems</h3>
+      <div id="problems" class="ok">No problems — this deck loads clean.</div>
+    </div>
+    <div class="sec">
+      <h3>This deck</h3>
+      <div class="summary">
+        <div class="stat"><b id="statCount">0</b><span>questions</span></div>
+        <div class="stat"><b id="statTime">—</b><span>of play</span></div>
       </div>
       <div id="plays"></div>
     </div>
-
-  <div class="card" id="docCard">
-    <div class="cardHead" id="docHead" style="padding-bottom:12px">
-      <h2>The document</h2>
-      <span class="headHint hint"># starts a question · answers on their own lines</span>
-      <button id="addQ" class="small primary">+ Question</button>
-      <button id="addRange" class="small ghost">+ Range</button>
-      <button id="addSort" class="small ghost">+ Sort</button>
-    </div>
-    <div id="docwrap">
-      <div id="gutter"><div id="gutterInner"></div></div>
-      <div id="editorArea">
-        <textarea id="doc" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-        <div id="sugRail"><div id="sugInner"></div></div>
-        <div id="mirror" aria-hidden="true"><div id="blockHi"></div></div>
-      </div>
-    </div>
-    <div id="docHint">
-      Click the box beside an answer to mark it correct (or type “✓ ” / “* ”) ·
-      two marks = select-all · on a <code>#</code> line the margin chip switches the type
-      and dragging the number reorders ·
-      name, theme, timing &amp; how it's played live in the bar above
-    </div>
-  </div>
-  </section>
-
-  <aside id="rightcol">
-    <div class="card" id="previewCard">
-      <div class="cardHead">
-        <h2>Preview</h2>
-        <span class="headHint">the real game engine — plays the question your cursor is in</span>
-        <span class="spacer"></span>
-        <button id="pvExpand" class="small ghost" title="expand the preview (Esc closes)">⛶</button>
-      </div>
-      <div class="cardBody">
-        <canvas id="preview" width="1920" height="1080"></canvas>
-        <div id="pvRow">
-          <button id="replay" class="primary">▶ Replay round</button>
-        </div>
-      </div>
-    </div>
-    <div class="card" id="detailCard">
-      <div class="cardHead"><h2 id="detailTitle">Details</h2></div>
-      <div class="cardBody" id="detailBody"><span class="hint">Click into a question in the doc.</span></div>
-    </div>
-    <div class="card">
-      <div class="cardHead"><h2>Problems</h2></div>
-      <div class="cardBody"><div id="problems" class="ok">No problems — this pack loads clean.</div></div>
-    </div>
   </aside>
 </main>
-
 <div id="pvBackdrop"></div>
 
-<dialog id="packsDlg">
-  <div style="padding:20px">
-    <h2>Packs</h2>
-    <div id="packsDrafts"></div>
-    <div id="packsServer"></div>
-    <div class="row" style="margin-top:14px">
-      <button id="packsClose">Close</button>
+<dialog id="keyDlg">
+  <div class="dlgBody">
+    <h2>Answer key</h2>
+    <div class="hint">Check every key before the night — this is what the room will be scored against. It doubles as your crib sheet.</div>
+    <div id="keyWarn" class="keyWarn" hidden></div>
+    <div id="keyBody"></div>
+    <div class="dlgActions">
+      <button class="btn ghost" id="keyCancel">Back to editing</button>
+      <button class="btn primary" id="download">Download deck file</button>
     </div>
   </div>
 </dialog>
 
+<dialog id="packsDlg">
+  <div class="dlgBody">
+    <h2>Decks</h2>
+    <div id="packsDrafts"></div>
+    <div id="packsServer"></div>
+    <div class="dlgActions"><button class="btn ghost" id="packsClose">Close</button></div>
+  </div>
+</dialog>
+
 <dialog id="aiDlg">
-  <div style="padding:20px">
+  <div class="dlgBody">
     <h2>Draft questions from your notes</h2>
-    <p class="hint" style="margin:0 0 10px">
-      Paste rough questions, lecture notes, or a list of facts — any format.
-      The AI writes them into the document for your review. It only marks an
-      answer correct when your notes say so; everything else is left for you
-      to click.
-    </p>
+    <div class="hint" style="margin-bottom:10px">Paste anything — lecture notes, a handout, half-written questions. The drafter formats them; it only marks an answer correct when your notes say so, and everything lands in the editor as ordinary text for you to check.</div>
     <textarea id="aiNotes" rows="12" style="width:100%" placeholder="e.g.
-- max daily acetaminophen is 4g (make this a range question)
-- CURB-65 components: confusion, urea >7, RR≥30, SBP<90, age≥65
-- a few true/false myths for the finale…"></textarea>
-    <label>Instructions (optional)</label>
+Aspirin overdose → respiratory alkalosis + anion-gap acidosis
+Max daily acetaminophen 3-4 g
+…"></textarea>
+    <label>What do you want?</label>
     <input type="text" id="aiInstructions" autocomplete="off" spellcheck="false" placeholder="about 10 questions, mostly multiple choice, one sort">
-    <div class="row" style="margin-top:8px">
-      <div class="checkline"><input type="radio" name="aiMode" id="aiReplace" checked><span>Replace the document</span></div>
-      <div class="checkline"><input type="radio" name="aiMode" id="aiAppend"><span>Append to it</span></div>
-    </div>
+    <div class="checkline"><input type="radio" name="aiMode" id="aiReplace" checked><span>Replace the document</span></div>
+    <div class="checkline"><input type="radio" name="aiMode" id="aiAppend"><span>Append to it</span></div>
     <div id="aiCodeRow" style="display:none">
-      <label>Passcode</label>
+      <label>Drafting passcode</label>
       <input type="text" id="aiCode" name="ai-access-code" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" placeholder="ask the host for the drafting passcode">
     </div>
-    <div class="row" style="margin-top:12px">
-      <button id="aiGo" class="primary">Draft</button>
-      <button id="aiCancel">Cancel</button>
+    <div class="dlgActions">
+      <button class="btn ghost" id="aiCancel">Cancel</button>
+      <button class="btn primary" id="aiGo">Draft</button>
     </div>
     <div class="hint" id="aiStatus" style="margin-top:8px"></div>
   </div>
 </dialog>
 
 <dialog id="pasteDlg">
-  <div style="padding:20px">
-    <h2>Paste pack JSON</h2>
+  <div class="dlgBody">
+    <h2>Paste deck JSON</h2>
     <textarea id="pasteBox" rows="14" style="width:100%"></textarea>
-    <div class="row" style="margin-top:12px">
-      <button id="pasteGo" class="primary">Import</button>
-      <button id="pasteCancel">Cancel</button>
+    <div class="dlgActions">
+      <button class="btn ghost" id="pasteCancel">Cancel</button>
+      <button class="btn primary" id="pasteGo">Import</button>
     </div>
   </div>
 </dialog>

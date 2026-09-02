@@ -17,7 +17,7 @@ import { LIMITS, PACK_THEMES, validatePack } from '../../shared/pack-validate.js
 import { STEP_MS, MAX_FRAME_DT_MS, MAX_STEPS_PER_FRAME } from '../../shared/tuning.js';
 import { createWorld } from '../../sim/world.js';
 import { buildCustomArena } from '../../sim/levels.js';
-import { PHASE, configureControlRounds, createGame, startGame, stepRound } from '../../sim/round.js';
+import { PHASE, configureControlRounds, createGame, startGame, stepRound, INTRO_MS, LOCK_MS, REVEAL_MS, SCORE_MS } from '../../sim/round.js';
 import { createShowdown, stepShowdown } from '../../sim/showdown.js';
 import { setTheme } from '../display/themes.js';
 import { render } from '../display/render.js';
@@ -126,7 +126,9 @@ function setText(next, opts = {}) {
       ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName);
     const scroll = doc.scrollTop;
     let done = false;
-    if (!fieldFocused) {
+    // The undo-preserving path needs a rendered, focusable textarea; while
+    // the empty-deck hero has it hidden, plain assignment is the only path.
+    if (!fieldFocused && doc.offsetParent !== null) {
       const cur = doc.value;
       let s = 0;
       while (s < cur.length && s < next.length && cur[s] === next[s]) s++;
@@ -331,7 +333,7 @@ function renderGutter(vproblems) {
       // Select-all is a teams question, so in a free-for-all deck the checks
       // behave like radio buttons: marking one clears the rest, and a second
       // correct answer simply cannot be produced by clicking.
-      mk(l.checked ? '✓' : '☐', l.checked ? 'on' : '', () => setText(
+      mk(l.checked ? '✓' : '', l.checked ? 'mark on' : 'mark', () => setText(
         meta.mode === 'teams' ? toggleCheck(docText, i) : setOnlyCheck(docText, parsed, i)
       ));
     } else if (l.kind === 'statement') {
@@ -435,7 +437,7 @@ function renderProblems(vproblems) {
   el.replaceChildren();
   if (!parsed.problems.length && !vproblems.length) {
     el.className = 'ok';
-    el.textContent = 'No problems — this pack loads clean.';
+    el.textContent = 'No problems — this deck loads clean.';
     return;
   }
   el.className = '';
@@ -467,12 +469,12 @@ function renderPanel() {
   body.replaceChildren();
   const b = parsed.blocks[caretIx];
   if (!b) {
-    $('detailTitle').textContent = 'Details';
+    $('detailTitle').textContent = 'This question';
     body.innerHTML = '<span class="hint">Click into a question in the doc.</span>';
     return;
   }
   $('detailTitle').textContent =
-    b.bucket === 'deck' ? 'Deck question' : b.bucket === 'control' ? 'Control Room case' : 'Showdown statement';
+    b.bucket === 'deck' ? 'This question' : b.bucket === 'control' ? 'Control Room case' : 'Showdown statement';
 
   if (b.bucket === 'showdown') {
     const h = document.createElement('div');
@@ -581,7 +583,7 @@ function renderPanel() {
   }
   const note = document.createElement('div');
   note.className = 'hint';
-  note.textContent = 'The exported pack references the FILENAME only — send the image file along; the host drops it in questions/images/.';
+  note.textContent = 'The exported deck references the FILENAME only — send the image file along; the host drops it in questions/images/.';
   body.appendChild(note);
 
   dangerDelete(body, b, 'Delete question');
@@ -833,39 +835,6 @@ function syncPackCard() {
   const teams = meta.mode === 'teams';
   $('modeSolo').classList.toggle('on', !teams);
   $('modeTeams').classList.toggle('on', teams);
-  syncCoverTile();
-}
-
-/**
- * The cover tile: this session's own pixels when the file was picked here,
- * otherwise the host's copy through /qimg (a Studio served by our node
- * server can show the cover of a pack it just opened). A cover named by a
- * pack whose file is not on this host falls back to the placeholder — the
- * name still exports, so that is honest rather than broken.
- */
-function syncCoverTile() {
-  const tile = $('coverTile');
-  const name = meta.cover;
-  $('coverClear').hidden = !name;
-  tile.title = name
-    ? `${name} — click to replace`
-    : 'the picture this deck wears in the lobby deck list';
-  const src = name ? localImages.get(name) ?? `/qimg/${encodeURIComponent(name)}` : '';
-  if (tile.dataset.src === src) return;
-  tile.dataset.src = src;
-  tile.replaceChildren();
-  if (!src) {
-    const ph = document.createElement('span');
-    ph.className = 'ph';
-    ph.textContent = '🖼';
-    tile.appendChild(ph);
-    return;
-  }
-  const img = document.createElement('img');
-  img.alt = name;
-  img.onerror = () => { tile.dataset.src = ''; syncCoverTile(); };
-  img.src = src;
-  tile.appendChild(img);
 }
 
 // ------------------------------------------------------------------ refresh
@@ -893,6 +862,7 @@ function refresh(opts = {}) {
   renderProblems(vproblems);
   renderPlays();
   syncPackCard();
+  syncChrome(vproblems);
   $('aiShorten').disabled = !parsed.blocks.length;
   if (!opts.keepPanel) renderPanel();
   restartPreview();
@@ -929,6 +899,7 @@ const emptyRoster = new Map();
 
 /** Rebuild the preview run from the caret block (first deck question otherwise). */
 function restartPreview() {
+  syncPvLabel();
   pvShowdown = null;
   pvWorld = createWorld([]);
   const { pack } = validated();
@@ -1139,23 +1110,6 @@ const setMode = (/** @type {'solo'|'teams'} */ m) => {
     toast(`${multis} question${multis === 1 ? ' has' : 's have'} more than one correct answer. Select-all is a teams question — each one now needs a single check, or switch back to Teams.`);
   }
 };
-// The cover is a picture the PACK wears, so it is a pack-bar button like
-// the mode segment — never a line in the document.
-$('coverTile').onclick = () => {
-  const inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = '.png,.jpg,.jpeg,.webp,.svg';
-  inp.onchange = () => {
-    const f = inp.files?.[0];
-    if (!f) return;
-    localImages.set(f.name, URL.createObjectURL(f));
-    meta.cover = f.name;
-    metaChanged();
-    toast('The exported pack references the FILENAME only — send the image file along; the host drops it in questions/images/.');
-  };
-  inp.click();
-};
-$('coverClear').onclick = () => { meta.cover = ''; metaChanged(); };
 $('modeSolo').onclick = () => setMode('solo');
 $('modeTeams').onclick = () => setMode('teams');
 $('packAnswerMs').oninput = () => {
@@ -1175,9 +1129,11 @@ $('download').onclick = () => {
   const blob = new Blob([JSON.stringify(exportable(), null, 2) + '\n'], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const safe = String(meta.pack).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pack';
+  const safe = String(meta.pack).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
   a.download = `${safe}.json`;
   a.click();
+  $('keyDlg').close();
+  toast(`Downloaded ${safe}.json — send it to your host, who drops it in the game's questions folder.`);
 };
 $('copyJson').onclick = async () => {
   await navigator.clipboard.writeText(JSON.stringify(exportable(), null, 2));
@@ -1269,7 +1225,7 @@ async function openPacksDlg() {
   if (!names.length) {
     const s = document.createElement('div');
     s.className = 'hint';
-    s.textContent = 'Nothing yet — everything you write is saved here automatically, under its pack name.';
+    s.textContent = 'Nothing yet — everything you write is saved here automatically, under its deck name.';
     draftsHolder.appendChild(s);
   }
   for (const name of names) {
@@ -1299,8 +1255,8 @@ async function openPacksDlg() {
           const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
           saveDraftEntry();
           adoptDoc(serializeDoc(pack));
-          toast(`Opened "${pk.name}" from the server — your edits stay in this browser until you download and send the file.`);
-        } catch { toast('Could not load that pack from the server.'); }
+          toast(`Opened "${pk.name}" from the server — your edits stay in this browser until you finish and send the file.`);
+        } catch { toast('Could not load that deck from the server.'); }
       }, null);
     }
   } catch {
@@ -1321,11 +1277,11 @@ $('packsBtn').onclick = () => void openPacksDlg();
 $('packsClose').onclick = () => $('packsDlg').close();
 
 $('newPack').onclick = () => {
-  if (!window.confirm('Start a new pack? The current one stays available under Packs…')) return;
+  if (!window.confirm('Start a new deck? The current one stays available under Decks…')) return;
   saveDraftEntry();
-  // Three worked questions to edit over beats an empty page: adoptDoc
-  // resets the arena pins and carried sections along the way.
-  adoptDoc(serializeDoc({ ...SAMPLE, pack: 'New pack' }));
+  // Empty on purpose: the empty-deck hero offers the drafter or a first
+  // question. adoptDoc resets the arena pins and carried sections.
+  adoptDoc(serializeDoc({ ...SAMPLE, pack: 'Untitled deck', questions: [] }));
 };
 // The preview, near-fullscreen: the canvas already renders at 1920x1080,
 // so scaling up is free sharpness. Esc or the backdrop closes.
@@ -1606,6 +1562,123 @@ $('aiShorten').onclick = async () => {
   toast(`✨ ${sugs.length} suggestion${sugs.length === 1 ? '' : 's'} beside your text — click one to use it, ✕ to clear the rest.`);
   refresh({ keepPanel: true });
 };
+
+// ------------------------------------------------------------------ chrome
+//
+// The furniture around the editor: the settings popover under the title
+// chips, the overflow menu, the Finish flow (answer key first, then the
+// download), the empty deck's hero, and the live labels — saved, problem
+// count on Finish, the deck's runtime.
+
+const POPS = [['settingsPop', 'settingsBtn'], ['morePop', 'moreBtn']];
+const closePops = () => { for (const [p] of POPS) $(p).hidden = true; };
+for (const [pop, btn] of POPS) {
+  $(btn).onclick = (/** @type {MouseEvent} */ ev) => {
+    ev.stopPropagation();
+    const open = $(pop).hidden;
+    closePops();
+    $(pop).hidden = !open;
+  };
+  $(pop).addEventListener('click', (/** @type {MouseEvent} */ ev) => ev.stopPropagation());
+}
+document.addEventListener('click', closePops);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePops(); });
+for (const el of $('morePop').querySelectorAll('button')) el.addEventListener('click', closePops);
+
+$('emptyDraft').onclick = () => $('aiDraft').click();
+$('emptyWrite').onclick = () => {
+  addBlock('deck', 'choice');
+  // The template separates itself from what came before with a blank line;
+  // on an empty deck that is a blank first line, so drop it.
+  if (docText.startsWith('\n')) setText(docText.replace(/^\n+/, ''), { line: 0 });
+};
+
+/** How long the deck plays, from the phase clocks the game actually uses. */
+function runtimeLabel(/** @type {any[]} */ qs) {
+  let ms = 0;
+  for (const q of qs) {
+    if (q.type === 'sort') ms += INTRO_MS + (q.items?.length ?? 0) * (q.itemMs ?? 6000) + SCORE_MS;
+    else ms += INTRO_MS + meta.answerMs + LOCK_MS + REVEAL_MS + SCORE_MS;
+  }
+  return ms < 60000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms / 60000)} min`;
+}
+
+/** @type {boolean | null} */
+let emptyShown = null;
+/** @param {string[]} vproblems */
+function syncChrome(vproblems) {
+  const count = parsed.problems.length + vproblems.length;
+  const pill = $('finishPill');
+  pill.hidden = count === 0;
+  pill.textContent = String(count);
+  $('chipMode').textContent = meta.mode === 'teams' ? 'Teams' : 'Free-for-all';
+  $('chipTheme').textContent = meta.theme;
+  $('chipTime').textContent = `${Math.round(meta.answerMs / 1000)} s to answer`;
+  const qs = /** @type {any[]} */ (parsed.raw.questions);
+  $('statCount').textContent = String(qs.length);
+  $('statTime').textContent = qs.length ? `≈ ${runtimeLabel(qs)}` : '—';
+  $('savedChip').textContent = 'Saved';
+  const empty = !parsed.blocks.length && !docText.trim();
+  if (emptyShown !== empty) {
+    emptyShown = empty;
+    $('empty').hidden = !empty;
+    $('docwrap').hidden = empty;
+    // The editor was measured while hidden; measure again now it shows.
+    if (!empty) requestAnimationFrame(() => refresh({ keepPanel: true }));
+  }
+}
+
+function syncPvLabel() {
+  const b = parsed.blocks[caretIx] ?? parsed.blocks.find((x) => x.bucket === 'deck');
+  $('pvLabel').textContent = b && b.bucket === 'deck' ? `Live preview · question ${b.ix + 1}` : 'Live preview';
+}
+
+// Finish: the answer key first — the one screen that protects the night —
+// then the download lives inside it.
+$('finish').onclick = () => {
+  const { pack, problems } = validated();
+  const count = parsed.problems.length + problems.length;
+  const warn = $('keyWarn');
+  warn.hidden = !count;
+  warn.textContent = count
+    ? `${count} problem${count === 1 ? '' : 's'} flagged — the deck still loads, but flagged text is cut or skipped in the game.`
+    : '';
+  const body = $('keyBody');
+  body.replaceChildren();
+  /** @type {any[]} */ (pack.questions).forEach((q, i) => {
+    const row = document.createElement('div');
+    row.className = 'keyq';
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = String(i + 1);
+    const t = document.createElement('div');
+    const text = document.createElement('div');
+    text.textContent = q.text;
+    const k = document.createElement('div');
+    k.className = 'k';
+    if (q.type === 'range') {
+      k.innerHTML = `<b>${q.answer[0]}–${q.answer[1]}</b>${q.unit ? ' ' + q.unit : ''}`;
+    } else if (q.type === 'sort') {
+      k.innerHTML = q.buckets.map((/** @type {string} */ bk, /** @type {number} */ bi) =>
+        `<b>${bk}</b>: ${q.items.filter((/** @type {any} */ it) => it.bucket === bi).map((/** @type {any} */ it) => it.label).join(', ')}`
+      ).join('<br>');
+    } else {
+      const idx = Array.isArray(q.correct) ? q.correct : [q.correct];
+      k.innerHTML = idx.map((/** @type {number} */ c) => `<b>${q.answers[c]}</b>`).join(' · ');
+    }
+    t.append(text, k);
+    row.append(n, t);
+    body.appendChild(row);
+  });
+  if (!pack.questions.length) {
+    const h = document.createElement('div');
+    h.className = 'hint';
+    h.textContent = 'No questions yet.';
+    body.appendChild(h);
+  }
+  $('keyDlg').showModal();
+};
+$('keyCancel').onclick = () => $('keyDlg').close();
 
 // boot
 adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
