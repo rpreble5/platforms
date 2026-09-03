@@ -23,21 +23,52 @@
         "Mercury breath mints",
         "Leech lollipops"
       ],
-      "correct": [0, 1, 2]
+      "correct": [
+        0,
+        1,
+        2
+      ]
     },
     {
       "type": "sort",
       "text": "Prescription drug, or Star Wars character?",
-      "buckets": ["Prescription drug", "Star Wars character"],
+      "buckets": [
+        "Prescription drug",
+        "Star Wars character"
+      ],
       "items": [
-        { "label": "Xarelto", "bucket": 0 },
-        { "label": "Ponda Baba", "bucket": 1 },
-        { "label": "Farxiga", "bucket": 0 },
-        { "label": "Kit Fisto", "bucket": 1 },
-        { "label": "Entresto", "bucket": 0 },
-        { "label": "Plo Koon", "bucket": 1 },
-        { "label": "Lumigan", "bucket": 0 },
-        { "label": "Bossk", "bucket": 1 }
+        {
+          "label": "Xarelto",
+          "bucket": 0
+        },
+        {
+          "label": "Ponda Baba",
+          "bucket": 1
+        },
+        {
+          "label": "Farxiga",
+          "bucket": 0
+        },
+        {
+          "label": "Kit Fisto",
+          "bucket": 1
+        },
+        {
+          "label": "Entresto",
+          "bucket": 0
+        },
+        {
+          "label": "Plo Koon",
+          "bucket": 1
+        },
+        {
+          "label": "Lumigan",
+          "bucket": 0
+        },
+        {
+          "label": "Bossk",
+          "bucket": 1
+        }
       ],
       "itemMs": 6000
     },
@@ -46,7 +77,10 @@
       "text": "How many bones is a newborn born with, before they fuse?",
       "min": 100,
       "max": 400,
-      "answer": [260, 310],
+      "answer": [
+        260,
+        310
+      ],
       "unit": "bones"
     },
     {
@@ -71,5 +105,8 @@
       "correct": 0,
       "layout": "reverse-pyramid"
     }
-  ]
+  ],
+  "published": {
+    "by": "Demo"
+  }
 }

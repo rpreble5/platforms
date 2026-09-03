@@ -40,7 +40,10 @@
       "text": "Charles Osborne hiccuped nonstop for the world record. How many YEARS?",
       "min": 0,
       "max": 100,
-      "answer": [60, 70],
+      "answer": [
+        60,
+        70
+      ],
       "unit": "years"
     },
     {
@@ -57,16 +60,40 @@
     {
       "type": "sort",
       "text": "Real body part, or made up?",
-      "buckets": ["Real anatomy", "Made up"],
+      "buckets": [
+        "Real anatomy",
+        "Made up"
+      ],
       "items": [
-        { "label": "Anatomical snuffbox", "bucket": 0 },
-        { "label": "Islets of Langerhans", "bucket": 0 },
-        { "label": "Duct of Flimwell", "bucket": 1 },
-        { "label": "Crypts of Lieberkühn", "bucket": 0 },
-        { "label": "Gland of Marzipan", "bucket": 1 },
-        { "label": "The antihelix", "bucket": 0 }
+        {
+          "label": "Anatomical snuffbox",
+          "bucket": 0
+        },
+        {
+          "label": "Islets of Langerhans",
+          "bucket": 0
+        },
+        {
+          "label": "Duct of Flimwell",
+          "bucket": 1
+        },
+        {
+          "label": "Crypts of Lieberkühn",
+          "bucket": 0
+        },
+        {
+          "label": "Gland of Marzipan",
+          "bucket": 1
+        },
+        {
+          "label": "The antihelix",
+          "bucket": 0
+        }
       ],
       "itemMs": 6000
     }
-  ]
+  ],
+  "published": {
+    "by": "Demo"
+  }
 }

@@ -232,5 +232,8 @@
       ],
       "itemMs": 7000
     }
-  ]
+  ],
+  "published": {
+    "by": "Demo"
+  }
 }
