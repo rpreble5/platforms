@@ -1814,6 +1814,7 @@ function showView(v, note = '') {
   $('whoChip').hidden = !who || v === 'login';
   $('whoChip').textContent = who;
   $('signOut').hidden = !requiresSignIn;
+  for (const el of document.querySelectorAll('#morePop .editorOnly')) /** @type {HTMLElement} */ (el).hidden = v !== 'editor';
   if (v === 'login') {
     $('loginError').textContent = note;
     $('loginName').value = who;
