@@ -1,4 +1,4 @@
-# Render Blueprint: the FACULTY TEST INSTANCE — not game night.
+# Render Blueprint: the FACULTY TEST INSTANCE — not the live session.
 #
 # One-time setup: render.com -> sign in with GitHub -> New -> Blueprint ->
 # pick this repository. Render reads this file, builds the free web
@@ -9,7 +9,7 @@
 #
 # The cloud hop adds ~60-150 ms to every button press — fine for one
 # person evaluating content, disqualifying for a 30-player race. Game
-# night runs on the host laptop over LAN, exactly as before.
+# session runs on the host laptop over LAN, exactly as before.
 # NOTE: this name is a REQUEST for the <name>.onrender.com subdomain —
 # onrender.com names are global across all Render users, and a taken name
 # gets a random suffix. Whatever happens, copy the real URL from the top

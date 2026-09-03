@@ -60,9 +60,9 @@ test('the theme whitelist and the ordering helper are exported for the builder',
 });
 
 test('a pack cover follows the same filename rule as a question picture', () => {
-  const good = validatePack({ cover: 'night.png', questions: [] });
-  assert.equal(good.pack.cover, 'night.png');
-  for (const bad of ['../etc/passwd', 'art/night.png', 'notes.txt', 42]) {
+  const good = validatePack({ cover: 'cover.png', questions: [] });
+  assert.equal(good.pack.cover, 'cover.png');
+  for (const bad of ['../etc/passwd', 'art/cover.png', 'notes.txt', 42]) {
     const { pack, problems } = validatePack({ cover: bad, questions: [] });
     assert.equal(pack.cover, undefined, `${bad} must not survive`);
     assert.ok(problems.some((m) => m.startsWith('cover must be a plain')));

@@ -64,7 +64,7 @@ selection, so editing one and re-picking it is the whole edit loop.
 
 **A deck is played one way, and says so**: `"mode": "solo"` for a
 free-for-all or `"mode": "teams"`. The lobby's mode tabs pick which kind of
-night it is and the list below shows only that mode's decks, so a deck is
+session it is and the list below shows only that mode's decks, so a deck is
 never played the way it was not written for. The highlighted row is the
 deck that will play — clicking a row IS the pick, there is no separate
 confirm. A deck that does not say is read from its questions — select-all
@@ -72,7 +72,7 @@ only works in teams, so a deck using one is a teams deck. Two ship:
 
 - **`mixed.json`** — free-for-all, 14 questions of general knowledge and
   medicine, one of every type a single player can answer.
-- **`showcase.json`** — teams, the demo night: a medicine + trivia mix with
+- **`showcase.json`** — teams, the demo deck: a medicine + trivia mix with
   choices, ranges, select-alls, a picture question and two lightning sorts.
   Its picture question ships with a placeholder strip: drop a de-identified
   EKG at `questions/images/your-ekg-here.png` (same filename) and the
@@ -80,7 +80,7 @@ only works in teams, so a deck using one is a teams deck. Two ship:
   session — they're board-classic, but they're the author's word.
 
 **Cover art** (dormant): a deck may carry a top-level
-`"cover": "night.png"` — a bare filename in `questions/images/`, same rules
+`"cover": "art.png"` — a bare filename in `questions/images/`, same rules
 as a question picture. The Studio no longer offers a cover control (the
 field survives in a pack that has one). The current lobby lists decks as
 text rows and does not draw covers;
@@ -98,7 +98,7 @@ on the menu while the host sets up — landing on a card squashes it, but
 jumping never changes state; every control is host-only (mouse/keyboard).
 Answer time is no longer on the lobby at all: decks carry their own
 default, and the host phone (`/host`) keeps a `Time ▸` button for cycling
-it when a night needs something different.
+it when a session needs something different.
 
 ### Drawing your own accessories (Figma → code)
 
@@ -230,7 +230,7 @@ mirrors the fiddly parts (range numbers, control steps, pacing) as
 plain fields so nobody has to memorize syntax. Line-numbered problems
 under the preview click through to the offending line.
 
-### Designing a night: the mode × type matrix
+### Designing a session: the mode × type matrix
 
 A pack has three buckets, and each bucket belongs to specific modes. When you
 write a question, this table says where it can live — the loader enforces it
@@ -335,7 +335,7 @@ to each button press. A solo evaluator barely notices — the sim and
 rendering run at 120 Hz in their own browser; only their taps commute
 through the cloud — but that number is disqualifying for thirty people
 racing platforms for speed bonuses. One sentence to repeat to everyone:
-**the test URL is the test drive; game night runs on the host laptop over
+**the test URL is the test drive; the live session runs on the host laptop over
 LAN.**
 
 One-time setup (repo owner): [render.com](https://render.com) → sign in
@@ -344,7 +344,7 @@ with GitHub → **New → Blueprint** → pick this repository. Render reads
 every push** to the branch it names. Then copy the service's URL **from
 the top of its page in the Render dashboard** and share
 `<that-url>/display/` with faculty; phones join by scanning the QR on
-that page, exactly like game night. (Don't type the URL from memory:
+that page, exactly like the live session. (Don't type the URL from memory:
 onrender.com subdomains are global across all Render users, so the name
 in render.yaml may come back with a random suffix — and a guessed URL
 can land on a stranger's app entirely.)
@@ -356,7 +356,7 @@ Honest small print:
 - There is ONE room. Two faculty testing at the same moment will see each
   other's avatars. Take turns, or treat it as a feature and wave.
 - Anyone holding the URL can technically fetch pack answer keys from the
-  API, so share it with faculty only — and never load the real night's
+  API, so share it with faculty only — and never load the real session's
   pack on the test instance.
 - The `/host` page works there too: the key is the `HOST_KEY` environment
   variable in the Render dashboard.
@@ -629,7 +629,7 @@ TV, i.e. the terms that dominate:
 4. Press jump. Count frames from thumb contact to the square going white.
    ÷ 240 = seconds. Each frame is 4.17 ms.
 
-Run it four times on night one: **Game Mode on/off × host wired/wireless.** The
+Run it four times at the first session: **Game Mode on/off × host wired/wireless.** The
 Game Mode delta alone will settle every architecture argument you might have.
 
 > The phone's own white flash is a convenience marker, not the reference — the
@@ -673,7 +673,7 @@ Try, best first:
 
 ### When to bring your own router
 
-Decide from measurements, not on the night:
+Decide from measurements, not at the session:
 
 - Isolation probe fails and IT can't help → no choice.
 - p99 input RTT > 150 ms, or loss > 1%, at 30 clients under load.
@@ -803,7 +803,7 @@ setup-card preview draws with the exact function the projector uses.
 **inlined into the phone page at boot** with its `export` keywords stripped — so
 the phone loads no modules and the wire format still can't drift. The phone being
 one gzipped file is a latency decision: thirty phones loading at once is the worst
-congestion moment of the night.
+congestion moment of the session.
 
 ## Commands
 

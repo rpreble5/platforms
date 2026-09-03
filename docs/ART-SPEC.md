@@ -104,8 +104,8 @@ license alongside as `OFL-Baloo2.txt`. The 800s the draw code asks for
 render true — one file serves every weight.
 
 **Self-hosted on purpose — don't link Google Fonts.** There's no internet at
-the venue, so a CDN link would silently fall back to the system face on the
-night. To swap the face, replace the file at this exact path (keep the
+the venue, so a CDN link would silently fall back to the system face there.
+To swap the face, replace the file at this exact path (keep the
 license of whatever you ship); the `@font-face` is already wired up and the
 display waits for the font before its first frame.
 

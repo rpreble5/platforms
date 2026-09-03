@@ -207,7 +207,7 @@ for (const r of results) {
 }
 
 // The triggers from the plan, evaluated for you rather than left as a judgement
-// call on the night.
+// call at the venue.
 const worst = results[results.length - 1];
 console.log('');
 

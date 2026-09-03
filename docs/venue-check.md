@@ -1,7 +1,7 @@
 # Venue check
 
 Run this **before the event**, not on the day. Everything here is cheap; the
-expensive thing is discovering on the night that the network blocks the game
+expensive thing is discovering at the session that the network blocks the game
 entirely.
 
 Write the numbers in. The whole point of the prototype is that the router
@@ -165,7 +165,7 @@ Worth 30 seconds at the start; each of these is a support call you won't get.
 
 ---
 
-## 6. On the night
+## 6. At the session
 
 - ☐ Host plugged into power, not just charged.
 - ☐ Display page open and fullscreen **before** anyone joins.

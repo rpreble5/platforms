@@ -24,7 +24,7 @@ const dev = process.argv.includes('--watch') || process.env.NODE_ENV !== 'produc
 // A cloud test instance (e.g. Render) fronts this server with HTTPS on a
 // public hostname — the LAN address in the QR would be meaningless there.
 // PUBLIC_URL (or Render's injected RENDER_EXTERNAL_URL) wins when present;
-// game night on a laptop sets neither and keeps the LAN behavior.
+// a session on a laptop sets neither and keeps the LAN behavior.
 const publicUrl = process.env.PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL;
 const lanAddr = bestLanAddress();
 const joinUrl = publicUrl
@@ -124,7 +124,7 @@ server.listen(PORT, HOST, () => {
   console.log('');
 
   // Behind a public URL the container's interface list is noise, and the
-  // wireless warnings below are about party-night LAN quality — skip both.
+  // wireless warnings below are about the venue's LAN quality — skip both.
   if (publicUrl) return;
 
   const others = lanAddresses().filter((a) => a.address !== addr?.address);

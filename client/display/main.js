@@ -351,7 +351,7 @@ const menu = {
   hover: null,
   /** Which mode's shelf the deck card is paging through. A filter, not a
    *  second owner of the mode: it only ever offers decks written for that
-   *  mode, and the deck that loads still decides how the night is played.
+   *  mode, and the deck that loads still decides how the session is played.
    *  @type {'solo'|'teams'} */
   browse: 'solo',
   /** The deck you were last on in each mode, so switching the segment back

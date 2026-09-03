@@ -18,4 +18,4 @@ checking the tiling. Delete it to go back to the placeholder.
 
 These load over loopback, so file size is irrelevant here. Do **not** add art to
 the phone page — thirty handsets fetching assets over contended WiFi at join
-time is the worst moment of the night.
+time is the worst moment of the session.

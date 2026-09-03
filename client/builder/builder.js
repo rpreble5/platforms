@@ -1060,7 +1060,7 @@ function adoptDoc(t, opts = {}) {
 /**
  * The starter: three questions, one of each type a free-for-all deck can
  * hold — multiple choice, lightning sort, range. It is what the Studio
- * opens with, what "Sample night" loads, and what New starts you from, so
+ * opens with, what the sample loads, and what New starts you from, so
  * there is one starter to know rather than several.
  *
  * Select-all is absent on purpose: it is a teams question (covering every
@@ -1072,7 +1072,7 @@ function adoptDoc(t, opts = {}) {
  * anything of their own.
  */
 const SAMPLE = {
-  pack: 'Sample night',
+  pack: 'Sample deck',
   theme: 'blanc',
   answerMs: 12000,
   questions: [
@@ -1737,7 +1737,7 @@ function syncPvLabel() {
   $('pvLabel').textContent = b && b.bucket === 'deck' ? `Live preview · question ${b.ix + 1}` : 'Live preview';
 }
 
-// Finish: the answer key first — the one screen that protects the night —
+// The answer key: the one screen that protects the session —
 // then the download lives inside it.
 $('finish').onclick = () => {
   const { pack, problems } = validated();

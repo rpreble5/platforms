@@ -8,7 +8,7 @@
  *
  * Format, by example:
  *
- *   pack: Cardiology night        <- front matter before the first '#'
+ *   pack: Cardiology review       <- front matter before the first '#'
  *   theme: blanc                     (pack / theme / time / order)
  *   time: 12s
  *

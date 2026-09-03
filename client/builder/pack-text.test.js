@@ -98,7 +98,7 @@ test('type inference: checks, star alias, range line, sort tag', () => {
 
 test('front matter, sections, control parens and showdown verdicts parse', () => {
   const doc = [
-    'pack: Night one',        // 1
+    'pack: Deck one',         // 1
     'theme: noir',            // 2
     'time: 9s',               // 3
     '',                       // 4
@@ -126,7 +126,7 @@ test('front matter, sections, control parens and showdown verdicts parse', () =>
   ].join('\n');
   const { raw, lines, problems } = parseDoc(doc);
   assert.deepEqual(problems, []);
-  assert.equal(raw.pack, 'Night one');
+  assert.equal(raw.pack, 'Deck one');
   assert.equal(raw.theme, 'noir');
   assert.equal(raw.answerMs, 9000);
   assert.equal(raw.controlRoom.perTeam, 2);
@@ -536,22 +536,22 @@ test('removeBlock deletes the block and its trailing blank', () => {
 });
 
 test('cover: rides the front matter like mode, and never shows in the doc', () => {
-  const { meta, text } = extractFrontMatter('pack: A\ncover: night.png\nmode: teams\n\n# Q?\n✓ a\nb');
-  assert.equal(meta.cover, 'night.png');
+  const { meta, text } = extractFrontMatter('pack: A\ncover: cover.png\nmode: teams\n\n# Q?\n✓ a\nb');
+  assert.equal(meta.cover, 'cover.png');
   assert.equal(text, '# Q?\n✓ a\nb', 'the editor is shown questions only');
 
-  assert.match(serializeDoc({ cover: 'night.png', questions: [] }), /cover: night\.png/);
+  assert.match(serializeDoc({ cover: 'cover.png', questions: [] }), /cover: cover\.png/);
   assert.doesNotMatch(serializeDoc({ questions: [] }), /cover:/); // absent unless set
 
-  assert.equal(parseDoc('cover: night.png\n\n# Q?\n✓ a\nb').raw.cover, 'night.png');
-  assert.equal(validatePack({ cover: 'night.png', questions: [] }).pack.cover, 'night.png');
+  assert.equal(parseDoc('cover: cover.png\n\n# Q?\n✓ a\nb').raw.cover, 'cover.png');
+  assert.equal(validatePack({ cover: 'cover.png', questions: [] }).pack.cover, 'cover.png');
 });
 
 test('the front-matter region ends AFTER mode and cover, not before them', () => {
   // setDirective(…, null, …) appends past the last front-matter line. When
   // frontMatterEnd stopped at time:, a new setting landed above mode/cover
   // and — worse — an existing one below them was never found to replace.
-  const doc = 'pack: A\ntime: 12s\nmode: teams\ncover: night.png\n\n# Q?\n✓ a\nb';
+  const doc = 'pack: A\ntime: 12s\nmode: teams\ncover: cover.png\n\n# Q?\n✓ a\nb';
   const withOrder = setDirective(doc, null, 'order', 'suggested');
   assert.equal(withOrder.split('\n')[4], 'order: suggested');
   assert.equal(setDirective(doc, null, 'cover', 'day.png').split('\n')[3], 'cover: day.png');

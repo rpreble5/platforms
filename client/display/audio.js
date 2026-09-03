@@ -115,7 +115,7 @@ export function tickAudio(world) {
     playNote(SCALE[degree], board ? 1 : 0.8);
   }
 
-  // Forget departed players so the maps can't grow across a long night.
+  // Forget departed players so the maps can't grow across a long session.
   if (wasGrounded.size > world.players.size + 8) {
     for (const id of wasGrounded.keys()) {
       if (!world.players.has(id)) {

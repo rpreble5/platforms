@@ -139,7 +139,7 @@ export function drawBean(cx, color, finish, w, h, shape, eyes = true, accessory 
     cx.fill();
     cx.restore();
   } else if (neon) {
-    // Night mode: the body goes almost to ink and the COLOUR moves into
+    // Dark body: it goes almost to ink and the COLOUR moves into
     // the outline, with glow's aura underneath. The only dark-bodied
     // finish — instantly findable in a crowd of light beans.
     cx.save();

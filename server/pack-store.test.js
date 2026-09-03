@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { commitToGitHub, packRev, packSlug, publishPack } from './pack-store.js';
 
-const deck = (name = 'Cardiology night') => ({
+const deck = (name = 'Cardiology review') => ({
   pack: name, theme: 'blanc', answerMs: 12000, mode: 'solo',
   questions: [{ text: 'Q?', answers: ['a', 'b'], correct: 0 }],
 });
@@ -18,7 +18,7 @@ function tmpRoot() {
 }
 
 test('slug mirrors the download filename and never traverses', () => {
-  assert.equal(packSlug('Cardiology night!'), 'cardiology-night');
+  assert.equal(packSlug('Cardiology review!'), 'cardiology-review');
   assert.equal(packSlug('../../etc/passwd'), 'etc-passwd');
   assert.equal(packSlug('   '), 'deck');
 });
@@ -26,10 +26,10 @@ test('slug mirrors the download filename and never traverses', () => {
 test('publish writes the deck with attribution and returns its rev', () => {
   const root = tmpRoot();
   const r = publishPack(root, { pack: deck(), by: '  Dr. Ada  ' });
-  assert.equal(r.file, 'cardiology-night.json');
+  assert.equal(r.file, 'cardiology-review.json');
   assert.equal(r.created, true);
   const j = JSON.parse(fs.readFileSync(path.join(root, 'questions', r.file), 'utf8'));
-  assert.equal(j.pack, 'Cardiology night');
+  assert.equal(j.pack, 'Cardiology review');
   assert.equal(j.published.by, 'Dr. Ada');
   assert.ok(Date.parse(j.published.at) > 0);
   assert.equal(r.rev, packRev(fs.readFileSync(path.join(root, 'questions', r.file), 'utf8')));

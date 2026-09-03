@@ -258,7 +258,7 @@ export function validatePack(raw) {
       // platform is a team act, and one player has one body. Flagged rather
       // than skipped or rewritten — a pack that reaches the venue with this
       // still plays (any correct platform scores), and silently dropping a
-      // question mid-game night would be worse than a noisy load.
+      // question mid-session would be worse than a noisy load.
       if (mode === 'solo') {
         problems.push(`${where}: select-all is a teams question — this deck is a free-for-all, so keep one correct answer or set the deck to teams`);
       }

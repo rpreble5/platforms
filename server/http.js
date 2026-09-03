@@ -5,7 +5,7 @@
  *
  *  - The phone page is assembled once at boot into ONE gzipped response with
  *    its CSS and JS inlined. Thirty phones loading simultaneously is the worst
- *    congestion moment of the night; it should cost one request each.
+ *    congestion moment of the session; it should cost one request each.
  *  - `shared/protocol.js` is inlined into that page with its `export` keywords
  *    stripped, so the phone and the server can never disagree about the wire
  *    format even though the phone loads no modules.
