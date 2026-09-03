@@ -151,32 +151,24 @@ until they export.
   the repo itself; if the repo is private, use `/builder` on a laptop
   instead.)
 
-The workflow: type → watch the live preview → **Finish** → check the
-answer key it shows you → **Download deck file** → send the file to the
-host, who drops it in `questions/` (plus any referenced images in
-`questions/images/`). Drafts autosave in the browser (the Saved chip
-says so); the ··· menu holds Decks (your drafts plus everything on the
-game server), Open a file, Paste JSON and Copy JSON for round-tripping
-existing packs. A new deck opens on a first-run page that offers the
-drafter or a first question; the inspector beside the document shows the
-live preview, the focused question's settings, problems, and the deck's
-question count and estimated play time.
-
-**Publishing (optional).** Finish → answer key → **Publish to the game**
-saves the deck straight into `questions/` on the server the Studio came
-from — the host laptop, or the Render test instance — so faculty never
-email a file. It is gated by the same `AI_PASSCODE` as drafting, so
-faculty need one code, and asks for a name once so the deck list can say
-who published what and when. If the server also has a
-`GITHUB_TOKEN` that can write the repository (`GITHUB_REPO`, and
-`GITHUB_BRANCH` if not the deploy branch), every publish is committed to
-`questions/` too — the repo is the database, git keeps every version — and
-`start.command` / `start.bat` pull before starting, so the venue laptop
-has everything published since last time (offline it just carries on).
-Two people on one deck can't silently overwrite each other: a publish
-sends the rev it opened, a stale one is refused, and the author chooses
-between opening the server copy and pushing through. Nothing plays
-unreviewed — the host still picks the deck in the lobby.
+The workflow: **sign in** with the faculty passcode and your name (skipped
+on a laptop that has no passcode set) → the **deck list** — every deck on
+the server, who last saved it and when → open one or start a new deck →
+type, watch the live preview → **Save**. Save writes straight to the
+server's `questions/` folder, so nobody emails a file; the answer key is
+one click away in the ··· menu (it doubles as the host's crib sheet, and
+holds the download for a copy of the page with no server). Drafts autosave
+in the browser as a safety net — leave mid-edit and the deck reopens with
+your changes — and the chip beside Save says Saved or Unsaved changes.
+Two people on one deck can't silently overwrite each other: Save sends the
+version it opened, a stale save is refused, and the author chooses between
+opening the server copy and saving over it. With a `GITHUB_TOKEN` that can
+write the repository (`GITHUB_REPO`, and `GITHUB_BRANCH` if not the deploy
+branch), every save is also committed to `questions/` — the repo is the
+database, git keeps every version — and `start.command` / `start.bat` pull
+before starting, so the venue laptop has everything saved since last time
+(offline it just carries on). Nothing plays unreviewed — the host still
+picks the deck in the lobby.
 
 **AI drafting (optional).** The Studio's "✨ Draft from notes" button
 turns pasted rough material — lecture notes, half-written questions, a

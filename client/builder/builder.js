@@ -1083,6 +1083,9 @@ const SAMPLE = {
   ],
 };
 
+/** The sample exactly as the editor holds it after boot, for the check above. */
+const SAMPLE_TEXT = extractFrontMatter(serializeDoc(SAMPLE)).text;
+
 // ------------------------------------------------------------------ wiring
 
 doc.addEventListener('input', () => { docText = doc.value; refresh({ keepPanel: false }); });
@@ -1140,9 +1143,9 @@ $('download').onclick = () => {
   const safe = String(meta.pack).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
   a.download = `${safe}.json`;
   a.click();
-  $('keyDlg').close();
-  toast(`Downloaded ${safe}.json — send it to your host, who drops it in the game's questions folder.`);
+  toast(`Downloaded ${safe}.json.`);
 };
+$('keyDownload').onclick = () => $('download').click();
 
 // ------------------------------------------------------------ publishing
 //
@@ -1153,84 +1156,71 @@ $('download').onclick = () => {
 // 409 and the author chooses — open theirs, or push through.
 
 const AUTHOR_KEY = 'packstudio-author';
-/** The text as it was last published — the Saved chip says Published while it holds. */
+/** The text as it was last saved to the server — the chip says Saved while it holds. */
 let publishedText = '';
 
-/** @param {{force?: boolean}} [o] */
-async function publish(o = {}) {
-  const status = $('pubStatus');
-  const by = $('pubName').value.trim();
-  try { localStorage.setItem(AUTHOR_KEY, by); } catch { /* no store */ }
-  const typed = $('pubCode').value.trim();
-  if (typed) { try { localStorage.setItem(AI_CODE_KEY, typed); } catch { /* no store */ } }
-  let code = '';
-  try { code = localStorage.getItem(AI_CODE_KEY) ?? ''; } catch { /* no store */ }
-  $('publish').disabled = true;
-  $('pubConflict').hidden = true;
-  status.textContent = 'Publishing…';
+/**
+ * Save to the server: the deck lands in questions/ there (and in the
+ * repository when the server holds a GitHub token). The rev the deck was
+ * opened with travels along, so two people editing one deck can't silently
+ * overwrite each other: a stale save comes back 409 and the author chooses.
+ * @param {{force?: boolean}} [o]
+ */
+async function saveToServer(o = {}) {
+  if (serverless) { toast('This copy of the Studio has no server — use ··· → Download file and send it to your host.'); return; }
+  if (!String(meta.pack ?? '').trim()) {
+    toast('Give the deck a name first — it becomes the filename.');
+    $('packName').focus();
+    return;
+  }
+  const by = author();
+  $('save').disabled = true;
   /** @type {{ok: boolean, status: number, json: any}} */
   let r;
   try {
     const res = await fetch('/api/packs', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ai-passcode': code },
+      headers: { 'Content-Type': 'application/json', 'x-ai-passcode': storedCode() },
       body: JSON.stringify({ pack: exportable(), file: meta.file || undefined, baseRev: meta.rev || undefined, force: !!o.force, by }),
     });
     r = { ok: res.ok, status: res.status, json: await res.json().catch(() => ({})) };
   } catch {
-    r = { ok: false, status: 0, json: { error: 'no server reachable — publishing works from the game server or the test instance, not from a static copy of this page' } };
+    r = { ok: false, status: 0, json: { error: 'no server reachable' } };
   }
-  $('publish').disabled = false;
-  if (r.status === 401) {
-    $('pubCodeRow').hidden = false;
-    $('pubCode').focus();
-    status.textContent = 'Enter the faculty passcode to publish.';
-    return;
-  }
+  $('save').disabled = false;
+  if (r.status === 401) { showView('login', 'Your sign-in expired — sign in again to save.'); return; }
   if (r.status === 409) {
-    $('pubConflict').hidden = false;
-    status.textContent = '';
+    $('conflictWho').textContent = 'Someone saved a newer version of this deck since you opened it. Open theirs (yours stays as a draft in this browser), or save yours over it.';
+    $('conflictDlg').showModal();
     return;
   }
-  if (!r.ok) {
-    status.textContent = r.json.error ?? `publish failed (${r.status})`;
-    return;
-  }
+  if (!r.ok) { toast(r.json.error ?? `save failed (${r.status})`); return; }
   meta.file = String(r.json.file ?? '');
   meta.rev = String(r.json.rev ?? '');
   publishedText = docText;
   save();
   refresh({ keepPanel: true });
-  $('keyDlg').close();
+  $('conflictDlg').close();
   toast(
-    r.json.committed
-      ? `Published "${meta.pack}" — it's on the server and committed to the repository. The venue laptop picks it up on its next start.`
-      : r.json.commitError
-        ? `Published "${meta.pack}" on this server, but the repository commit failed (${r.json.commitError}). It plays here; tell the host.`
-        : `Published "${meta.pack}" — it's in this server's deck list now.`
+    r.json.commitError
+      ? `Saved on this server, but the repository commit failed (${r.json.commitError}) — tell the host.`
+      : r.json.committed ? 'Saved — and committed to the repository for the venue laptop.' : 'Saved.'
   );
 }
-$('publish').onclick = () => void publish();
-$('pubForce').onclick = () => void publish({ force: true });
+$('save').onclick = () => void saveToServer();
+$('pubForce').onclick = () => void saveToServer({ force: true });
 $('pubReload').onclick = async () => {
-  // Open the server's copy over mine: my text is kept as a local draft
-  // under this name, so nothing is lost, only set aside.
   try {
     const packs = await fetch('/api/packs').then((r) => r.json());
     const pk = (Array.isArray(packs) ? packs : []).find((/** @type {any} */ p) => p.file === meta.file);
-    if (!pk) { $('pubStatus').textContent = 'That deck is no longer on the server.'; return; }
-    const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
+    if (!pk) { toast('That deck is no longer on the server.'); return; }
     saveDraftEntry();
-    $('keyDlg').close();
-    adoptDoc(serializeDoc(pack), { file: pk.file, rev: pk.rev });
-    toast(`Opened the server's "${pk.name}"${pk.by ? ` (published by ${pk.by})` : ''}. Your version is under Decks as a draft.`);
-  } catch { $('pubStatus').textContent = 'Could not load the server copy.'; }
+    $('conflictDlg').close();
+    await openServerDeck(pk);
+    toast(`Opened the server's "${pk.name}"${pk.by ? ` (saved by ${pk.by})` : ''}. Your version is kept as a draft in this browser.`);
+  } catch { toast('Could not load the server copy.'); }
 };
-$('copyJson').onclick = async () => {
-  await navigator.clipboard.writeText(JSON.stringify(exportable(), null, 2));
-  $('copyJson').textContent = 'Copied ✓';
-  setTimeout(() => { $('copyJson').textContent = 'Copy JSON'; }, 1200);
-};
+
 $('openFile').onclick = () => {
   const inp = document.createElement('input');
   inp.type = 'file';
@@ -1238,7 +1228,7 @@ $('openFile').onclick = () => {
   inp.onchange = async () => {
     const f = inp.files?.[0];
     if (!f) return;
-    try { adoptDoc(serializeDoc(JSON.parse(await f.text()))); } catch { alert('Not valid JSON'); }
+    try { adoptDoc(serializeDoc(JSON.parse(await f.text()))); showView('editor'); } catch { alert('Not valid JSON'); }
   };
   inp.click();
 };
@@ -1249,6 +1239,7 @@ $('pasteGo').onclick = () => {
     const next = serializeDoc(JSON.parse($('pasteBox').value));
     $('pasteDlg').close();
     adoptDoc(next);
+    showView('editor');
   } catch { alert('Not valid JSON'); }
 };
 // ---------------------------------------------------------------- packs
@@ -1268,6 +1259,9 @@ let draftKey = '';
 function saveDraftEntry() {
   const name = String(meta.pack ?? '').trim();
   if (!name) return;
+  // The built-in sample, untouched, is nobody's work — filing it as an
+  // unsaved draft would put a phantom deck on every first visit's home.
+  if (name === SAMPLE.pack && docText === SAMPLE_TEXT) return;
   try {
     const drafts = loadDrafts();
     // Drafts are keyed by name and saved on every keystroke, so typing a
@@ -1280,11 +1274,34 @@ function saveDraftEntry() {
   } catch { /* full/blocked: drafts are a convenience */ }
 }
 
-async function openPacksDlg() {
-  const draftsHolder = $('packsDrafts');
-  const serverHolder = $('packsServer');
+/** A deck opened from the server: its file and rev ride along for Save. */
+async function openServerDeck(/** @type {any} */ pk) {
+  const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
+  const fresh = serializeDoc(pack);
+  // A draft of this deck with newer edits in this browser: offer to keep it.
+  const drafts = loadDrafts();
+  const d = drafts[String(pk.name)];
+  const mine = d && d.meta?.file === pk.file && d.doc !== extractFrontMatter(fresh).text;
+  if (mine && window.confirm(`You have unsaved edits to "${pk.name}" in this browser from earlier.\n\nOK keeps editing yours. Cancel opens the server copy instead.`)) {
+    meta = { ...d.meta };
+    draftKey = String(pk.name);
+    carried = d.carried ?? {};
+    levels = d.levels ?? {};
+    publishedText = '';
+    setText(d.doc, { caret: 0 });
+  } else {
+    adoptDoc(fresh, { file: pk.file, rev: pk.rev });
+    publishedText = docText;
+    refresh({ keepPanel: true });
+  }
+  showView('editor');
+}
+
+async function renderHome() {
+  const list = $('homeList');
+  const draftsHolder = $('homeDrafts');
+  list.replaceChildren();
   draftsHolder.replaceChildren();
-  serverHolder.replaceChildren();
 
   const row = (/** @type {HTMLElement} */ into, /** @type {string} */ title, /** @type {string} */ sub, /** @type {() => void} */ open, /** @type {(() => void) | null} */ del) => {
     const r = document.createElement('div');
@@ -1296,21 +1313,20 @@ async function openPacksDlg() {
     su.className = 'sub';
     su.textContent = sub;
     const b = document.createElement('button');
-    b.className = 'small primary';
+    b.className = 'primary';
     b.textContent = 'Open';
-    b.onclick = () => { open(); $('packsDlg').close(); };
+    b.onclick = open;
     r.append(t, su, b);
     if (del) {
       const d = document.createElement('button');
-      d.className = 'small danger';
+      d.className = 'danger';
       d.textContent = '✕';
-      d.title = 'delete this draft from this browser';
-      d.onclick = () => { if (window.confirm(`Delete the draft "${title}" from this browser?`)) { del(); void openPacksDlg(); } };
+      d.title = 'discard this draft';
+      d.onclick = () => { if (window.confirm(`Discard the draft "${title}"?`)) { del(); void renderHome(); } };
       r.appendChild(d);
     }
     into.appendChild(r);
   };
-
   const head = (/** @type {HTMLElement} */ into, /** @type {string} */ text) => {
     const h = document.createElement('div');
     h.className = 'packsHead';
@@ -1318,19 +1334,31 @@ async function openPacksDlg() {
     into.appendChild(h);
   };
 
-  head(draftsHolder, 'Your drafts (this browser)');
-  const drafts = loadDrafts();
-  const names = Object.keys(drafts).sort((a, b) => (drafts[b].at ?? 0) - (drafts[a].at ?? 0));
-  if (!names.length) {
+  /** @type {any[]} */
+  let packs = [];
+  try {
+    packs = await fetch('/api/packs').then((r) => (r.ok ? r.json() : Promise.reject()));
+  } catch {
     const s = document.createElement('div');
     s.className = 'hint';
-    s.textContent = 'Nothing yet — everything you write is saved here automatically, under its deck name.';
-    draftsHolder.appendChild(s);
+    s.textContent = 'No game server reachable from this page — decks can only be downloaded here.';
+    list.appendChild(s);
   }
+  for (const pk of packs) {
+    const when = pk.at ? new Date(pk.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    const who = pk.by ? `by ${pk.by}` : 'shipped with the game';
+    const sub = [`${pk.questions} question${pk.questions === 1 ? '' : 's'}`, pk.mode === 'teams' ? 'teams' : 'free-for-all', [who, when].filter(Boolean).join(' · ')].join(' — ');
+    row(list, pk.name, sub, () => { saveDraftEntry(); void openServerDeck(pk); }, null);
+  }
+
+  // Unsaved decks that exist only in this browser (never saved to the server).
+  const onServer = new Set(packs.map((p) => p.name));
+  const drafts = loadDrafts();
+  const names = Object.keys(drafts).filter((n) => !onServer.has(n)).sort((a, b) => (drafts[b].at ?? 0) - (drafts[a].at ?? 0));
+  if (names.length) head(draftsHolder, 'Not saved to the server yet (this browser only)');
   for (const name of names) {
     const d = drafts[name];
-    const current = name === String(meta.pack ?? '').trim();
-    row(draftsHolder, name, `${current ? 'open now · ' : ''}${new Date(d.at).toLocaleString()}`, () => {
+    row(draftsHolder, name, new Date(d.at).toLocaleString(), () => {
       saveDraftEntry();
       meta = { ...d.meta };
       draftKey = name;
@@ -1338,56 +1366,26 @@ async function openPacksDlg() {
       const { text, levels: pins } = extractLevels(deckOnly);
       carried = Object.keys(found).length ? found : (d.carried ?? {});
       levels = Object.keys(pins).length ? pins : (d.levels ?? {});
+      publishedText = '';
       setText(text, { caret: 0 });
+      showView('editor');
     }, () => {
       const all = loadDrafts();
       delete all[name];
       try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(all)); } catch { /* ignore */ }
     });
   }
-
-  head(serverHolder, 'On the game server');
-  try {
-    const packs = await fetch('/api/packs').then((r) => r.ok ? r.json() : Promise.reject());
-    for (const pk of Array.isArray(packs) ? packs : []) {
-      const when = pk.at ? new Date(pk.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-      const who = pk.by ? `by ${pk.by}` : '';
-      const sub = [`${pk.questions} question${pk.questions === 1 ? '' : 's'}`, [who, when].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
-      row(serverHolder, pk.name, sub, async () => {
-        try {
-          const pack = await fetch(`/api/questions?pack=${encodeURIComponent(pk.file)}`).then((r) => r.json());
-          saveDraftEntry();
-          adoptDoc(serializeDoc(pack), { file: pk.file, rev: pk.rev });
-          toast(`Opened "${pk.name}" from the server — your edits stay in this browser until you publish.`);
-        } catch { toast('Could not load that deck from the server.'); }
-      }, null);
-    }
-  } catch {
-    const s = document.createElement('div');
-    s.className = 'hint';
-    s.textContent = 'No game server reachable from this page.';
-    serverHolder.appendChild(s);
-  }
-  row(serverHolder, 'Sample night', 'the built-in starter — one of each question type', () => {
-    saveDraftEntry();
-    adoptDoc(serializeDoc(SAMPLE));
-  }, null);
-
-  $('packsDlg').showModal();
 }
 
-$('packsBtn').onclick = () => void openPacksDlg();
-$('packsClose').onclick = () => $('packsDlg').close();
-
-$('newPack').onclick = () => {
-  if (!window.confirm('Start a new deck? The current one stays available under Decks…')) return;
+$('homeNew').onclick = () => {
   saveDraftEntry();
-  // Empty on purpose: the empty-deck hero offers the drafter or a first
-  // question. adoptDoc resets the arena pins and carried sections.
-  adoptDoc(serializeDoc({ ...SAMPLE, pack: 'Untitled deck', questions: [] }));
+  adoptDoc(serializeDoc({ ...SAMPLE, pack: '', questions: [] }));
+  publishedText = '';
+  showView('editor');
+  $('packName').focus();
 };
-// The preview, near-fullscreen: the canvas already renders at 1920x1080,
-// so scaling up is free sharpness. Esc or the backdrop closes.
+$('backHome').onclick = () => { saveDraftEntry(); showView('home'); };
+
 $('pvExpand').onclick = () => {
   const big = $('previewCard').classList.toggle('big');
   $('pvBackdrop').classList.toggle('on', big);
@@ -1720,7 +1718,10 @@ function syncChrome(vproblems) {
   const qs = /** @type {any[]} */ (parsed.raw.questions);
   $('statCount').textContent = String(qs.length);
   $('statTime').textContent = qs.length ? `≈ ${runtimeLabel(qs)}` : '—';
-  $('savedChip').textContent = meta.rev && docText === publishedText ? 'Published' : 'Saved';
+  const savedUp = Boolean(meta.rev) && docText === publishedText;
+  $('savedChip').textContent = serverless ? 'Autosaved here' : savedUp ? 'Saved' : 'Unsaved changes';
+  $('savedChip').classList.toggle('ok', savedUp || serverless);
+  $('savedChip').classList.toggle('warn', !savedUp && !serverless);
   const empty = !parsed.blocks.length && !docText.trim();
   if (emptyShown !== empty) {
     emptyShown = empty;
@@ -1779,15 +1780,90 @@ $('finish').onclick = () => {
     h.textContent = 'No questions yet.';
     body.appendChild(h);
   }
-  try { $('pubName').value = localStorage.getItem(AUTHOR_KEY) ?? ''; } catch { /* no store */ }
-  $('pubStatus').textContent = meta.file ? `Opened from the server as ${meta.file}` : '';
-  $('pubConflict').hidden = true;
   $('keyDlg').showModal();
 };
 $('keyCancel').onclick = () => $('keyDlg').close();
 
-// boot
+// ------------------------------------------------------------ views & sign-in
+//
+// Three screens. Sign in (the faculty passcode and a name, remembered in
+// this browser) is skipped where the server has no passcode. Home is the
+// deck list. The editor is everything above.
+
+/** @type {'login'|'home'|'editor'} */
+let view = 'editor';
+let requiresSignIn = false;
+/** True when no game server answers: a static copy of the page, download only. */
+let serverless = false;
+
+function storedCode() { try { return localStorage.getItem(AI_CODE_KEY) ?? ''; } catch { return ''; } }
+function author() { try { return localStorage.getItem(AUTHOR_KEY) ?? ''; } catch { return ''; } }
+
+/** @param {'login'|'home'|'editor'} v @param {string} [note] */
+function showView(v, note = '') {
+  view = v;
+  $('login').hidden = v !== 'login';
+  $('home').hidden = v !== 'home';
+  $('editor').hidden = v !== 'editor';
+  $('titleWrap').hidden = v !== 'editor';
+  $('actions').hidden = v === 'login';
+  $('save').hidden = v !== 'editor';
+  $('savedChip').hidden = v !== 'editor';
+  $('backHome').hidden = v !== 'editor' || serverless;
+  const who = author();
+  $('whoChip').hidden = !who || v === 'login';
+  $('whoChip').textContent = who;
+  $('signOut').hidden = !requiresSignIn;
+  if (v === 'login') {
+    $('loginError').textContent = note;
+    $('loginName').value = who;
+    $('loginCode').value = '';
+    ($('loginName').value ? $('loginCode') : $('loginName')).focus();
+  }
+  if (v === 'home') void renderHome();
+  if (v === 'editor') refresh({ keepPanel: true });
+}
+
+/** Ask the server whether we're in; route to the right screen. */
+async function ensureSession() {
+  try {
+    const r = await fetch('/api/session', { headers: { 'x-ai-passcode': storedCode() } });
+    const j = await r.json().catch(() => ({}));
+    requiresSignIn = !!j.required;
+    if (r.ok) { showView('home'); return; }
+    showView('login', storedCode() ? 'That passcode no longer works — ask the host.' : '');
+  } catch {
+    serverless = true;
+    showView('editor');
+  }
+}
+
+$('loginGo').onclick = async () => {
+  const name = $('loginName').value.trim();
+  const code = $('loginCode').value.trim();
+  if (!name) { $('loginError').textContent = 'Your name, please — it goes beside the decks you save.'; $('loginName').focus(); return; }
+  try { localStorage.setItem(AUTHOR_KEY, name); localStorage.setItem(AI_CODE_KEY, code); } catch { /* no store */ }
+  $('loginGo').disabled = true;
+  try {
+    const r = await fetch('/api/session', { headers: { 'x-ai-passcode': code } });
+    if (r.ok) showView('home');
+    else showView('login', 'Wrong passcode.');
+  } catch { showView('login', 'No server reachable.'); }
+  $('loginGo').disabled = false;
+};
+for (const id of ['loginName', 'loginCode']) {
+  $(id).addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter') $('loginGo').click(); });
+}
+$('signOut').onclick = () => {
+  saveDraftEntry();
+  try { localStorage.removeItem(AI_CODE_KEY); } catch { /* no store */ }
+  showView('login');
+};
+
+// boot: the editor state is restored quietly, then the session decides
+// which screen you see.
 adoptDoc(loadDraft() ?? serializeDoc(SAMPLE), { boot: true });
+void ensureSession();
 void fetch('/api/levels')
   .then((r) => (r.ok ? r.json() : Promise.reject()))
   .then((list) => {

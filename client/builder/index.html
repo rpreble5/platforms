@@ -253,6 +253,21 @@
   .stat span { font-size: 12px; color: var(--ink3); font-weight: 600; }
   #plays .pnote { color: var(--ink3); font-size: 13px; margin: 10px 0 0; line-height: 1.5; }
 
+  /* ------------------------------------------------------- sign in, home */
+  #login { display: grid; place-items: center; min-height: calc(100vh - 60px); padding: 28px; }
+  .loginCard { width: min(440px, 100%); background: var(--panel); border-radius: 18px; padding: 28px; }
+  .loginCard h1 { margin: 0 0 6px; font-size: 28px; font-weight: 800; }
+  .loginCard .lead { color: var(--ink3); margin: 0 0 18px; font-size: 14.5px; }
+  .loginCard input { background: var(--field); }
+  .loginCard .btn { margin-top: 18px; width: 100%; padding: 12px; }
+  .loginCard .hint { min-height: 1.4em; margin-top: 8px; color: var(--red); }
+  #home { max-width: 820px; margin: 0 auto; padding: 36px 28px 80px; }
+  .homeHead { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .homeHead h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -.01em; }
+  .homeHead .spacer { flex: 1; }
+  .chip.warn { color: var(--gold-ink); background: var(--gold-bg); }
+  #whoChip { color: var(--ink3); }
+
   /* ------------------------------------------------------------ dialogs */
   dialog {
     background: var(--field); color: var(--ink); border: 1px solid var(--hair); border-radius: 18px;
@@ -274,10 +289,6 @@
   .keyq .n { color: var(--ink3); font-weight: 700; font-variant-numeric: tabular-nums; }
   .keyq .k { color: var(--ink2); margin-top: 2px; }
   .keyq .k b { color: var(--ink); }
-  .pubRow { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; margin-top: 12px; }
-  .pubRow label { margin: 0; }
-  .pubConflict { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--gold-bg); color: var(--gold-ink); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin-top: 12px; }
-  .pubConflict span { flex: 1; min-width: 200px; }
   dialog .dlgActions .spacer { flex: 1; }
   .keyWarn { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin-top: 8px; }
   #toast {
@@ -294,6 +305,7 @@
 
 <div id="top">
   <div class="wordmark">PLATFORMS <small>Studio</small></div>
+  <button class="btn ghost" id="backHome" hidden>‹ Decks</button>
   <div id="titleWrap">
     <input type="text" id="packName" placeholder="Untitled deck" autocomplete="off" spellcheck="false" aria-label="deck name">
     <div class="popAnchor">
@@ -311,25 +323,52 @@
     </div>
   </div>
   <div id="actions">
-    <span class="chip ok" id="savedChip" title="drafts autosave in this browser">Saved</span>
-    <button class="btn primary" id="finish">Finish<span class="pill" id="finishPill" hidden>0</span></button>
+    <span class="chip" id="savedChip" title="drafts autosave in this browser; Save writes to the server">Unsaved changes</span>
+    <button class="btn primary" id="save">Save<span class="pill" id="finishPill" hidden>0</span></button>
+    <span class="chip" id="whoChip" hidden></span>
     <div class="popAnchor">
-      <button class="btn icon" id="moreBtn" type="button" title="open, decks, paste, copy">···</button>
+      <button class="btn icon" id="moreBtn" type="button" title="answer key, download, open, paste, sign out">···</button>
       <div class="pop" id="morePop" hidden>
-        <button id="packsBtn" type="button">Decks…</button>
-        <button id="newPack" type="button">New deck</button>
-        <button id="openFile" type="button">Open a file…</button>
+        <button id="finish" type="button">Answer key…</button>
+        <button id="download" type="button">Download file</button>
         <hr>
+        <button id="openFile" type="button">Open a file…</button>
         <button id="pasteJson" type="button">Paste JSON…</button>
         <button id="copyJson" type="button">Copy JSON</button>
         <hr>
         <a class="guide" href="/client/training/" target="_blank" rel="noopener">Writer's guide ↗</a>
+        <button id="signOut" type="button" hidden>Sign out</button>
       </div>
     </div>
   </div>
 </div>
 
-<main>
+<!-- sign in: the faculty passcode and a name, once per browser -->
+<section id="login" hidden>
+  <div class="loginCard">
+    <h1>Studio</h1>
+    <p class="lead">Write and edit the decks the game plays. Sign in with the faculty passcode.</p>
+    <label for="loginName">Your name</label>
+    <input type="text" id="loginName" autocomplete="name" spellcheck="false" placeholder="shown beside the decks you save" maxlength="60">
+    <label for="loginCode">Faculty passcode</label>
+    <input type="password" id="loginCode" name="faculty-passcode" autocomplete="current-password" placeholder="ask the host">
+    <div class="hint" id="loginError"></div>
+    <button class="btn primary" id="loginGo">Sign in</button>
+  </div>
+</section>
+
+<!-- home: every deck on the server, who saved it, and where new ones start -->
+<section id="home" hidden>
+  <div class="homeHead">
+    <h1>Decks</h1>
+    <span class="spacer"></span>
+    <button class="btn primary" id="homeNew">+ New deck</button>
+  </div>
+  <div id="homeList"></div>
+  <div id="homeDrafts"></div>
+</section>
+
+<main id="editor">
   <section id="center">
     <div id="docTools">
       <button id="addQ" class="btn quiet small">+ Question</button>
@@ -399,35 +438,23 @@
     <div class="hint">Check every key before the night — this is what the room will be scored against. It doubles as your crib sheet.</div>
     <div id="keyWarn" class="keyWarn" hidden></div>
     <div id="keyBody"></div>
-    <div class="pubRow">
-      <label for="pubName">Published by</label>
-      <input type="text" id="pubName" autocomplete="off" spellcheck="false" placeholder="your name, for the deck list" maxlength="60">
-    </div>
-    <div class="pubRow" id="pubCodeRow" hidden>
-      <label for="pubCode">Faculty passcode</label>
-      <input type="text" id="pubCode" name="faculty-passcode" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" placeholder="ask the host">
-    </div>
-    <div class="pubConflict" id="pubConflict" hidden>
-      <span>This deck changed on the server since you opened it.</span>
-      <button class="btn small quiet" id="pubReload">Open theirs</button>
-      <button class="btn small danger" id="pubForce">Publish mine anyway</button>
-    </div>
     <div class="dlgActions">
-      <span class="hint" id="pubStatus"></span>
+      <button class="btn ghost" id="keyDownload">Download file</button>
       <span class="spacer"></span>
-      <button class="btn ghost" id="keyCancel">Back to editing</button>
-      <button class="btn ghost" id="download">Download file</button>
-      <button class="btn primary" id="publish">Publish to the game</button>
+      <button class="btn primary" id="keyCancel">Done</button>
     </div>
   </div>
 </dialog>
 
-<dialog id="packsDlg">
+<dialog id="conflictDlg">
   <div class="dlgBody">
-    <h2>Decks</h2>
-    <div id="packsDrafts"></div>
-    <div id="packsServer"></div>
-    <div class="dlgActions"><button class="btn ghost" id="packsClose">Close</button></div>
+    <h2>This deck changed on the server</h2>
+    <div class="hint" id="conflictWho">Someone saved a newer version since you opened it.</div>
+    <div class="dlgActions">
+      <button class="btn ghost" id="pubReload">Open theirs</button>
+      <span class="spacer"></span>
+      <button class="btn primary" id="pubForce">Save mine over it</button>
+    </div>
   </div>
 </dialog>
 

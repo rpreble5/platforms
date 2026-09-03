@@ -113,6 +113,16 @@ export function createHandler({ root, dev, getCheckpoint, getJoinUrl }) {
       return;
     }
 
+    // The Studio's sign-in: is a passcode needed here, and is this one
+    // right? No passcode configured (the host laptop) means no sign-in.
+    if (pathname === '/api/session') {
+      const passcode = process.env.AI_PASSCODE;
+      const okay = !passcode || req.headers['x-ai-passcode'] === passcode;
+      res.writeHead(okay ? 200 : 401, { 'Content-Type': MIME['.json'] });
+      res.end(JSON.stringify(okay ? { ok: true, required: !!passcode } : { ok: false, required: true, error: 'wrong or missing passcode' }));
+      return;
+    }
+
     if (pathname === '/api/packs' && req.method === 'POST') {
       // Publishing from the Studio: gated by the same AI_PASSCODE faculty
       // already use for drafting (one code to hand out); writes the deck
