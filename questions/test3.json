@@ -1,0 +1,21 @@
+{
+  "pack": "test3",
+  "theme": "blanc",
+  "answerMs": 12000,
+  "questions": [
+    {
+      "text": "TEst New question?aflkj",
+      "answers": [
+        "fasdf",
+        "asdfljk",
+        "adflkjaf"
+      ],
+      "correct": 0
+    }
+  ],
+  "mode": "solo",
+  "published": {
+    "by": "",
+    "at": "2026-09-10T18:15:22.198Z"
+  }
+}
