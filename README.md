@@ -32,11 +32,12 @@ npm run dev
 After the first setup, double-click `start.command` (macOS) or `start.bat`
 (Windows) instead.
 
-The terminal prints a QR code and two URLs:
+The terminal prints two QR codes (players, host) and the URLs:
 
 ```
-players   http://192.168.1.20:8080/       <- scan this / phones open this
-display   http://localhost:8080/display/  <- open on the machine driving the TV
+players   http://192.168.1.20:8080/           <- scan this / phones open this
+display   http://localhost:8080/display/      <- open on the machine driving the TV
+host      http://192.168.1.20:8080/host#K7PX  <- scan the host QR with your own phone
 ```
 
 Put the display page fullscreen on the TV, scan the QR from a phone, and press

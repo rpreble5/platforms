@@ -105,18 +105,22 @@ normal. You only ever need to do this again after downloading a new version.
 npm run dev
 ```
 
-You'll see a QR code and something like:
+You'll see two QR codes and something like:
 
 ```
   players   http://192.168.1.20:8080/
   display   http://localhost:8080/display/
+  host      http://192.168.1.20:8080/host#K7PX
 ```
 
-Two different URLs, and the difference matters:
+Three different URLs, and the difference matters:
 
 - **`players`** — has your laptop's address on the network. This is what phones
-  open. It's what the QR code encodes.
+  open. It's what the first QR code encodes.
 - **`display`** — the big screen. Only works on the laptop itself.
+- **`host`** — the remote control for whoever is running the show. Scan the
+  second QR code with your own phone. Don't show it to the room: the code at
+  the end is the key, and it changes every time the server starts.
 
 Leave this terminal window open. Closing it stops the game.
 

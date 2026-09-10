@@ -1,5 +1,5 @@
 /**
- * Boot: HTTP + WebSocket on one port, then print the join URL and a QR for it.
+ * Boot: HTTP + WebSocket on one port, then print the join and host URLs with a QR for each.
  *
  * One port matters — the QR code has to point somewhere, and asking 30 people
  * to type a URL with a port number is how a party stalls for ten minutes.
@@ -113,7 +113,12 @@ server.listen(PORT, HOST, () => {
   const addr = lanAddr;
 
   console.log('');
-  console.log(qrToTerminal(joinUrl));
+  console.log(
+    qrRow([
+      { label: 'players', text: joinUrl },
+      { label: 'host', text: hostUrl },
+    ])
+  );
   console.log('');
   console.log(`  players   ${bold(joinUrl)}`);
   console.log(`  display   ${bold(publicUrl ? `${joinUrl}display/` : `http://localhost:${PORT}/display/`)}`);
@@ -149,6 +154,34 @@ server.listen(PORT, HOST, () => {
   console.log('  Chromecast/AirPlay add 100-500ms.');
   console.log('');
 });
+
+/**
+ * Two QR codes side by side when the window is wide enough, stacked when it
+ * isn't. The players code is for the room; the host code is for the one
+ * phone running the show, so the host never has to type the key.
+ * @param {{label: string, text: string}[]} codes
+ */
+function qrRow(codes) {
+  const GAP = 4;
+  const blocks = codes.map(({ label, text }) => {
+    const lines = qrToTerminal(text).split('\n');
+    const width = lines[0].replace(/\x1b\[[0-9;]*m/g, '').length;
+    return { label, lines, width };
+  });
+  const need = blocks.reduce((sum, b) => sum + b.width, 0) + GAP * (blocks.length - 1) + 2;
+  const columns = process.stdout.columns ?? 80;
+  if (need > columns) {
+    return blocks.map((b) => `  ${b.label}\n${b.lines.map((l) => `  ${l}`).join('\n')}`).join('\n\n');
+  }
+  const rows = Math.max(...blocks.map((b) => b.lines.length));
+  const out = ['  ' + blocks.map((b) => b.label.padEnd(b.width + GAP)).join('').trimEnd()];
+  for (let r = 0; r < rows; r++) {
+    out.push(
+      '  ' + blocks.map((b) => (b.lines[r] ?? ' '.repeat(b.width)) + ' '.repeat(GAP)).join('').trimEnd()
+    );
+  }
+  return out.join('\n');
+}
 
 /** @param {string} s */
 function bold(s) {
