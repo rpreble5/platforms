@@ -1,0 +1,161 @@
+{
+  "pack": "Didactics 9/10",
+  "theme": "blanc",
+  "answerMs": 12000,
+  "questions": [
+    {
+      "text": "Which is NOT part of Mason's framework for ABX selection",
+      "answers": [
+        "Patient",
+        "Antibiotic",
+        "Dose",
+        "Duration",
+        "Infection"
+      ],
+      "correct": 4
+    },
+    {
+      "text": "34 yo w/ 5 days of sinusitis symptoms. What now?",
+      "answers": [
+        "Follow-up in 7 days",
+        "Augmentin(875/125) BID 5 D",
+        "Augmentin (2000/125) BID 5 D",
+        "Augmentin (875/125) BID 10 D"
+      ],
+      "correct": 1
+    },
+    {
+      "text": "Afebrile, 48 yo w/ tonsillar exudates, tender cervical lymph nodes,  and a cough What now?",
+      "answers": [
+        "Rapid Strep test",
+        "Supportive",
+        "Amox 500 BID x 10 days",
+        "Throat culture"
+      ],
+      "correct": 1
+    },
+    {
+      "text": "8 yo w/ + rapid strep, centor score 5. Treated 3 weeks ago for strep w/ amox. What now?",
+      "answers": [
+        "Amox 500 BID x 10 days",
+        "Augm (875/125) BID x 10 days",
+        "Cefdinir 300 BID x 10 days"
+      ],
+      "correct": 0
+    },
+    {
+      "text": "33 yo w/ hx of AUD, w/ infiltrates on cxray, fever, normal pulse ox",
+      "answers": [
+        "Admit",
+        "Amox 1 g TID, azithro 500 QD",
+        "Augmen 875/125 BID + Azithro",
+        "F/u in 2 weeks"
+      ],
+      "correct": 2
+    },
+    {
+      "text": "Supportive treatment, or ABX + Supportive",
+      "type": "sort",
+      "buckets": [
+        "Supportive",
+        "ABX+Supportive"
+      ],
+      "items": [
+        {
+          "label": "Cough diarrhea myalgias",
+          "bucket": 0
+        },
+        {
+          "label": "Bronchitis",
+          "bucket": 0
+        },
+        {
+          "label": "+ urine cx no dysuria",
+          "bucket": 0
+        },
+        {
+          "label": "8 yo Centor score 5",
+          "bucket": 1
+        },
+        {
+          "label": "7 yo fever bulging TM",
+          "bucket": 1
+        },
+        {
+          "label": "+ urine ccx w/ dysuria",
+          "bucket": 1
+        }
+      ],
+      "itemMs": 10000
+    },
+    {
+      "text": "Patient w/ COPD presents to ED in respiratory distress. ABG 7.1/90/50/30. O2 sat 82",
+      "answers": [
+        "Put on  5L NC",
+        "Give Nebs, Steroids",
+        "Give Augmentin"
+      ],
+      "correct": 1
+    },
+    {
+      "text": "If you call Dr. Biel (or any crit care physician) about respiratory patient you should?",
+      "answers": [
+        "Tell them about the O2 sat",
+        "Tell them about the VBG",
+        "Tell them about the ABG"
+      ],
+      "correct": 2
+    },
+    {
+      "text": "did you read the AAFP journal articles before today?",
+      "answers": [
+        "Yes",
+        "No",
+        "I dont believe anyone on yes"
+      ],
+      "correct": 2
+    },
+    {
+      "text": "Bug to drug!",
+      "type": "sort",
+      "buckets": [
+        "Penicillin",
+        "Cephalosporin",
+        "Pen + beta lactam inhib",
+        "Bactrim"
+      ],
+      "items": [
+        {
+          "label": "Strep",
+          "bucket": 0
+        },
+        {
+          "label": "Treponema pallidum",
+          "bucket": 0
+        },
+        {
+          "label": "moraxella",
+          "bucket": 0
+        },
+        {
+          "label": "E coli",
+          "bucket": 1
+        },
+        {
+          "label": "MSSA",
+          "bucket": 1
+        },
+        {
+          "label": "Anaerobes",
+          "bucket": 2
+        },
+        {
+          "label": "MRSA",
+          "bucket": 3
+        }
+      ],
+      "itemMs": 10000
+    }
+  ],
+  "mode": "solo"
+}
